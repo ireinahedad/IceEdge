@@ -123,7 +123,7 @@ export function toUIGame(g: any): UIGame {
   };
 }
 
-function toUIPlayer(p: any): UIPlayer {
+export function toUIPlayer(p: any): UIPlayer {
   return {
     id:          String(p.id),
     name:        p.name ?? p.fullName,

@@ -44,7 +44,8 @@ const groupSchema = z.object({
 });
 
 export const sgpPriceLogSchema = z.object({
-  book: z.enum(['bet365', 'draftkings', 'other']),
+  // Ouvert : `ScanBook` grandira (FanDuel…), le journal ne doit pas refuser un nouveau livre.
+  book: z.string().regex(/^[a-z0-9_]{2,20}$/),
   lang: z.enum(['fr', 'en']).nullable().optional(),
   oddsFormat: z.enum(['american', 'decimal', 'fractional']).nullable().optional(),
   groups: z.array(groupSchema).min(1).max(10),

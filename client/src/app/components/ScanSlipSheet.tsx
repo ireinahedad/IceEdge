@@ -21,26 +21,35 @@
  * (corrélation du même match), puis compare au prix payé (`slipScanValue.ts`) :
  * probabilité implicite, cote juste, « taxe », maillon faible, et le ticket entier.
  * « Ajouter au coupon » reprend ensuite ces jambes déjà chiffrées.
+ *
+ * Chaque SGP entièrement chiffré part ensuite au journal ANONYME des prix SGP
+ * (`/api/scan/price-log`, migration 052) : cote, bookmaker, marchés, proba du modèle.
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router";
-import { Camera, X, Check } from "lucide-react";
+import { Camera, X, Check, Share2 } from "lucide-react";
 import { scanSlip, type ScanGroup, type ScanLeg, type ScanLegState, type ScanCandidate, type SlipScanResult } from "../../../../server/src/services/slipScan";
 import { priceVerdict, ticketModelPct, ticketPaidDecimal, weakestLeg, type PriceVerdict } from "../../../../server/src/services/slipScanValue";
 import { combineParlayLegs } from "../../../../server/src/services/parlay";
 import { buildLeg } from "../services/buildLeg";
 import { predictionApiService } from "../services/predictionApiService";
 import type { BetLeg } from "../types/bet";
+import { renderScanShareCard } from "../services/scanShareCanvas";
+import { shareImageBlob } from "../services/shareImage";
 import { validateIntent, type SlipIntent } from "../../../../server/src/services/slipCommand";
 import { recognize, OcrError } from "../services/ocr/ocrService";
 import { useBet } from "../context/BetContext";
 import { useAuth } from "../context/AuthContext";
 import { useI18n } from "../i18n";
 import { useSlipCommandData } from "../hooks/useSlipCommandData";
+import { toUIPlayer, type UIPlayer } from "../hooks/useNHLData";
+import { nhlApiService } from "../services/nhlApiService";
+import type { SlipContext, SlipPlayer } from "../../../../server/src/services/slipCommand";
+import type { SlipCommandData } from "../services/slipCommandLegs";
 import { describeInput, intentToLegInput } from "../services/slipCommandLegs";
 import { askParseCommand, type LLMError } from "../services/llmService";
-import { getScanUsage, startScan, refundScan, ScanQuotaError, type ScanUsage } from "../services/scanService";
+import { getScanUsage, startScan, refundScan, logSgpPrices, ScanQuotaError, type ScanUsage, type SgpPriceLogGroup } from "../services/scanService";
 import { features } from "../platform";
 
 type T = ReturnType<typeof useI18n>["t"];
@@ -70,10 +79,13 @@ interface Analysis {
   weakest: string | null;
 }
 
-/** Probabilité d'un groupe : la jambe seule, sinon la probabilité raffinée du serveur (corrélation), sinon le calcul local. */
-async function groupProbability(legs: BetLeg[]): Promise<number | null> {
+/**
+ * Probabilité d'un groupe : la jambe seule, sinon la probabilité raffinée du serveur (corrélation),
+ * sinon le calcul local. `source` dit d'où vient le chiffre (journal des prix SGP).
+ */
+async function groupProbability(legs: BetLeg[]): Promise<{ pct: number; source: "server" | "local" } | null> {
   if (!legs.length) return null;
-  if (legs.length === 1) return legs[0].probability;
+  if (legs.length === 1) return { pct: legs[0].probability, source: "server" };
   try {
     const r = await predictionApiService.getParlayPrediction({
       legs: legs.map((l) => ({
@@ -81,13 +93,39 @@ async function groupProbability(legs: BetLeg[]): Promise<number | null> {
         line: l.line, teamId: l.subjectId, opponentId: l.opponentId, isHome: l.isHome, subjectType: l.subjectType,
       })),
     });
-    if (typeof r.adjustedProbability === "number") return r.adjustedProbability;
+    if (typeof r.adjustedProbability === "number") return { pct: r.adjustedProbability, source: "server" };
   } catch { /* hors ligne : calcul local */ }
   const local = combineParlayLegs(legs.map((l) => ({
     marketType: l.marketType, probability: l.probability, gameId: l.gameId, selection: l.selectionValue,
     line: l.line, subject: l.subjectId, subjectType: l.subjectType,
   })));
-  return Number.isFinite(local.probability) ? Math.round(local.probability * 10) / 10 : null;
+  return Number.isFinite(local.probability) ? { pct: Math.round(local.probability * 10) / 10, source: "local" } : null;
+}
+
+/**
+ * Les SGP du ticket entièrement chiffrés (≥ 2 jambes, une cote lue, un match) → journal anonyme
+ * des prix. Un groupe partiel n'est jamais envoyé : sa probabilité serait fausse.
+ */
+function sgpPriceGroups(
+  groups: ScanGroup[], views: LegView[], built: Map<string, BetLeg>,
+  probs: ({ pct: number; source: "server" | "local" } | null)[],
+): SgpPriceLogGroup[] {
+  const out: SgpPriceLogGroup[] = [];
+  groups.forEach((g, gi) => {
+    const p = probs[gi];
+    const gv = views.filter((v) => v.group === gi);
+    const legs = gv.map((v) => built.get(v.key)).filter((l): l is BetLeg => !!l);
+    if (g.kind !== "sgp" || !g.odds || !g.gameId || !p || legs.length < 2 || legs.length !== gv.length) return;
+    out.push({
+      gameId: g.gameId, odds: g.odds, modelPct: p.pct, modelSource: p.source,
+      legs: legs.map((l) => ({
+        market: l.marketType, subjectType: l.subjectType, subjectId: l.subjectId,
+        selection: (l.selectionValue ?? l.selectionShort).slice(0, 40), modelPct: l.probability,
+        ...(typeof l.line === "number" ? { line: l.line } : {}),
+      })),
+    });
+  });
+  return out;
 }
 
 type Note =
@@ -98,7 +136,8 @@ type Note =
   | { kind: "ai_working" }
   | { kind: "ai_unclear" }
   | { kind: "ai_quota"; limit: number }
-  | { kind: "ai_error" };
+  | { kind: "ai_error" }
+  | { kind: "share_error" };
 
 type Row =
   | { key: string; kind: "added"; legId: string; label: string; removed: boolean }
@@ -123,6 +162,7 @@ function noteText(n: Note, t: T): string {
     case "ai_unclear":  return t("cmd.aiUnclear");
     case "ai_quota":    return t("cmd.aiFreeQuota", { limit: n.limit });
     case "ai_error":    return t("cmd.aiError");
+    case "share_error": return t("scan.shareError");
   }
 }
 
@@ -130,7 +170,12 @@ export function ScanSlipSheet({ onClose }: { onClose: () => void }) {
   const { t, lang } = useI18n();
   const { addLeg, removeLeg, hasLeg } = useBet();
   const { user } = useAuth();
-  const { ctx, data, loading, error } = useSlipCommandData();
+  const { ctx: baseCtx, data: baseData, loading, error } = useSlipCommandData();
+  // Le contexte de base ne connaît que les meneurs de la ligue (~60 joueurs) : pour un ticket,
+  // on lui ajoute les effectifs COMPLETS des équipes du ticket (voir `withRosters`).
+  const [extra, setExtra] = useState<{ ctx: SlipContext; data: SlipCommandData } | null>(null);
+  const ctx = extra?.ctx ?? baseCtx;
+  const data = extra?.data ?? baseData;
   const navigate = useNavigate();
   const location = useLocation();
   const fileRef = useRef<HTMLInputElement>(null);
@@ -152,14 +197,44 @@ export function ScanSlipSheet({ onClose }: { onClose: () => void }) {
     return () => { alive = false; };
   }, [user]);
 
+  /**
+   * Effectifs complets des équipes du ticket, ajoutés au contexte. Sans eux, seuls les
+   * meneurs de la ligue (`/players`, ~60 joueurs) sont reconnus : « Matt Boldy » ou
+   * « Jack Quinn » restaient introuvables même parfaitement lus. Un effectif qui ne
+   * charge pas est simplement omis.
+   */
+  async function withRosters(teams: string[], base: SlipContext): Promise<{ ctx: SlipContext; data: SlipCommandData }> {
+    const rosters = await Promise.all(teams.map((abbr) =>
+      nhlApiService.getTeamRoster(abbr).then((ps) => ps.map((p) => ({ ...p, teamAbbr: abbr }))).catch(() => [])));
+    const known = new Set(base.players.map((p) => p.id));
+    const fresh = rosters.flat().filter((p) => p?.id != null && p.name && !known.has(String(p.id)));
+    const slipPlayers: SlipPlayer[] = fresh.map((p) => ({ id: String(p.id), name: p.name, teamAbbr: p.teamAbbr.toUpperCase(), position: p.position }));
+    const uiPlayers: UIPlayer[] = fresh.map((p) => toUIPlayer({ ...p, teamAbbr: p.teamAbbr.toLowerCase() }));
+    return {
+      ctx: { ...base, players: [...base.players, ...slipPlayers] },
+      data: { ...baseData, players: [...baseData.players, ...uiPlayers] },
+    };
+  }
+
   const read = useCallback(async (file: Blob) => {
-    if (!ctx) return;
+    if (!baseCtx) return;
     setNote(null);
     setRows([]);
+    setExtra(null);
     setPhase("reading");
     try {
       const ocr = await recognize(file);
-      const r = scanSlip(ocr, ctx);
+      // 1er passage : trouver les matchs du ticket. 2e passage : avec les effectifs de leurs équipes.
+      const first = scanSlip(ocr, baseCtx);
+      const teams = new Set<string>();
+      for (const g of first.groups) {
+        const game = g.gameId ? baseCtx.games.find((x) => x.id === g.gameId) : null;
+        if (game) { teams.add(game.awayAbbr.toUpperCase()); teams.add(game.homeAbbr.toUpperCase()); }
+        if (g.game) { teams.add(g.game.away); teams.add(g.game.home); }
+      }
+      const ext = teams.size ? await withRosters([...teams], baseCtx) : null;
+      if (ext) setExtra(ext);
+      const r = ext ? scanSlip(ocr, ext.ctx) : first;
       const vs: LegView[] = r.groups.flatMap((g, gi) => g.legs.map((leg, li) => ({
         key: `${gi}-${li}`, group: gi, leg, state: leg.state, intent: leg.state === "ok" ? leg.intent : undefined,
       })));
@@ -173,7 +248,8 @@ export function ScanSlipSheet({ onClose }: { onClose: () => void }) {
       setNote({ kind: "ocr", code: e instanceof OcrError ? e.code : "failed" });
       setPhase("pick");
     }
-  }, [ctx]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [baseCtx, baseData]);
 
   // Web : coller une capture (Cmd/Ctrl+V) pendant l'étape d'import.
   useEffect(() => {
@@ -259,13 +335,21 @@ export function ScanSlipSheet({ onClose }: { onClose: () => void }) {
       }
       if (!built.size) { void refundScan(); setNote({ kind: "unavailable" }); return; }
 
-      const gs = await Promise.all(groups.map(async (g, gi) => {
+      const probs = await Promise.all(groups.map(async (_g, gi) => {
         const gv = views.filter((v) => v.group === gi);
         const legs = gv.map((v) => built.get(v.key)).filter((l): l is BetLeg => !!l);
         // Partiel : une jambe du groupe n'est pas chiffrée → aucun chiffre présenté comme complet.
-        const pct = gv.length && legs.length === gv.length ? await groupProbability(legs) : null;
-        return { pct, verdict: pct != null && g.odds ? priceVerdict(pct, g.odds) : null };
+        return gv.length && legs.length === gv.length ? await groupProbability(legs) : null;
       }));
+      const gs = groups.map((g, gi) => {
+        const pct = probs[gi]?.pct ?? null;
+        return { pct, verdict: pct != null && g.odds ? priceVerdict(pct, g.odds) : null };
+      });
+      // Journal anonyme des prix SGP (plan « Parlay Tax ») : best-effort, jamais attendu.
+      void logSgpPrices({
+        book: scan.book, lang: scan.lang, oddsFormat: scan.oddsFormat,
+        groups: sgpPriceGroups(groups, views, built, probs),
+      });
       const tPct = ticketModelPct(gs.map((g, gi) => ({ pct: g.pct, gameId: groups[gi].gameId })));
       const tPaid = ticketPaidDecimal(scan.totalOdds, groups.map((g) => g.odds));
       const ticket = groups.length > 1 && tPct != null && tPaid ? priceVerdict(tPct, tPaid, scan.oddsFormat) : null;
@@ -293,6 +377,47 @@ export function ScanSlipSheet({ onClose }: { onClose: () => void }) {
       }
     });
     setRows(out);
+  }
+
+  /** Le verdict à mettre sur la carte : le ticket entier, sinon son unique pari. */
+  function shareTarget(): { v: PriceVerdict; paid: string; gis: number[] } | null {
+    if (!analysis || !scan) return null;
+    if (analysis.ticket) {
+      const paid = scan.totalOdds ?? analysis.ticket.paidDecimal.toFixed(2);
+      return { v: analysis.ticket, paid, gis: groups.map((_, i) => i) };
+    }
+    const priced = analysis.groups.map((g, i) => ({ g, i })).filter((x) => x.g.verdict);
+    if (groups.length === 1 && priced.length === 1 && groups[0].odds) return { v: priced[0].g.verdict!, paid: groups[0].odds, gis: [0] };
+    return null;
+  }
+
+  /** Carte « Parlay Tax » du ticket : feuille de partage native, sinon téléchargement. */
+  async function share() {
+    const target = shareTarget();
+    if (!target || !analysis) return;
+    const vs = views.filter((v) => target.gis.includes(v.group) && analysis.built.has(v.key));
+    const g0 = groups[target.gis[0]]?.game;
+    const v = target.v;
+    try {
+      const blob = await renderScanShareCard({
+        game: target.gis.length === 1 && g0 ? `${g0.away} @ ${g0.home}` : "",
+        legs: vs.map((x) => labelOf(x)),
+        weakest: analysis.weakest ? vs.findIndex((x) => x.key === analysis.weakest) : null,
+        paidOdds: target.paid,
+        fairOdds: v.fairOdds,
+        headline: v.verdict === "tax" ? t("scan.tax", { pct: Math.round(v.taxPct) })
+          : v.verdict === "value" ? t("scan.value", { pct: Math.round(-v.taxPct) }) : t("scan.fair"),
+        tone: v.verdict,
+        detail: t("scan.shareDetail", { model: v.modelPct, implied: v.impliedPct }),
+        labels: {
+          brand: t("scan.shareBrand"), weakest: t("scan.weakest"), paid: t("scan.sharePaid"), fair: t("scan.shareFair"),
+          disclaimer: t("scan.shareDisclaimer"), more: (n) => t("scan.shareMore", { n }),
+        },
+      });
+      await shareImageBlob(blob, "arakice-parlay-grade.png");
+    } catch {
+      setNote({ kind: "share_error" });
+    }
   }
 
   function reset() {
@@ -416,6 +541,13 @@ export function ScanSlipSheet({ onClose }: { onClose: () => void }) {
                       <p className="text-[11px] uppercase tracking-wider text-[#bfc8cc]">{t("scan.ticket")}</p>
                       <VerdictLine v={analysis.ticket} pct={analysis.ticket.modelPct} t={t} />
                     </div>
+                  )}
+
+                  {phase === "analysed" && shareTarget() && (
+                    <button onClick={() => void share()}
+                      className="tap-44 w-full flex items-center justify-center gap-2 text-[#86d1ea] text-sm font-bold bg-[#86d1ea]/10 border border-[#86d1ea]/30 rounded-2xl px-4 py-3">
+                      <Share2 size={14} /> {t("scan.share")}
+                    </button>
                   )}
 
                   {unreadableCount > 0 && features.aiBetBuilder && !analysis && (

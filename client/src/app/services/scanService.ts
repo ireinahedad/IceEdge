@@ -43,3 +43,27 @@ export async function startScan(): Promise<void> {
 export async function refundScan(): Promise<void> {
   await authedFetch("/scan/refund", { method: "POST" }).catch(() => undefined);
 }
+
+/** Un SGP entièrement chiffré, tel qu'envoyé au journal anonyme des prix (migration 052). */
+export interface SgpPriceLogGroup {
+  gameId: string;
+  odds: string;
+  modelPct: number;
+  modelSource: "server" | "local";
+  legs: { market: string; subjectType: "team" | "player" | "game"; subjectId: string; selection: string; line?: number; modelPct: number }[];
+}
+
+/**
+ * Journal ANONYME des prix SGP (plan « Parlay Tax ») : cote, bookmaker, marchés, proba du
+ * modèle. Rien du compte n'est envoyé ni écrit côté serveur. Best-effort, jamais attendu.
+ */
+export async function logSgpPrices(body: {
+  book: string; lang: string | null; oddsFormat: string | null; groups: SgpPriceLogGroup[];
+}): Promise<void> {
+  if (!body.groups.length) return;
+  await authedFetch("/scan/price-log", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  }).catch(() => undefined);
+}

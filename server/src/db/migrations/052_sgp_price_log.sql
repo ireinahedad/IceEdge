@@ -22,7 +22,8 @@ CREATE TABLE IF NOT EXISTS sgp_price_log (
   fingerprint      TEXT        NOT NULL UNIQUE,
   logged_hour      TIMESTAMPTZ NOT NULL,
   game_id          TEXT        NOT NULL,
-  bookmaker        TEXT        NOT NULL CHECK (bookmaker IN ('bet365', 'draftkings', 'other')),
+  -- Pas de liste fermée : un livre ajouté au scanner (FanDuel…) ne doit pas casser le journal.
+  bookmaker        TEXT        NOT NULL CHECK (bookmaker ~ '^[a-z0-9_]{2,20}$'),
   lang             TEXT        CHECK (lang IN ('fr', 'en')),
   odds_format      TEXT        CHECK (odds_format IN ('american', 'decimal', 'fractional')),
   -- Cote telle qu'affichée sur le ticket (« +600 », « 7.00 ») et sa valeur décimale.

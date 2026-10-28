@@ -1071,7 +1071,8 @@ const DICT: Record<string, { en: string; fr: string }> = {
   // « Scanner un ticket » — SCAN_TICKET_PLAN S3 (ScanSlipSheet).
   "scan.open":         { en: "Scan a slip", fr: "Scanner un ticket" },
   "scan.title":        { en: "Scan a slip", fr: "Scanner un ticket" },
-  "scan.hint":         { en: "Import a screenshot of a bet365 or DraftKings slip. Each leg gets the model's probability.", fr: "Importez une capture d'écran d'un ticket bet365 ou DraftKings. Chaque jambe reçoit la probabilité du modèle." },
+  "scan.hint":         { en: "Import a screenshot of your bet slip. Each leg gets the model's probability.", fr: "Importez une capture d'écran de votre ticket. Chaque jambe reçoit la probabilité du modèle." },
+  "scan.boostUnread":  { en: "Boosted odds: the boosted price wasn't read, so the whole slip isn't priced.", fr: "Cote boostée : le prix boosté n'a pas été lu, le ticket entier n'est donc pas chiffré." },
   "scan.pick":         { en: "Choose a screenshot", fr: "Choisir une capture" },
   "scan.privacy":      { en: "The image is read on your device and never uploaded. Stake and balance are ignored.", fr: "L'image est lue sur votre appareil et n'est jamais envoyée. La mise et le solde sont ignorés." },
   "scan.reading":      { en: "Reading the slip…", fr: "Lecture du ticket…" },
