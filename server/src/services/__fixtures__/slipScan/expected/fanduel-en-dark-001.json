@@ -1,0 +1,30 @@
+{
+  "book": "fanduel",
+  "lang": "en",
+  "theme": "dark",
+  "oddsFormat": "american",
+  "gameDate": null,
+  "groups": [
+    { "kind": "single", "odds": "-390", "game": { "away": "LAK", "home": "CHI" },
+      "legs": [ { "ticketText": ["Artemi Panarin", "2+ SHOTS ON GOAL"], "state": "ok",
+        "intent": { "subjectType": "player", "player": "Artemi Panarin", "marketType": "shots_ou", "selection": "over", "line": 1.5 } } ] },
+    { "kind": "single", "odds": "-250", "game": { "away": "BOS", "home": "CAR" },
+      "legs": [ { "ticketText": ["Logan Stankoven", "2+ SHOTS ON GOAL"], "state": "ok",
+        "intent": { "subjectType": "player", "player": "Logan Stankoven", "marketType": "shots_ou", "selection": "over", "line": 1.5 } } ] },
+    { "kind": "single", "odds": "-405", "game": { "away": "NJD", "home": "DAL" },
+      "legs": [ { "ticketText": ["Jack Hughes", "2+ SHOTS ON GOAL"], "state": "ok",
+        "intent": { "subjectType": "player", "player": "Jack Hughes", "marketType": "shots_ou", "selection": "over", "line": 1.5 } } ] },
+    { "kind": "single", "odds": "-589", "game": { "away": "FLA", "home": "WPG" },
+      "legs": [ { "ticketText": ["Kyle Connor", "2+ SHOTS ON GOAL"], "state": "ok",
+        "intent": { "subjectType": "player", "player": "Kyle Connor", "marketType": "shots_ou", "selection": "over", "line": 1.5 } } ] },
+    { "kind": "single", "odds": "-608", "game": { "away": "MIN", "home": "UTA" },
+      "legs": [ { "ticketText": ["Matt Boldy", "2+ SHOTS ON GOAL"], "state": "ok",
+        "intent": { "subjectType": "player", "player": "Matt Boldy", "marketType": "shots_ou", "selection": "over", "line": 1.5 } } ] },
+    { "kind": "single", "odds": "-290", "game": { "away": "BUF", "home": "SJS" },
+      "legs": [ { "ticketText": ["Jack Quinn", "2+ SHOTS ON GOAL"], "state": "ok",
+        "intent": { "subjectType": "player", "player": "Jack Quinn", "marketType": "shots_ou", "selection": "over", "line": 1.5 } } ] }
+  ],
+  "totalOdds": "+302",
+  "personal": [],
+  "notes": "FanDuel, parlay de 6 jambes (capture partagée au user, 2026-10-28). Ce qu'elle apprend : (1) nom du joueur sur une ligne, marché « 2+ SHOTS ON GOAL » sur la suivante (= plus de 1.5 tirs), cote à droite sur la ligne du nom ; (2) le match SOUS la jambe, en noms complets (« Los Angeles Kings @ Chicago Blackhawks ») + heure ; (3) PROFIT BOOST : la cote barrée (+233) puis la cote boostée (+302) — c'est la boostée que le joueur reçoit, donc la cote payée ; (4) le résumé « Artemi Panarin 2+ Shots on Goal, Logan Stankoven 2+ Shots on Goal, … » en tête n'est PAS une jambe (texte coupé « … ») ; (5) bruit : « REWARDS 160 PTS PENDING », « PROFIT BOOST 30% », « 6 leg parlay »."
+}

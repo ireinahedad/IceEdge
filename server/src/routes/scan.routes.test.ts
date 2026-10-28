@@ -19,6 +19,12 @@ vi.mock('../services/scanQuota.service', () => ({
   getScanUsage: async (...a: unknown[]) => { calls.push(['usage', ...a]); return { pro: a[1], used: 0, limit: 3, remaining: 3, resetsAt: 'R' }; },
 }));
 
+const logged: unknown[][] = [];
+vi.mock('../services/sgpPriceLog.service', async () => {
+  const real = await vi.importActual<any>('../services/sgpPriceLog.service');
+  return { ...real, logSgpPrices: async (...a: unknown[]) => { logged.push(a); return { logged: 1, skipped: 0 }; } };
+});
+
 async function app() {
   const { default: routes } = await import('./scan.routes');
   const a = express();
@@ -32,6 +38,7 @@ beforeEach(() => {
   pro = false;
   verdict = { allowed: true, pro: false, used: 1, limit: 3, resetsAt: 'R' };
   calls.length = 0;
+  logged.length = 0;
 });
 
 describe('/api/scan', () => {
@@ -78,5 +85,37 @@ describe('/api/scan', () => {
   it('usage', async () => {
     const r = await request(await app()).get('/api/scan/usage');
     expect(r.body).toMatchObject({ limit: 3, remaining: 3 });
+  });
+});
+
+describe('/api/scan/price-log', () => {
+  const sgp = {
+    book: 'bet365', lang: 'fr', oddsFormat: 'decimal',
+    groups: [{
+      gameId: '2025020123', odds: '7.00', modelPct: 10.5, modelSource: 'server',
+      legs: [
+        { market: 'moneyline', subjectType: 'team', subjectId: 'tor', selection: 'tor', modelPct: 55 },
+        { market: 'goals_ou', subjectType: 'game', subjectId: '2025020123', selection: 'over', line: 6.5, modelPct: 40 },
+      ],
+    }],
+  };
+
+  it('déconnecté → 401, rien n’est écrit', async () => {
+    user = null;
+    expect((await request(await app()).post('/api/scan/price-log').send(sgp)).status).toBe(401);
+    expect(logged).toEqual([]);
+  });
+
+  it('écrit sans rien du compte (ni id, ni e-mail)', async () => {
+    const r = await request(await app()).post('/api/scan/price-log').send({ ...sgp, userId: 'u1' });
+    expect(r.status).toBe(202);
+    expect(logged).toHaveLength(1);
+    expect(JSON.stringify(logged[0])).not.toMatch(/u1|a@b\.com/);
+  });
+
+  it('corps invalide → 400', async () => {
+    const r = await request(await app()).post('/api/scan/price-log').send({ book: 'fanduel', groups: [] });
+    expect(r.status).toBe(400);
+    expect(logged).toEqual([]);
   });
 });

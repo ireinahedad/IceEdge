@@ -18,7 +18,7 @@ import type { OcrEngine, OcrResult } from '../../ocrTypes';
 
 export const FIXTURE_DIR = __dirname;
 
-export type Book = 'bet365' | 'draftkings' | 'other';
+export type Book = 'bet365' | 'draftkings' | 'fanduel' | 'other';
 
 /** Ce que la jambe DOIT devenir. Les noms (pas les ids) : les ids changent d'une saison à l'autre. */
 export interface ExpectedIntent {
@@ -120,7 +120,7 @@ const ABBR_RE = /^[A-Z]{3}$/;
 /** Erreurs de forme d'une vérité attendue (liste vide = valide). */
 export function validateExpected(e: SlipScanExpected): string[] {
   const errs: string[] = [];
-  if (!['bet365', 'draftkings', 'other'].includes(e.book)) errs.push(`book: ${e.book}`);
+  if (!['bet365', 'draftkings', 'fanduel', 'other'].includes(e.book)) errs.push(`book: ${e.book}`);
   if (!['fr', 'en'].includes(e.lang)) errs.push(`lang: ${e.lang}`);
   if (!['dark', 'light'].includes(e.theme)) errs.push(`theme: ${e.theme}`);
   if (!['american', 'decimal', 'fractional'].includes(e.oddsFormat)) errs.push(`oddsFormat: ${e.oddsFormat}`);

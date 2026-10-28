@@ -1,5 +1,5 @@
 {
- "engine": "tesseract", "width": 1200, "height": 1899, "ms": 3504,
+ "engine": "tesseract", "width": 1200, "height": 1899, "ms": 6016,
  "lines": [
   {"text":"SPORTSBOOK QUICK PARLAY SOCIAL POOLS FLASH BET REIGN","confidence":0.75,"box":{"x":18,"y":26,"w":1182,"h":32}},
   {"text":"an’","confidence":0.52,"box":{"x":317,"y":168,"w":38,"h":12}},

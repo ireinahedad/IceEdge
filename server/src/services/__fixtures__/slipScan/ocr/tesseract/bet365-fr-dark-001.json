@@ -1,5 +1,5 @@
 {
- "engine": "tesseract", "width": 1098, "height": 1575, "ms": 3160,
+ "engine": "tesseract", "width": 1098, "height": 1575, "ms": 7180,
  "lines": [
   {"text":"mar. 13 oct. 23:24 bet365","confidence":0.94,"box":{"x":49,"y":72,"w":1005,"h":51}},
   {"text":"Réutiliser les","confidence":0.89,"box":{"x":237,"y":183,"w":211,"h":27}},

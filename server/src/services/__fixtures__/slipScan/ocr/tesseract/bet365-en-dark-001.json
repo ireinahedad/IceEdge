@@ -1,5 +1,5 @@
 {
- "engine": "tesseract", "width": 1179, "height": 2556, "ms": 5729,
+ "engine": "tesseract", "width": 1179, "height": 2556, "ms": 15132,
  "lines": [
   {"text":"06:55 4 all ¥ EB","confidence":0.35,"box":{"x":117,"y":67,"w":962,"h":41}},
   {"text":"$20.00 Same Game Parlay + Track","confidence":0.96,"box":{"x":85,"y":256,"w":1011,"h":43}},

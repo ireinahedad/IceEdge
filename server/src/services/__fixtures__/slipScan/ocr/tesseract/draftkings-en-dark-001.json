@@ -1,5 +1,5 @@
 {
- "engine": "tesseract", "width": 1024, "height": 806, "ms": 1493,
+ "engine": "tesseract", "width": 1024, "height": 806, "ms": 2593,
  "lines": [
   {"text":"6 Hunter Skoczylas Fri 9:49 AM","confidence":0.89,"box":{"x":21,"y":19,"w":413,"h":44}},
   {"text":"3 Picks","confidence":0.96,"box":{"x":212,"y":131,"w":84,"h":21}},

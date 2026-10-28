@@ -1,0 +1,47 @@
+{
+  "book": "draftkings",
+  "lang": "en",
+  "theme": "dark",
+  "oddsFormat": "american",
+  "gameDate": null,
+  "groups": [
+    {
+      "kind": "single",
+      "odds": "+114",
+      "game": { "away": "LAK", "home": "NYR" },
+      "legs": [
+        { "ticketText": ["LA Kings", "Moneyline"], "state": "ok",
+          "intent": { "subjectType": "team", "team": "LAK", "marketType": "moneyline", "selection": "LAK" } }
+      ]
+    },
+    {
+      "kind": "single",
+      "odds": "+114",
+      "game": { "away": "TOR", "home": "CGY" },
+      "legs": [
+        { "ticketText": ["CGY Flames", "Moneyline"], "state": "ok",
+          "intent": { "subjectType": "team", "team": "CGY", "marketType": "moneyline", "selection": "CGY" } }
+      ]
+    },
+    {
+      "kind": "single",
+      "odds": "-180",
+      "game": { "away": "DET", "home": "EDM" },
+      "legs": [
+        { "ticketText": ["EDM Oilers", "Moneyline"], "state": "ok",
+          "intent": { "subjectType": "team", "team": "EDM", "marketType": "moneyline", "selection": "EDM" } }
+      ]
+    },
+    {
+      "kind": "single",
+      "odds": "-175",
+      "game": null,
+      "legs": [
+        { "ticketText": ["CLE Cavaliers", "Moneyline"], "state": "unsupported_market" }
+      ]
+    }
+  ],
+  "totalOdds": "+2127",
+  "personal": ["$348.50", "$1.04", "$15.00", "12:22"],
+  "notes": "DraftKings, onglet « My Activity » (nouvelle interface), capture du user 2026-10-28, ticket réglé (Lost). Ce qu'elle apprend : (1) en-tête « 5 Pick Parlay | +2127 » = cote totale ; la ligne sous l'en-tête résume les équipes (« LA Kings, CGY Flames, … MIL Brewers ») : ce n'est PAS une jambe ; (2) jambe = nom d'équipe sur une ligne, marché (« Moneyline ») sur la suivante, cote alignée à droite (« +114 ») ; (3) la carte de score (« Final P1 P2 P3 T », deux équipes avec leurs buts) SOUS la jambe donne le match, l'équipe du haut = visiteur (convention DraftKings) ; (4) parlay multi-sports : CLE Cavaliers (NBA), MIL Brewers (MLB, hors capture) → pas des paris LNH ; (5) barre d'onglets et barre de navigation (« Home Live My Activity Search Rewards ») = bruit ; solde et mise = personnels."
+}

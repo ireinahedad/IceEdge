@@ -1,5 +1,5 @@
 {
- "engine": "tesseract", "width": 1179, "height": 2556, "ms": 4539,
+ "engine": "tesseract", "width": 1179, "height": 2556, "ms": 10367,
  "lines": [
   {"text":"18:11 n 4 all © (21 }","confidence":0.48,"box":{"x":129,"y":65,"w":951,"h":51}},
   {"text":"Mes Paris 102,068 (5) | QO","confidence":0.66,"box":{"x":29,"y":225,"w":1110,"h":57}},
