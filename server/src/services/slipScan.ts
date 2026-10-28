@@ -21,8 +21,8 @@
  * VIE PRIVÉE (§ 3.1, § 6) : mise, gains, solde, n° de pari, heure du pari et nom de
  * l'auteur d'un partage sont jetés au nettoyage. Aucune ligne jetée ne ressort.
  *
- * Gabarits v1 (D1) : bet365 (FR + EN) et DraftKings (carte de partage, onglet social).
- * Un autre bookmaker passe par le gabarit bet365, sans garantie.
+ * Gabarits : bet365 (FR + EN), DraftKings (carte de partage, onglet social, « My Activity »)
+ * et FanDuel (2026-10-28). Un autre bookmaker passe par le gabarit bet365, sans garantie.
  */
 
 import type { OcrLine, OcrResult } from './ocrTypes';
@@ -33,7 +33,7 @@ import type { SlipContext, SlipGame, SlipIntent, SlipMarket, SlipPlayer } from '
 
 // ── Types publics ────────────────────────────────────────────────────────────
 
-export type ScanBook = 'bet365' | 'draftkings' | 'other';
+export type ScanBook = 'bet365' | 'draftkings' | 'fanduel' | 'other';
 export type ScanLang = 'fr' | 'en';
 export type OddsFormat = 'american' | 'decimal' | 'fractional';
 
@@ -88,6 +88,12 @@ export interface SlipScanResult {
   groups: ScanGroup[];
   /** Cote totale affichée, ou celle de l'unique groupe ; null sinon. */
   totalOdds: string | null;
+  /**
+   * Cote boostée (« Profit Boost ») sur le ticket. Si `totalOdds` est null, la cote
+   * réellement payée n'a pas été lue : le ticket ne doit PAS être chiffré avec le
+   * produit des jambes (ce serait le prix d'avant le boost).
+   */
+  boosted: boolean;
 }
 
 // ── Normalisation ────────────────────────────────────────────────────────────
@@ -109,7 +115,22 @@ export function normScan(s: string): string {
 }
 
 /** Signe moins typographique → ASCII, espaces retirés (« −130 » → « -130 »). */
-const asciiOdds = (s: string) => s.replace(/[−–—]/g, '-').replace(/\s+/g, '');
+const asciiOdds = (s: string) => s.replace(/[−–—]/g, '-').replace(/\s+/g, '').replace(/^~(?=\d)/, '-');
+
+/**
+ * Cote américaine EN FIN de ligne (« -390 », « : +114 », « EDM Oilers ~180 » : l'OCR lit
+ * parfois « − » comme « ~ »). Sans signe (« 172 »), ce n'est pas une cote : null —
+ * mieux vaut une cote manquante qu'une cote fausse.
+ */
+export function trailingAmerican(raw: string): string | null {
+  const m = (raw || '').trim().match(/(?:^|[\s:])([+\-−–~])\s?(\d{3,4})$/);
+  return m ? `${m[1] === '+' ? '+' : '-'}${m[2]}` : null;
+}
+
+/** Toutes les cotes américaines d'un texte, dans l'ordre (« +233 +302 » → les deux). */
+function americanTokens(raw: string): string[] {
+  return [...(raw || '').matchAll(/(?:^|\s)([+\-−–~])(\d{3,5})(?=\s|$)/g)].map((m) => `${m[1] === '+' ? '+' : '-'}${m[2]}`);
+}
 
 // ── Cotes (§ 3.2) ────────────────────────────────────────────────────────────
 
@@ -156,7 +177,7 @@ export function impliedProbability(odds: string): number | null {
 /** Montants d'argent : mise, gains, solde. Une ligne qui en porte est jetée entière. */
 const MONEY = /(\$\s?\d)|(\d[\d\s]*[.,]\d{2}\s?\$)|(\d[.,]\d{2}\s?(€|eur))|(€\s?\d)/i;
 /** Heure d'horloge (barre d'état, heure du pari, heure du match). */
-const CLOCK = /\b\d{1,2}[:h]\d{2}\b/;
+const CLOCK = /\b\d{1,2}[:h]\d{2}(?:\s?[ap]m)?\b/;
 
 /**
  * Bruit d'interface (normalisé). Une ligne qui en contient un est jetée entière :
@@ -170,7 +191,9 @@ const NOISE = [
   // DraftKings
   'quick parlay', 'flash bet', 'betting groups', 'my friends', 'dk network', 'show chat',
   'show bets', 'invite a friend', 'more bets', 'morebets', 'view picks', 'dkn picks',
-  'people placed', 'odds are subject', 'subject to change',
+  'people placed', 'odds are subject', 'subject to change', 'my activity', 'horse bets', 'pick em',
+  // FanDuel
+  'rewards', 'pts pending', 'profit boost',
 ];
 const NOISE_RE = new RegExp(`(?:^|[^a-z])(?:${NOISE.map((w) => w.replace(/ /g, '\\s?')).join('|')})(?:[^a-z]|$)`);
 
@@ -196,7 +219,7 @@ export function cleanLines(ocr: OcrResult): CleanLine[] {
     const n = normScan(raw);
     if (NOISE_RE.test(n)) continue;
     const letters = (n.match(/[a-z]/g) || []).length;
-    const isOdds = oddsFormatOf(raw) !== null;
+    const isOdds = oddsFormatOf(raw) !== null || trailingAmerican(raw) !== null;
     if (!isOdds && letters < 3) continue;
     if (CLOCK.test(n) && !teamsIn(n).length && !/@/.test(n)) continue;
     out.push({ ...l, text: raw, n });
@@ -252,7 +275,7 @@ const PROP_WORDS: [RegExp, SlipMarket][] = [
 ];
 
 /** Sous-titres de catégorie (ligne sous la jambe chez bet365, « Total FT » chez DraftKings). */
-const CATEGORY = /^(money ?line|moneyline|ligne d argent|team total|total de l equipe|total|total de points|total de buts|total ft.*|game total|points|shots on goal|tirs au but|tirs|assists|passes|saves|arrets|anytime goal ?scorer|buteur a tout moment|first goal ?scorer|premier buteur|puck ?line|spread|ecart|handicap|60 min line|3 way|resultat 60 min)$/;
+const CATEGORY = /^(m?oneyline|money ?line|moneyline|ligne d argent|team total|total de l equipe|total|total de points|total de buts|total ft.*|game total|points|shots on goal|tirs au but|tirs|assists|passes|saves|arrets|anytime goal ?scorer|buteur a tout moment|first goal ?scorer|premier buteur|puck ?line|spread|ecart|handicap|60 min line|3 way|resultat 60 min)$/;
 
 const PROP_ALT = 'shots on goal|shots on target|shots|sog|tirs au but|tirs cadres|tirs|points|point|pts|assists|assist|passes|aides|saves|arrets|goals|goal|buts|but';
 const NUM = '(\\d{1,2}(?:\\.\\d{1,2})?)';
@@ -312,9 +335,14 @@ export function parseLegText(main: string, subtitle = ''): ParsedLeg | null {
   if ((m = m0.match(/^(.+?)\s+([+-]\d(?:\.\d)?)$/)) && /puck ?line|spread|ecart|handicap/.test(sub)) {
     return { subjectType: 'team', subjectText: m[1], marketType: 'puck_line', selection: 'team', line: Number(m[2]) };
   }
-  // Nom d'équipe seul + sous-titre Money Line (DraftKings)
-  if (/^(money ?line|moneyline|ligne d argent)$/.test(sub) && teamsIn(m0).length === 1) {
-    return { subjectType: 'team', subjectText: m0, marketType: 'moneyline', selection: 'team' };
+  // Nom d'équipe seul + sous-titre Money Line (DraftKings, FanDuel)
+  if (sub && isMoneylineCategory(sub)) {
+    const team = m0.replace(/\s+\d[\d\s.]*$/, '').trim();
+    if (teamsIn(team).length === 1) return { subjectType: 'team', subjectText: team, marketType: 'moneyline', selection: 'team' };
+    // Une équipe d'un AUTRE sport (« CLE Cavaliers ») : lisible, mais pas un pari LNH.
+    if (teamsIn(team).length === 0 && /[a-z]{3,}\s+[a-z]{3,}/.test(team)) {
+      return { subjectType: 'team', subjectText: team, marketType: null, selection: 'team' };
+    }
   }
   // Buteur : « Auston Matthews - Anytime Goalscorer » ou nom seul + sous-titre
   if ((m = m0.match(/^(.+?)\s*[-:]?\s*(?:anytime goal ?scorer|to score|anytime goal|buteur a tout moment|marquer un but)$/))) {
@@ -339,7 +367,12 @@ function prop(name: string, n: number, word: string): ParsedLeg {
   return { subjectType: 'player', subjectText, marketType: market, selection: 'over', line: n - 0.5 };
 }
 
-const isCategory = (n: string) => CATEGORY.test(stripTail(stripBullet(n)).replace(/[^a-z0-9 ()]+$/, '').trim());
+/** Sous-titre de catégorie, débris d'OCR de 1 à 3 lettres en tête tolérés (« Nid Moneyline »). */
+const isCategory = (n: string) => {
+  const s = stripTail(stripBullet(n)).replace(/[^a-z0-9 ()]+$/, '').trim();
+  return CATEGORY.test(s) || CATEGORY.test(s.replace(/^(?:[a-z]{1,3}\s+)+(?=[a-z]{4,})/, ''));
+};
+const isMoneylineCategory = (n: string) => isCategory(n) && /m?oneyline|money ?line|ligne d argent/.test(n);
 
 // ── Détection du bookmaker et de la langue ──────────────────────────────────
 
@@ -349,9 +382,11 @@ const EN_WORDS = /\b(same game parlay|money line|goals|shots|today|picks|parlay|
 function detect(ocr: OcrResult): { book: ScanBook; lang: ScanLang } {
   const all = ocr.lines.map((l) => normScan(l.text)).join('\n');
   const book: ScanBook =
-    /bet365|same game parlay|pari personnalise|early payout|reuse selections|reutiliser les|cash out/.test(all) ? 'bet365'
-      : /draftkings|\bdk\b|quick parlay|picks?\b.*\n?|total ft|odds are subject|people placed/.test(all) && /@/.test(all) ? 'draftkings'
-        : 'other';
+    /bet365|same game parlay|pari personnalise|early payout|reuse selections|reutiliser les|effectuer un cash out/.test(all) ? 'bet365'
+      : /fanduel|profit boost|\d+ leg parlay|pts pending/.test(all) ? 'fanduel'
+        : /\d+ pick parlay|my activity|wager:/.test(all) ? 'draftkings'
+          : /draftkings|\bdk\b|quick parlay|picks?\b.*\n?|total ft|odds are subject|people placed/.test(all) && /@/.test(all) ? 'draftkings'
+            : 'other';
   const fr = (all.match(FR_WORDS) || []).length;
   const en = (all.match(EN_WORDS) || []).length;
   // Un ticket bet365 français garde des libellés anglais : les mots d'interface
@@ -493,6 +528,120 @@ function segmentDkSocial(lines: CleanLine[], header: number, width: number): { g
   return { groups, total };
 }
 
+/** Nom propre en fin de ligne, débris d'OCR en tête retirés (« fa Artemi Panarin » → « Artemi Panarin »). */
+function personName(raw: string): string | null {
+  const clean = (raw || '').replace(/[^A-Za-zÀ-ÿ' .-]+/g, ' ').replace(/\s+/g, ' ').trim();
+  const m = clean.match(/([A-ZÀ-Ý][a-zà-ÿ'.-]+(?:\s+[A-ZÀ-Ý][A-Za-zà-ÿ'.-]+){1,3})$/);
+  return m ? m[1] : null;
+}
+
+/** « 2+ SHOTS ON GOAL » seul sur sa ligne (le nom est sur la ligne d'au-dessus) ; débris de ≤ 4 caractères tolérés. */
+function propOnly(n: string): { n: number; word: string } | null {
+  const s = stripBullet(n);
+  const m = s.match(new RegExp(`^(.{0,4}?)\\s*(\\d{1,2})\\s?\\+\\s+(${PROP_ALT})$`));
+  return m && !/[a-z]{3,}/.test(m[1]) ? { n: Number(m[2]), word: m[3] } : null;
+}
+
+/** Cotes américaines des lignes d'en-tête ; avec un boost, seule une 2e cote (la boostée) est sûre. */
+function headerTotal(header: CleanLine[], boosted: boolean): string | null {
+  const tokens = header.flatMap((l) => americanTokens(asciiOddsLine(l.text)));
+  if (boosted) return tokens.length >= 2 ? tokens[tokens.length - 1] : null;
+  return tokens[0] ?? null;
+}
+const asciiOddsLine = (s: string) => s.replace(/[−–—]/g, '-');
+
+/**
+ * Gabarit FanDuel : en-tête (« 6 leg parlay », cote, boost, résumé des jambes), puis par jambe :
+ * cote, nom, marché (« 2+ SHOTS ON GOAL ») sur sa propre ligne, match « A @ B » en noms
+ * complets, heure. Le match FERME la jambe.
+ */
+function segmentFanDuel(lines: CleanLine[], boosted: boolean): { groups: RawGroup[]; total: string | null } {
+  const gameIdx = lines.map((l, i) => (gameFrom(l.text) ? i : -1)).filter((i) => i !== -1);
+  const first = gameIdx[0] ?? lines.length;
+  let headerEnd = -1;
+  for (let i = 0; i < first; i++) {
+    const n = lines[i].n;
+    if (/parlay|\.\.\.|…/.test(n) || (n.includes(',') && /\d\s?\+/.test(n))) headerEnd = i;
+  }
+  const total = headerTotal(lines.slice(0, headerEnd + 1), boosted);
+  const groups: RawGroup[] = [];
+  let start = headerEnd + 1;
+  for (const gi of gameIdx) {
+    const seg = lines.slice(start, gi);
+    start = gi + 1;
+    const odds = seg.map((l) => trailingAmerican(l.text)).find((o): o is string => !!o) ?? null;
+    const prop = seg.map((l) => ({ l, p: propOnly(l.n) })).find((x) => x.p);
+    const cat = seg.find((l) => isCategory(l.n));
+    let leg: RawLeg | null = null;
+    if (prop) {
+      const nameLine = seg.slice(0, seg.indexOf(prop.l)).reverse().find((l) => personName(l.text) && !trailingAmerican(l.text));
+      const name = nameLine ? personName(nameLine.text) : null;
+      if (name) leg = { text: [nameLine!.text, prop.l.text], main: `${name}: ${prop.p!.n}+ ${prop.p!.word}`, subtitle: '' };
+    } else if (cat) {
+      const main = seg.slice(0, seg.indexOf(cat)).reverse().find((l) => !trailingAmerican(l.text) || teamsIn(l.n).length);
+      if (main) leg = { text: [main.text, cat.text], main: main.text.replace(/\s[+\-−–~]\d{3,4}\s*$/, ''), subtitle: cat.text };
+    } else {
+      const own = seg.find((l) => parseLegText(l.text));
+      if (own) leg = { text: [own.text], main: own.text, subtitle: '' };
+      else {
+        const any = seg.find((l) => looksLikeLeg(l.n));
+        if (any) leg = { text: [any.text], main: any.text, subtitle: '' };
+      }
+    }
+    if (leg) groups.push({ kind: 'single', odds, game: gameFrom(lines[gi].text), legs: [leg], closed: true });
+  }
+  return { groups, total };
+}
+
+/**
+ * Gabarit DraftKings « My Activity » : en-tête « 5 Pick Parlay | +2127 », résumé des équipes,
+ * puis par jambe : (cote) · équipe ou joueur · catégorie (« Moneyline ») · carte de score
+ * (« Final P1 P2 P3 T » + deux équipes, VISITEUR EN HAUT) ou ligne « A @ B ».
+ */
+function segmentDkActivity(lines: CleanLine[]): { groups: RawGroup[]; total: string | null } {
+  const h = lines.findIndex((l) => /\d+\s*pick parlay/.test(l.n));
+  const total = h === -1 ? null : (americanTokens(asciiOddsLine(lines[h].text))[0] ?? null);
+  const groups: RawGroup[] = [];
+  for (let i = h + 1; i < lines.length; i++) {
+    const l = lines[i];
+    const prop = propOnly(l.n);
+    if (!isCategory(l.n) && !prop) continue;
+    // La ligne de la jambe : juste au-dessus (on saute une ligne qui n'est qu'une cote).
+    let k = i - 1;
+    while (k > h && /^[^a-z]*$/.test(lines[k].n)) k--;
+    if (k <= h) continue;
+    const mainLine = lines[k];
+    if (mainLine.n.includes(',')) continue; // le résumé de l'en-tête n'est pas une jambe
+    const odds = trailingAmerican(mainLine.text) ?? (k - 1 > h ? trailingAmerican(lines[k - 1].text) : null);
+    const mainText = mainLine.text.replace(/\s[+\-−–~]\d{3,4}\s*$/, '');
+    let leg: RawLeg;
+    if (prop) {
+      const name = personName(mainText);
+      if (!name) continue;
+      leg = { text: [mainLine.text, l.text], main: `${name}: ${prop.n}+ ${prop.word}`, subtitle: '' };
+    } else {
+      leg = { text: [mainLine.text, l.text], main: mainText, subtitle: l.text };
+    }
+    // Le match : carte de score (« Final ») ou ligne « A @ B » dans les 4 lignes suivantes.
+    let game: { away: string; home: string } | null = null;
+    const ahead = lines.slice(i + 1, i + 5);
+    const at = ahead.findIndex((x) => /\s@\s/.test(x.n));
+    const fin = ahead.findIndex((x) => /^\W*final\b/.test(x.n));
+    if (at !== -1) game = gameFrom(ahead[at].text, ahead[at + 1]?.text);
+    else if (fin !== -1) {
+      const t1 = teamsIn(ahead[fin + 1]?.n ?? '')[0];
+      const t2 = teamsIn(ahead[fin + 2]?.n ?? '')[0];
+      const legTeam = teamsIn(mainText)[0];
+      // Une ligne de la carte illisible (« LAKings ») : l'équipe de la jambe est l'autre côté.
+      const away = t1 ?? (t2 && legTeam && legTeam !== t2 ? legTeam : undefined);
+      const home = t2 ?? (t1 && legTeam && legTeam !== t1 ? legTeam : undefined);
+      if (away && home && away !== home) game = { away, home };
+    }
+    groups.push({ kind: 'single', odds, game, legs: [leg], closed: true });
+  }
+  return { groups, total };
+}
+
 // ── Résolution contre le contexte (§ 3.5) ────────────────────────────────────
 
 const lower = (s: string) => s.toLowerCase();
@@ -568,6 +717,8 @@ function resolveGroup(raw: RawGroup, ctx: SlipContext): ScanGroup {
     const base = { text: l.text };
     if (!p) return { ...base, state: 'unreadable' };
     if (p.marketType === null || !MARKETS.has(p.marketType)) return { ...base, state: 'unsupported_market', parsed: p };
+    // Un sujet d'équipe qui ne nomme aucune équipe LNH n'est pas un pari LNH.
+    if (p.subjectType === 'team' && !teamsIn(p.subjectText).length) return { ...base, state: 'unsupported_market', parsed: p };
     if (!game) return { ...base, state: 'no_game', parsed: p };
 
     const sides = [game.awayAbbr.toUpperCase(), game.homeAbbr.toUpperCase()];
@@ -613,9 +764,18 @@ export function scanSlip(ocr: OcrResult, ctx: SlipContext): SlipScanResult {
   const { book, lang } = detect(ocr);
   const lines = cleanLines(ocr);
 
+  const boosted = ocr.lines.some((l) => /boost/i.test(l.text));
   let raws: RawGroup[];
   let total: string | null = null;
-  if (book === 'draftkings') {
+  if (book === 'fanduel') {
+    const r = segmentFanDuel(lines, boosted);
+    raws = r.groups;
+    total = r.total;
+  } else if (book === 'draftkings' && lines.some((l) => /\d+\s*pick parlay/.test(l.n))) {
+    const r = segmentDkActivity(lines);
+    raws = r.groups;
+    total = r.total;
+  } else if (book === 'draftkings') {
     const r = segmentDraftKings(lines, ocr.width);
     raws = r.groups;
     total = r.total;
@@ -624,8 +784,8 @@ export function scanSlip(ocr: OcrResult, ctx: SlipContext): SlipScanResult {
   }
 
   const groups = raws.map((g) => resolveGroup(g, ctx));
-  if (total === null && groups.length === 1) total = groups[0].odds;
+  if (total === null && groups.length === 1 && !boosted) total = groups[0].odds;
 
   const shown = [total, ...groups.map((g) => g.odds)].find((o): o is string => !!o);
-  return { book, lang, oddsFormat: shown ? oddsFormatOf(shown) : null, groups, totalOdds: total };
+  return { book, lang, oddsFormat: shown ? oddsFormatOf(shown) : null, groups, totalOdds: total, boosted };
 }
