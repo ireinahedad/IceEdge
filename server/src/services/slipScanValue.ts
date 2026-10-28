@@ -84,7 +84,7 @@ export function ticketPaidDecimal(totalOdds: string | null, groupOdds: (string |
   if (!groupOdds.length || groupOdds.some((o) => !o)) return null;
   const ds = groupOdds.map((o) => oddsToDecimal(o as string));
   if (ds.some((d) => !d)) return null;
-  return ds.reduce((a, d) => a * (d as number), 1);
+  return ds.reduce<number>((a, d) => a * (d as number), 1);
 }
 
 /** Le maillon faible : la jambe la moins probable selon le modèle (null s'il y en a moins de 2). */
