@@ -94,4 +94,10 @@ export const features = {
    * VITE_TARGET : la constante doit se replier pour que le chunk disparaisse.
    */
   ocrLab:         isWeb || import.meta.env.VITE_OCR_LAB === 'true',
+  /**
+   * SCAN_TICKET_PLAN S3 — « Scanner un ticket » (ScanSlipSheet). Masqué tant que
+   * VITE_SLIP_SCAN n'est pas « true » (variable Vercel / build iOS) : la fonction
+   * arrive en production éteinte, et s'allume sans toucher au code.
+   */
+  slipScan:       import.meta.env.VITE_SLIP_SCAN === 'true',
 } as const;

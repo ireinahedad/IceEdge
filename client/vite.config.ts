@@ -69,6 +69,9 @@ export default defineConfig({
         path.resolve(__dirname, '../server/src/services/oddsTeamNames.ts'),
         // Lignes des marchés plus/moins, partagées avec le serveur (marketLines.ts).
         path.resolve(__dirname, '../server/src/services/marketLines.ts'),
+        // Lecture OCR d'un ticket → jambes (SCAN_TICKET_PLAN S2) ; ses imports de types sont effacés.
+        path.resolve(__dirname, '../server/src/services/slipScan.ts'),
+        path.resolve(__dirname, '../server/src/services/slipScanValue.ts'),
       ],
     },
   },

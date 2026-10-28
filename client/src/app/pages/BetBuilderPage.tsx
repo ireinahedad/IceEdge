@@ -19,6 +19,7 @@ import { useBet } from "../context/BetContext";
 import { useAuth } from "../context/AuthContext";
 import { MarketSelectorSheet } from "../components/MarketSelectorSheet";
 import { SlipCommandLauncher } from "../components/SlipCommandSheet";
+import { ScanSlipLauncher } from "../components/ScanSlipSheet";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { BottomNav } from "../components/BottomNav";
 import { getMySlips, submitSlip } from "../services/slipApiService";
@@ -339,6 +340,7 @@ export function BetBuilderPage() {
                 <p className="text-white text-sm font-medium">{t("slip.predictions")}</p>
                 <div className="flex items-center gap-2">
                   <SlipCommandLauncher variant="pill" />
+                  <ScanSlipLauncher variant="pill" />
                   <button onClick={() => setShowSheet(true)}
                     className="tap-44 flex items-center gap-1 text-[#90C9F0] text-xs bg-[#90C9F0]/10 border border-[#90C9F0]/25 rounded-full px-3 py-1.5 active:scale-95 transition-transform">
                     <Plus size={10} /> {t("slip.add")}

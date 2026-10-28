@@ -15,6 +15,7 @@ import { useBookmaker, minOddsFromPct } from "../../context/BookmakerContext";
 import { useOddsFormat } from "../../context/OddsFormatContext";
 import { useI18n } from "../../i18n";
 import { SlipCommandLauncher } from "../../components/SlipCommandSheet";
+import { ScanSlipLauncher } from "../../components/ScanSlipSheet";
 
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -334,8 +335,9 @@ export function EmptySlip({ onBrowse }: { onBrowse: () => void }) {
         </p>
       </div>
       {/* « Bet builder IA » au-dessus de « Browse markets » (décision du user, 2026-09-28). */}
-      <div className="w-full max-w-[280px]">
+      <div className="w-full max-w-[280px] flex flex-col gap-2">
         <SlipCommandLauncher variant="block" />
+        <ScanSlipLauncher variant="block" />
       </div>
       <button onClick={onBrowse}
         className="bg-[#86d1ea] text-[#072E49] font-bold px-6 py-3 rounded-2xl text-sm flex items-center gap-2 active:scale-95 transition-transform">
