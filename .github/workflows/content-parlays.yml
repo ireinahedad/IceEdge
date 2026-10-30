@@ -9,12 +9,15 @@ name: Contenu — combinés du jour
 #
 # Chaque passage commence par `parlays-due.mjs` (aucune dépendance, quelques
 # secondes) : `npm ci`, Chromium et ffmpeg ne s'installent que si c'est l'heure.
-# 46 passages « non » par jour coûtent donc ~15 s chacun.
+# Depuis le 2026-10-30 : 4 passages par jour seulement (06:00, 06:30, 07:00,
+# 08:00 UTC). Chaque passage interroge /api/content/parlays, donc Postgres :
+# les 39 passages d'avant réveillaient Neon toutes les 30 min, 19 h par jour.
 #
 # Heures (UTC ; Bali = UTC+8, sans heure d'été) :
 #   • pick — 1er passage à 06:00 UTC = 14 h à Bali (GitHub peut le retarder
-#            jusqu'à ~1 h). Les passages suivants, toutes les 30 min jusqu'à
-#            01:00, ne servent que de rattrapage si le premier a échoué.
+#            jusqu'à ~1 h). 06:30, 07:00 et 08:00 ne servent que de rattrapage
+#            si le premier a échoué ; au-delà, relancer à la main
+#            (workflow_dispatch).
 #
 # MODE ESSAI : tant que la variable de dépôt PARLAYS_YOUTUBE_PRIVACY n'est pas
 # « public », les Shorts partent en « unlisted » et le courriel porte [ESSAI].
@@ -22,9 +25,8 @@ name: Contenu — combinés du jour
 
 on:
   schedule:
-    - cron: "0,30 6-23 * * *"
-    - cron: "0,30 0 * * *"
-    - cron: "0 1 * * *"
+    - cron: "0,30 6 * * *"
+    - cron: "0 7,8 * * *"
   workflow_dispatch:
     inputs:
       mode:

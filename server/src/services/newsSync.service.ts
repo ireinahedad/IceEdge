@@ -26,6 +26,7 @@
 import { pool } from '../db/connection';
 import { logger } from '../logger';
 import { withJobLock } from './jobLock';
+import { onClockGrid } from './clockGrid';
 import { mapLimit } from './concurrency';
 import { TtlCache } from './ttlCache';
 import { fetchGamesByDate } from './nhlApiClient';
@@ -229,7 +230,9 @@ async function tick(): Promise<void> {
   } catch (err: any) {
     logger.warn({ err: err?.message }, '[NewsSync] tour échoué');
   } finally {
-    timer = setTimeout(() => void tick(), nextMs);
+    // `nextDelayMs` est déjà sur la grille dans la fenêtre des matchs ; le calage
+    // couvre le reste (6 h, repli d'une heure) — voir clockGrid.ts.
+    timer = setTimeout(() => void tick(), onClockGrid(nextMs));
     timer.unref();
   }
 }

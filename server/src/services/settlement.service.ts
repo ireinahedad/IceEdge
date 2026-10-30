@@ -67,6 +67,7 @@ import {
 import { applyXpDelta, xpForOutcome } from './slip.service';
 import { logger } from '../logger';
 import { withJobLock } from './jobLock';
+import { onClockGrid, gridFor } from './clockGrid';
 import { mapLimit } from './concurrency';
 import { parseMarginBucket } from './prediction/marginPeriods';
 import { notifySettled, type SettledSlip } from './settlementNotify';
@@ -1503,7 +1504,9 @@ const maxSleepMs = 6 * 60 * 60_000; // safety re-check horizon (schedule changes
 
 /** Delay (ms) until the next check, from what the last pass observed. */
 function nextDelay(r: CheckResult): number {
-  if (!r.pending) return idleMs;                 // no open bets → let the DB sleep
+  // No open bets → let the DB sleep, waking on the shared clock grid (:00) so
+  // this check shares its 5-min Neon window with the other jobs (clockGrid.ts).
+  if (!r.pending) return onClockGrid(idleMs, Date.now(), gridFor(idleMs));
   if (r.live) return activeMs;                    // a game is on → poll fast
   if (r.soonestStartMs != null) {                 // all pending games are upcoming
     const wake = r.soonestStartMs - preRollMs;
@@ -1572,8 +1575,11 @@ export function notifySlipPlaced(): void {
  *
  * Cadence knobs (env, minutes):
  *   - SETTLEMENT_POLL_MIN       fast interval while a game is live (default 2)
- *   - SETTLEMENT_IDLE_POLL_MIN  interval while nothing is pending (default 15 in
- *                               production, else same as active)
+ *   - SETTLEMENT_IDLE_POLL_MIN  interval while nothing is pending (default 60 in
+ *                               production, else same as active). 60 since
+ *                               2026-10-30 (Neon compute): a new bet wakes the
+ *                               check at once via notifySlipPlaced(), so the idle
+ *                               poll only re-checks the calendar.
  *   - SETTLEMENT_PREROLL_MIN    how early before a game's start to begin polling (default 2)
  *   - SETTLEMENT_FALLBACK_MIN   safety-net full settlement pass (default 60)
  * To restore a plain fixed poll every 5 min, set SETTLEMENT_POLL_MIN=5 and
@@ -1581,7 +1587,7 @@ export function notifySlipPlaced(): void {
  */
 export function startSettlementJob(): void {
   activeMs  = minToMs(process.env.SETTLEMENT_POLL_MIN, 2 * 60_000);
-  const idleDefault = process.env.NODE_ENV === 'production' ? 15 * 60_000 : activeMs;
+  const idleDefault = process.env.NODE_ENV === 'production' ? 60 * 60_000 : activeMs;
   idleMs    = minToMs(process.env.SETTLEMENT_IDLE_POLL_MIN, idleDefault);
   preRollMs = minToMs(process.env.SETTLEMENT_PREROLL_MIN, 2 * 60_000);
   const fallbackMs = minToMs(process.env.SETTLEMENT_FALLBACK_MIN, 60 * 60_000);
@@ -1615,7 +1621,13 @@ export function startSettlementJob(): void {
 
   // Catch-up pass shortly after boot (games may have finished while the server
   // was down), then event-driven checks + periodic fallback safety net.
+  // The fallback runs on the clock grid (:00 for the default 60 min), not every
+  // N min from boot, so it lands in the same Neon window as the idle check.
+  const scheduleFallback = () => {
+    setTimeout(() => { scheduleFallback(); void fallback(); },
+      onClockGrid(fallbackMs, Date.now(), gridFor(fallbackMs))).unref();
+  };
   setTimeout(fallback, 30_000).unref();
   armCheck(activeMs);
-  setInterval(fallback, fallbackMs).unref();
+  scheduleFallback();
 }

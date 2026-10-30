@@ -28,6 +28,7 @@ import { logger } from '../logger';
 import { fetchGamesRange } from './nhlApiClient';
 import { etDate } from './bestBets.service';
 import { warmGameMlBundle } from './gameMlBundle';
+import { onClockGrid } from './clockGrid';
 
 const DAYS_AHEAD = 7;
 let running = false;
@@ -73,5 +74,10 @@ export function startMlBundleWarmup(): void {
   // 2 min après le démarrage : laisser passer le réchauffage de best-bets, qui
   // calcule déjà les paquets d'aujourd'hui et de demain.
   setTimeout(tick, 2 * 60_000).unref();
-  setInterval(tick, minutes * 60_000).unref();
+  // Sur la grille d'horloge (quarts d'heure), pas N min après le démarrage :
+  // le tour partage la fenêtre Neon des autres jobs (clockGrid.ts).
+  const schedule = () => {
+    setTimeout(() => { schedule(); tick(); }, onClockGrid(minutes * 60_000)).unref();
+  };
+  schedule();
 }

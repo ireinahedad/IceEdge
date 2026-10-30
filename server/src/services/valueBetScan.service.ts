@@ -16,6 +16,8 @@ import { getCurrentValueBets, type ValueBet } from './valueBets.service';
 import { logger } from '../logger';
 import { sendToUsers, pushEnabled } from './push.service';
 import { withJobLock, getJobState, setJobState } from './jobLock';
+import { fetchGamesByDate } from './nhlApiClient';
+import { onClockGrid, gridFor } from './clockGrid';
 
 /**
  * Clé de la dernière alerte envoyée, en base et non en mémoire.
@@ -119,10 +121,33 @@ async function runScan(): Promise<void> {
   }
 }
 
-/** Un tour de scan, sous verrou d'unicité. */
+/** Ouverture de la fenêtre de scan : 7 h avant la 1re mise au jeu (≈ midi ET pour 19 h). */
+export const SCAN_LEAD_MS = 7 * 60 * 60_000;
+
+/**
+ * Vrai si un value bet peut exister maintenant : entre 7 h avant le 1er match
+ * du jour et la DERNIÈRE mise au jeu (après, plus rien n'est prenable). Hors de
+ * cette fenêtre, ou un jour sans match, le tour ne touche pas la base — même
+ * pas pour le verrou, qui est une écriture Postgres (`job_locks`) et suffisait
+ * à réveiller Neon toutes les 30 min, jour et nuit.
+ */
+export function inScanWindow(now: number, startsUtc: number[]): boolean {
+  if (startsUtc.length === 0) return false;
+  return now >= Math.min(...startsUtc) - SCAN_LEAD_MS && now < Math.max(...startsUtc);
+}
+
+async function todaysStarts(): Promise<number[]> {
+  const day = new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
+  const games = await fetchGamesByDate(day);   // API NHL + cache mémoire, jamais la base
+  return games.map((g: any) => Date.parse(g?.startTimeUTC ?? '')).filter(Number.isFinite);
+}
+
+/** Un tour de scan, sous verrou d'unicité — seulement dans la fenêtre des matchs. */
 function tick(): void {
-  void withJobLock('value-bet-scan', LOCK_TTL_MS, runScan)
-    .catch((err: any) => logger.warn({ err: err?.message }, '[ValueBetScan] tick failed'));
+  void (async () => {
+    if (!inScanWindow(Date.now(), await todaysStarts())) return;
+    await withJobLock('value-bet-scan', LOCK_TTL_MS, runScan);
+  })().catch((err: any) => logger.warn({ err: err?.message }, '[ValueBetScan] tick failed'));
 }
 
 export function startValueBetScan(): void {
@@ -131,8 +156,13 @@ export function startValueBetScan(): void {
     logger.warn('[ValueBetScan] push not configured — scan not started.');
     return;
   }
-  const minutes = Number(process.env.PUSH_SCAN_INTERVAL_MIN) || 30;
-  setInterval(tick, minutes * 60 * 1000);
+  const periodMs = (Number(process.env.PUSH_SCAN_INTERVAL_MIN) || 30) * 60 * 1000;
+  // Sur la grille d'horloge (:00 / :30), pas N min après le démarrage : le tour
+  // partage ainsi la fenêtre Neon des autres jobs (clockGrid.ts).
+  const schedule = () => {
+    setTimeout(() => { schedule(); tick(); }, onClockGrid(periodMs, Date.now(), gridFor(periodMs))).unref();
+  };
+  schedule();
   // Kick off one scan shortly after boot.
   setTimeout(tick, 15_000);
 }
