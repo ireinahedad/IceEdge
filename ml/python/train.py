@@ -212,6 +212,11 @@ def train_game(train_df, val_df, test_df, features, trials: int):
                 "blend_log_loss":  round(log_loss_np(yt, p_blend), 4),
                 "blend_brier":     round(brier(yt, p_blend), 4),
                 "blend_weights":   [round(float(x), 4) for x in blend_w],
+                # Le modèle sur EXACTEMENT les matchs cotés : seule comparaison
+                # honnête avec « marché seul » (même n, mêmes matchs).
+                "model_accuracy_same":  round(accuracy(yt, p_test[tmask]), 4),
+                "model_log_loss_same":  round(log_loss_np(yt, p_test[tmask]), 4),
+                "model_brier_same":     round(brier(yt, p_test[tmask]), 4),
             }
 
     # ── Baselines ────────────────────────────────────────────────────────────
@@ -235,6 +240,8 @@ def train_game(train_df, val_df, test_df, features, trials: int):
     if market_metrics:
         print(f"   Marché seul : acc {market_metrics['market_accuracy']:.4f}, "
               f"ll {market_metrics['market_log_loss']:.4f}  (n={market_metrics['n_with_odds']})")
+        print(f"   Modèle, mêmes matchs : acc {market_metrics['model_accuracy_same']:.4f}, "
+              f"ll {market_metrics['model_log_loss_same']:.4f}  (n={market_metrics['n_with_odds']})")
         print(f"   Blend ⊕     : acc {market_metrics['blend_accuracy']:.4f}, "
               f"ll {market_metrics['blend_log_loss']:.4f}")
 

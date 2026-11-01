@@ -9,145 +9,149 @@
     2020,
     2021,
     2022,
-    2025
+    2023,
+    2024,
+    2025,
+    2026
   ],
-  "n_games_with_odds": 11134,
+  "n_games_with_odds": 13841,
   "log_loss": {
-    "model": 0.6689,
-    "market": 0.6677
+    "model": 0.666,
+    "market": 0.6655
   },
   "roi": [
     {
       "edge": 0.01,
-      "n_bets": 6713,
-      "hit_rate": 52.23,
-      "roi_flat_pct": -0.95,
-      "roi_kelly_pct": -1.7
+      "n_bets": 6918,
+      "hit_rate": 52.56,
+      "roi_flat_pct": -0.16,
+      "roi_kelly_pct": 0.23
     },
     {
       "edge": 0.02,
-      "n_bets": 4155,
-      "hit_rate": 51.99,
-      "roi_flat_pct": -0.54,
-      "roi_kelly_pct": -1.76
+      "n_bets": 4509,
+      "hit_rate": 52.69,
+      "roi_flat_pct": 0.56,
+      "roi_kelly_pct": 0.27
     },
     {
       "edge": 0.03,
-      "n_bets": 2424,
-      "hit_rate": 51.36,
-      "roi_flat_pct": -0.44,
-      "roi_kelly_pct": -2.12
+      "n_bets": 2743,
+      "hit_rate": 52.64,
+      "roi_flat_pct": 1.66,
+      "roi_kelly_pct": 0.23
     },
     {
       "edge": 0.04,
-      "n_bets": 1314,
-      "hit_rate": 50.08,
-      "roi_flat_pct": 0.03,
-      "roi_kelly_pct": -2.03
+      "n_bets": 1569,
+      "hit_rate": 51.05,
+      "roi_flat_pct": 0.71,
+      "roi_kelly_pct": -0.7
     },
     {
       "edge": 0.05,
-      "n_bets": 771,
-      "hit_rate": 46.95,
-      "roi_flat_pct": -1.48,
-      "roi_kelly_pct": -2.95
+      "n_bets": 871,
+      "hit_rate": 49.83,
+      "roi_flat_pct": 2.36,
+      "roi_kelly_pct": -0.31
     },
     {
       "edge": 0.06,
-      "n_bets": 482,
-      "hit_rate": 44.4,
-      "roi_flat_pct": -0.57,
-      "roi_kelly_pct": -2.76
+      "n_bets": 514,
+      "hit_rate": 47.08,
+      "roi_flat_pct": 1.94,
+      "roi_kelly_pct": -1.0
     }
   ],
   "roi_by_source": {
     "sbro": [
       {
         "edge": 0.01,
-        "n_bets": 6713,
-        "hit_rate": 52.23,
-        "roi_flat_pct": -0.95,
-        "roi_kelly_pct": -1.7
+        "n_bets": 6918,
+        "hit_rate": 52.56,
+        "roi_flat_pct": -0.16,
+        "roi_kelly_pct": 0.23
       },
       {
         "edge": 0.02,
-        "n_bets": 4155,
-        "hit_rate": 51.99,
-        "roi_flat_pct": -0.54,
-        "roi_kelly_pct": -1.76
+        "n_bets": 4509,
+        "hit_rate": 52.69,
+        "roi_flat_pct": 0.56,
+        "roi_kelly_pct": 0.27
       },
       {
         "edge": 0.03,
-        "n_bets": 2424,
-        "hit_rate": 51.36,
-        "roi_flat_pct": -0.44,
-        "roi_kelly_pct": -2.12
+        "n_bets": 2743,
+        "hit_rate": 52.64,
+        "roi_flat_pct": 1.66,
+        "roi_kelly_pct": 0.23
       },
       {
         "edge": 0.04,
-        "n_bets": 1314,
-        "hit_rate": 50.08,
-        "roi_flat_pct": 0.03,
-        "roi_kelly_pct": -2.03
+        "n_bets": 1569,
+        "hit_rate": 51.05,
+        "roi_flat_pct": 0.71,
+        "roi_kelly_pct": -0.7
       },
       {
         "edge": 0.05,
-        "n_bets": 771,
-        "hit_rate": 46.95,
-        "roi_flat_pct": -1.48,
-        "roi_kelly_pct": -2.95
+        "n_bets": 871,
+        "hit_rate": 49.83,
+        "roi_flat_pct": 2.36,
+        "roi_kelly_pct": -0.31
       },
       {
         "edge": 0.06,
-        "n_bets": 482,
-        "hit_rate": 44.4,
-        "roi_flat_pct": -0.57,
-        "roi_kelly_pct": -2.76
+        "n_bets": 514,
+        "hit_rate": 47.08,
+        "roi_flat_pct": 1.94,
+        "roi_kelly_pct": -1.0
       }
     ],
     "oddsapi:draftkings": [
       {
         "edge": 0.01,
-        "n_bets": 1108,
-        "hit_rate": 52.44,
-        "roi_flat_pct": -0.61,
-        "roi_kelly_pct": 0.73
+        "n_bets": 2800,
+        "hit_rate": 57.18,
+        "roi_flat_pct": -3.36,
+        "roi_kelly_pct": -0.25
       },
       {
         "edge": 0.02,
-        "n_bets": 926,
-        "hit_rate": 53.02,
-        "roi_flat_pct": -0.12,
-        "roi_kelly_pct": 0.69
+        "n_bets": 1660,
+        "hit_rate": 59.94,
+        "roi_flat_pct": -1.82,
+        "roi_kelly_pct": -0.23
       },
       {
         "edge": 0.03,
-        "n_bets": 739,
-        "hit_rate": 53.18,
-        "roi_flat_pct": -0.66,
-        "roi_kelly_pct": 0.53
+        "n_bets": 788,
+        "hit_rate": 63.45,
+        "roi_flat_pct": 0.33,
+        "roi_kelly_pct": -0.02
       },
       {
         "edge": 0.04,
-        "n_bets": 587,
-        "hit_rate": 54.0,
-        "roi_flat_pct": 1.13,
-        "roi_kelly_pct": 0.9
+        "n_bets": 332,
+        "hit_rate": 65.06,
+        "roi_flat_pct": -0.55,
+        "roi_kelly_pct": -1.02
       },
       {
         "edge": 0.05,
-        "n_bets": 431,
-        "hit_rate": 55.22,
-        "roi_flat_pct": 2.45,
-        "roi_kelly_pct": 1.42
+        "n_bets": 106,
+        "hit_rate": 65.09,
+        "roi_flat_pct": -1.5,
+        "roi_kelly_pct": -0.86
       },
       {
         "edge": 0.06,
-        "n_bets": 306,
-        "hit_rate": 55.56,
-        "roi_flat_pct": 3.33,
-        "roi_kelly_pct": 1.96
+        "n_bets": 32,
+        "hit_rate": 65.62,
+        "roi_flat_pct": -0.91,
+        "roi_kelly_pct": 2.88
       }
-    ]
+    ],
+    "oddsapi:live": []
   }
 }

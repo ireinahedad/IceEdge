@@ -29,147 +29,143 @@
     "elo_atk_minus_def"
   ],
   "params": {
-    "max_depth": 5,
-    "learning_rate": 0.03,
+    "max_depth": 4,
+    "learning_rate": 0.02,
     "subsample": 0.7,
-    "colsample_bytree": 0.8,
+    "colsample_bytree": 0.6,
     "min_child_weight": 20,
-    "reg_lambda": 1.0
+    "reg_lambda": 10.0
   },
-  "best_iteration": 236,
+  "best_iteration": 481,
   "tau_margin": {
-    "-6": 0.65126,
-    "-5": 0.74522,
-    "-4": 0.92004,
-    "-3": 1.38689,
-    "-2": 0.90634,
-    "-1": 0.70297,
-    "0": 1.36034,
-    "1": 0.72912,
-    "2": 0.92461,
-    "3": 1.43731,
-    "4": 1.03362,
-    "5": 0.85858,
-    "6": 0.84971
+    "-6": 0.6591,
+    "-5": 0.75013,
+    "-4": 0.9211,
+    "-3": 1.39014,
+    "-2": 0.91126,
+    "-1": 0.70308,
+    "0": 1.35888,
+    "1": 0.73016,
+    "2": 0.92171,
+    "3": 1.43408,
+    "4": 1.02846,
+    "5": 0.86011,
+    "6": 0.8482
   },
-  "p_ot_home": 0.49985,
+  "p_ot_home": 0.49956,
   "p_ot_model": {
     "signal": "lambda_diff",
     "source": "train_oof",
-    "n": 3429,
+    "n": 3443,
     "w": [
-      0.29476,
-      -0.063899
+      0.303781,
+      -0.067874
     ],
-    "mean_fitted": 0.49985,
+    "mean_fitted": 0.49956,
     "logloss_const": 0.69315,
-    "logloss_model": 0.69098
+    "logloss_model": 0.69081
   },
   "blend": {
     "weights": [
-      0.586093,
-      0.683737,
-      -0.086583
+      0.639216,
+      0.638525,
+      -0.071975
     ],
     "market_column": "market_home_p_close",
-    "n_val_with_odds": 1974,
-    "n_test_with_odds": 2628,
-    "logloss_score_only": 0.6714,
-    "logloss_market_only": 0.67047,
-    "logloss_blend": 0.67072,
-    "brier_score_only": 0.23945,
-    "brier_market_only": 0.23898,
-    "brier_blend": 0.23915
+    "n_val_with_odds": 1889,
+    "n_test_with_odds": 4018,
+    "logloss_score_only": 0.66483,
+    "logloss_market_only": 0.66492,
+    "logloss_blend": 0.6641,
+    "brier_score_only": 0.23635,
+    "brier_market_only": 0.23637,
+    "brier_blend": 0.23609
   },
   "confidence": {
     "signal": "abs_lambda_diff",
     "source": "train_oof",
-    "n": 14637,
+    "n": 14722,
     "deciles": [
-      2e-05,
-      0.06437,
-      0.13355,
-      0.2028,
-      0.27207,
-      0.34776,
-      0.4353,
-      0.53594,
-      0.66116,
-      0.85379,
-      1.90048
+      4e-05,
+      0.06559,
+      0.13353,
+      0.20431,
+      0.27581,
+      0.35413,
+      0.44161,
+      0.54478,
+      0.67073,
+      0.86099,
+      2.03612
     ]
   },
-  "n_train": 14637,
-  "n_test": 4305,
+  "n_train": 14722,
+  "n_test": 4331,
   "test": {
     "raw": {
       "label": "Poisson sans correction",
-      "mae_total": 1.8757,
-      "logloss_moneyline": 0.6632,
-      "tie_predicted": 0.158,
-      "tie_observed": 0.2211,
-      "home_-1.5_predicted": 0.3131,
-      "home_-1.5_observed": 0.3317,
-      "home_win_predicted": 0.5443,
-      "home_win_observed": 0.5396
+      "mae_total": 1.8683,
+      "logloss_moneyline": 0.6623,
+      "tie_predicted": 0.1585,
+      "tie_observed": 0.22,
+      "home_-1.5_predicted": 0.3112,
+      "home_-1.5_observed": 0.3318,
+      "home_win_predicted": 0.5427,
+      "home_win_observed": 0.5419
     },
     "corrected": {
       "label": "Poisson + correction \u03c4",
-      "mae_total": 1.8806,
-      "logloss_moneyline": 0.6635,
-      "tie_predicted": 0.214,
-      "tie_observed": 0.2211,
-      "home_-1.5_predicted": 0.3353,
-      "home_-1.5_observed": 0.3317,
-      "home_win_predicted": 0.553,
-      "home_win_observed": 0.5396
+      "mae_total": 1.8731,
+      "logloss_moneyline": 0.6624,
+      "tie_predicted": 0.2145,
+      "tie_observed": 0.22,
+      "home_-1.5_predicted": 0.3325,
+      "home_-1.5_observed": 0.3318,
+      "home_win_predicted": 0.5507,
+      "home_win_observed": 0.5419
     },
-    "baseline_mae_total": 1.9008
+    "baseline_mae_total": 1.8956
   },
   "ensemble": null,
   "feature_importances": [
     {
       "name": "elo_atk_minus_def",
-      "importance": 0.0885
+      "importance": 0.0896
     },
     {
       "name": "is_home",
-      "importance": 0.0845
-    },
-    {
-      "name": "def_goalie_backup",
-      "importance": 0.0549
+      "importance": 0.0887
     },
     {
       "name": "def_xga60_l",
-      "importance": 0.0525
-    },
-    {
-      "name": "atk_lineup_pts",
-      "importance": 0.05
+      "importance": 0.064
     },
     {
       "name": "atk_lineup_xg",
-      "importance": 0.0476
+      "importance": 0.058
+    },
+    {
+      "name": "def_goalie_backup",
+      "importance": 0.0561
+    },
+    {
+      "name": "atk_lineup_pts",
+      "importance": 0.0528
     },
     {
       "name": "atk_xgf60_l",
-      "importance": 0.0408
-    },
-    {
-      "name": "def_goalie_svpct",
-      "importance": 0.0358
+      "importance": 0.0434
     },
     {
       "name": "atk_star_power",
-      "importance": 0.0355
+      "importance": 0.038
+    },
+    {
+      "name": "def_goalie_svpct",
+      "importance": 0.0373
     },
     {
       "name": "def_ev_xga60_s",
-      "importance": 0.035
-    },
-    {
-      "name": "atk_rest_days",
       "importance": 0.0338
     },
     {
@@ -177,60 +173,64 @@
       "importance": 0.033
     },
     {
-      "name": "def_goalie_gsax60",
-      "importance": 0.0311
-    },
-    {
-      "name": "atk_xgf60_s",
-      "importance": 0.031
-    },
-    {
-      "name": "atk_ev_xgf_pct_l",
-      "importance": 0.0307
-    },
-    {
-      "name": "atk_b2b",
-      "importance": 0.0306
-    },
-    {
-      "name": "def_ga_s",
+      "name": "atk_ev_xgf60_s",
       "importance": 0.0303
     },
     {
-      "name": "atk_ev_xgf60_s",
-      "importance": 0.0299
+      "name": "atk_xgf60_s",
+      "importance": 0.03
     },
     {
-      "name": "atk_ev_xgf_pct_s",
-      "importance": 0.0298
+      "name": "def_ga_s",
+      "importance": 0.0295
     },
     {
-      "name": "atk_finishing_s",
-      "importance": 0.0293
+      "name": "atk_b2b",
+      "importance": 0.0286
     },
     {
-      "name": "def_pk_xga60_s",
-      "importance": 0.0287
-    },
-    {
-      "name": "atk_stars_out_weight",
+      "name": "atk_rest_days",
       "importance": 0.0284
     },
     {
+      "name": "atk_ev_xgf_pct_l",
+      "importance": 0.0284
+    },
+    {
+      "name": "def_goalie_gsax60",
+      "importance": 0.0278
+    },
+    {
+      "name": "atk_ev_xgf_pct_s",
+      "importance": 0.0277
+    },
+    {
+      "name": "atk_stars_out_weight",
+      "importance": 0.0264
+    },
+    {
       "name": "def_rest_days",
-      "importance": 0.028
+      "importance": 0.0261
     },
     {
       "name": "atk_gf_s",
-      "importance": 0.0279
+      "importance": 0.0255
+    },
+    {
+      "name": "atk_finishing_s",
+      "importance": 0.0252
     },
     {
       "name": "def_b2b",
-      "importance": 0.0267
+      "importance": 0.0245
+    },
+    {
+      "name": "def_pk_xga60_s",
+      "importance": 0.0242
     },
     {
       "name": "atk_pp_xgf60_s",
-      "importance": 0.0257
+      "importance": 0.0228
     }
   ]
 }
