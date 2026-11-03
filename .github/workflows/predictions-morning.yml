@@ -1,0 +1,93 @@
+name: Bilan — probabilités du matin
+
+# X402_PLAN.md, phase 1. Chaque jour de match, fige les probabilités d'avant-match
+# de tous les matchs pas encore commencés (`model_snapshots`, kind `morning`) et
+# les commite dans le dépôt PUBLIC `arakice-nhl-predictions`. L'heure du push
+# prouve que le chiffre précède le match.
+#
+# Heures (UTC) : 15:00 = 10 h ET (11 h en heure d'été) = 23 h à Bali, avant les
+# matchs de l'après-midi du week-end (12 h 30 ET au plus tôt). GitHub peut
+# retarder un cron d'environ 1 h : 16:00 ne sert que de rattrapage — si le
+# fichier du jour existe déjà, le passage s'arrête sans appeler l'API (pas de
+# réveil de Neon). Un match commencé avant le push sort du bilan.
+#
+# Prérequis (une fois) :
+#   • dépôt public vide `arakice-nhl-predictions` (même compte) ;
+#   • secret PREDICTIONS_REPO_TOKEN : jeton « fine-grained » limité à ce dépôt,
+#     permission Contents : Read and write ;
+#   • CONTENT_CRON_SECRET existe déjà (workflow des combinés).
+
+on:
+  schedule:
+    - cron: "0 15,16 * * *"
+  workflow_dispatch:
+    inputs:
+      date:
+        description: "Jour NHL YYYY-MM-DD (vide = aujourd'hui, heure de l'Est)"
+        required: false
+        default: ""
+
+concurrency:
+  group: predictions-morning
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  freeze:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      CONTENT_API_URL: https://api.arakice.com/api
+      CONTENT_CRON_SECRET: ${{ secrets.CONTENT_CRON_SECRET }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          sparse-checkout: server/scripts/predictions-publish.mjs
+          sparse-checkout-cone-mode: false
+
+      - uses: actions/checkout@v7
+        with:
+          repository: ${{ github.repository_owner }}/arakice-nhl-predictions
+          token: ${{ secrets.PREDICTIONS_REPO_TOKEN }}
+          path: predictions
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+
+      # Le champ saisi passe par l'environnement, jamais interpolé dans le script.
+      - name: Geler
+        id: freeze
+        env:
+          INPUT_DATE: ${{ github.event.inputs.date }}
+        run: |
+          DATE_ARG=""
+          if [ -n "$INPUT_DATE" ]; then
+            echo "$INPUT_DATE" | grep -Eq '^[0-9]{4}-[0-9]{2}-[0-9]{2}$' || { echo "date invalide : $INPUT_DATE"; exit 1; }
+            DATE_ARG="--date=$INPUT_DATE"
+          fi
+          node server/scripts/predictions-publish.mjs freeze --repo=predictions $DATE_ARG
+
+      - name: Commiter et pousser
+        id: push
+        if: steps.freeze.outputs.wrote == 'true'
+        working-directory: predictions
+        env:
+          DAY: ${{ steps.freeze.outputs.date }}
+          GAMES: ${{ steps.freeze.outputs.games }}
+        run: |
+          git config user.name  "arakice-bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data
+          git commit -m "NHL pre-game probabilities ${DAY} (${GAMES} games)"
+          git push
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Marquer le bilan
+        if: steps.push.outputs.sha != ''
+        env:
+          DAY: ${{ steps.freeze.outputs.date }}
+          SHA: ${{ steps.push.outputs.sha }}
+        run: node server/scripts/predictions-publish.mjs confirm --repo=predictions --date="$DAY" --commit="$SHA"

@@ -1,107 +1,116 @@
 {
-  "n_games": 11214,
+  "n_games": 12525,
   "overall": {
-    "n": 11214,
-    "delta": -0.00074,
-    "se": 0.0008,
-    "z": -0.92
+    "n": 12525,
+    "delta": -0.00054,
+    "se": 0.00077,
+    "z": -0.7
   },
   "n_suspect_close": 31,
   "overall_without_suspect": {
-    "n": 11183,
-    "delta": -0.00069,
-    "se": 0.0008,
-    "z": -0.86
+    "n": 12494,
+    "delta": -0.0005,
+    "se": 0.00077,
+    "z": -0.65
   },
-  "ll_model": 0.66621,
-  "ll_market": 0.66695,
+  "ll_model": 0.6652,
+  "ll_market": 0.66574,
   "by_season": [
     {
       "n": 1230,
-      "delta": -0.00212,
-      "se": 0.0027,
-      "z": -0.79,
+      "delta": -0.00177,
+      "se": 0.00271,
+      "z": -0.65,
       "season": 2015,
       "label": "2015-16",
       "source": "sbro"
     },
     {
       "n": 1230,
-      "delta": -0.00054,
-      "se": 0.00245,
-      "z": -0.22,
+      "delta": -0.00018,
+      "se": 0.00242,
+      "z": -0.08,
       "season": 2016,
       "label": "2016-17",
       "source": "sbro"
     },
     {
       "n": 1265,
-      "delta": -0.00012,
-      "se": 0.0026,
-      "z": -0.04,
+      "delta": -0.00028,
+      "se": 0.00262,
+      "z": -0.11,
       "season": 2017,
       "label": "2017-18",
       "source": "sbro"
     },
     {
       "n": 1271,
-      "delta": -0.00164,
-      "se": 0.00218,
-      "z": -0.75,
+      "delta": -0.00155,
+      "se": 0.00222,
+      "z": -0.7,
       "season": 2018,
       "label": "2018-19",
       "source": "sbro"
     },
     {
       "n": 1080,
-      "delta": 0.00118,
-      "se": 0.00239,
-      "z": 0.49,
+      "delta": 0.00095,
+      "se": 0.00244,
+      "z": 0.39,
       "season": 2019,
       "label": "2019-20",
       "source": "sbro"
     },
     {
       "n": 868,
-      "delta": -0.00335,
-      "se": 0.00291,
-      "z": -1.15,
+      "delta": -0.00364,
+      "se": 0.0029,
+      "z": -1.26,
       "season": 2020,
       "label": "2020-21",
       "source": "sbro"
     },
     {
       "n": 1307,
-      "delta": -0.00487,
-      "se": 0.00222,
-      "z": -2.2,
+      "delta": -0.00479,
+      "se": 0.00225,
+      "z": -2.13,
       "season": 2021,
       "label": "2021-22",
       "source": "sbro"
     },
     {
       "n": 342,
-      "delta": 0.00967,
+      "delta": 0.00976,
       "se": 0.00519,
-      "z": 1.86,
+      "z": 1.88,
       "season": 2022,
       "label": "2022-23",
       "source": "sbro"
     },
     {
+      "n": 1311,
+      "delta": 0.00058,
+      "se": 0.00252,
+      "z": 0.23,
+      "season": 2023,
+      "label": "2023-24",
+      "source": "oddsapi:draftkings"
+    },
+    {
       "n": 1310,
-      "delta": -0.00012,
-      "se": 0.0022,
-      "z": -0.06,
+      "delta": 3e-05,
+      "se": 0.00221,
+      "z": 0.01,
       "season": 2024,
       "label": "2024-25",
       "source": "oddsapi:draftkings"
     },
     {
       "n": 1311,
-      "delta": 0.0016,
-      "se": 0.00236,
-      "z": 0.68,
+      "delta": 0.00168,
+      "se": 0.00235,
+      "z": 0.71,
       "season": 2025,
       "label": "2025-26",
       "source": "oddsapi:draftkings"
@@ -113,31 +122,31 @@
         0.0,
         0.02
       ],
-      "n": 4155,
-      "share": 0.371,
-      "p_model": 0.5122,
-      "p_market": 0.5025,
-      "observed": 0.5061,
-      "observed_se": 0.0078,
-      "share_model_on_underdog": 0.485,
+      "n": 4603,
+      "share": 0.368,
+      "p_model": 0.5142,
+      "p_market": 0.5044,
+      "observed": 0.5042,
+      "observed_se": 0.0074,
+      "share_model_on_underdog": 0.477,
       "paired_ll_model_minus_market": {
-        "n": 4155,
-        "delta": 0.00033,
-        "se": 0.00036,
-        "z": 0.92
+        "n": 4603,
+        "delta": 0.00047,
+        "se": 0.00035,
+        "z": 1.37
       },
-      "n_suspect_close": 7,
+      "n_suspect_close": 5,
       "without_suspect": {
-        "n": 4148,
-        "p_model": 0.5123,
-        "p_market": 0.5026,
-        "observed": 0.5063,
-        "observed_se": 0.0078,
+        "n": 4598,
+        "p_model": 0.5142,
+        "p_market": 0.5044,
+        "observed": 0.5043,
+        "observed_se": 0.0074,
         "paired_ll_model_minus_market": {
-          "n": 4148,
-          "delta": 0.00033,
-          "se": 0.00036,
-          "z": 0.92
+          "n": 4598,
+          "delta": 0.00047,
+          "se": 0.00035,
+          "z": 1.36
         }
       },
       "closer": "marché"
@@ -147,128 +156,128 @@
         0.02,
         0.05
       ],
-      "n": 4526,
-      "share": 0.404,
-      "p_model": 0.5459,
-      "p_market": 0.5127,
-      "observed": 0.5325,
-      "observed_se": 0.0074,
-      "share_model_on_underdog": 0.456,
+      "n": 4982,
+      "share": 0.398,
+      "p_model": 0.5507,
+      "p_market": 0.5175,
+      "observed": 0.5305,
+      "observed_se": 0.0071,
+      "share_model_on_underdog": 0.44,
       "paired_ll_model_minus_market": {
-        "n": 4526,
-        "delta": -0.00078,
-        "se": 0.00104,
-        "z": -0.75
+        "n": 4982,
+        "delta": 0.00052,
+        "se": 0.001,
+        "z": 0.52
       },
-      "n_suspect_close": 12,
+      "n_suspect_close": 13,
       "without_suspect": {
-        "n": 4514,
-        "p_model": 0.5461,
-        "p_market": 0.5129,
-        "observed": 0.5328,
-        "observed_se": 0.0074,
+        "n": 4969,
+        "p_model": 0.5509,
+        "p_market": 0.5177,
+        "observed": 0.5307,
+        "observed_se": 0.0071,
         "paired_ll_model_minus_market": {
-          "n": 4514,
-          "delta": -0.0008,
-          "se": 0.00105,
-          "z": -0.76
-        }
-      },
-      "closer": "modèle"
-    },
-    {
-      "bucket": [
-        0.05,
-        0.1
-      ],
-      "n": 2360,
-      "share": 0.21,
-      "p_model": 0.5859,
-      "p_market": 0.519,
-      "observed": 0.5513,
-      "observed_se": 0.0102,
-      "share_model_on_underdog": 0.425,
-      "paired_ll_model_minus_market": {
-        "n": 2360,
-        "delta": 0.0001,
-        "se": 0.0029,
-        "z": 0.03
-      },
-      "n_suspect_close": 5,
-      "without_suspect": {
-        "n": 2355,
-        "p_model": 0.5859,
-        "p_market": 0.5189,
-        "observed": 0.5512,
-        "observed_se": 0.0102,
-        "paired_ll_model_minus_market": {
-          "n": 2355,
-          "delta": 6e-05,
-          "se": 0.0029,
-          "z": 0.02
+          "n": 4969,
+          "delta": 0.00053,
+          "se": 0.001,
+          "z": 0.53
         }
       },
       "closer": "marché"
     },
     {
       "bucket": [
+        0.05,
+        0.1
+      ],
+      "n": 2746,
+      "share": 0.219,
+      "p_model": 0.5945,
+      "p_market": 0.5274,
+      "observed": 0.567,
+      "observed_se": 0.0095,
+      "share_model_on_underdog": 0.389,
+      "paired_ll_model_minus_market": {
+        "n": 2746,
+        "delta": -0.00182,
+        "se": 0.00269,
+        "z": -0.68
+      },
+      "n_suspect_close": 6,
+      "without_suspect": {
+        "n": 2740,
+        "p_model": 0.5945,
+        "p_market": 0.5274,
+        "observed": 0.5672,
+        "observed_se": 0.0095,
+        "paired_ll_model_minus_market": {
+          "n": 2740,
+          "delta": -0.0019,
+          "se": 0.00269,
+          "z": -0.71
+        }
+      },
+      "closer": "modèle"
+    },
+    {
+      "bucket": [
         0.1,
         1.01
       ],
-      "n": 173,
+      "n": 194,
       "share": 0.015,
-      "p_model": 0.6155,
-      "p_market": 0.4975,
-      "observed": 0.6243,
-      "observed_se": 0.0368,
-      "share_model_on_underdog": 0.497,
+      "p_model": 0.6271,
+      "p_market": 0.5096,
+      "observed": 0.6289,
+      "observed_se": 0.0347,
+      "share_model_on_underdog": 0.428,
       "paired_ll_model_minus_market": {
-        "n": 173,
-        "delta": -0.03655,
-        "se": 0.01777,
-        "z": -2.06
+        "n": 194,
+        "delta": -0.03392,
+        "se": 0.01694,
+        "z": -2.0
       },
       "n_suspect_close": 7,
       "without_suspect": {
-        "n": 166,
-        "p_model": 0.6182,
-        "p_market": 0.5024,
-        "observed": 0.6265,
-        "observed_se": 0.0375,
+        "n": 187,
+        "p_model": 0.6301,
+        "p_market": 0.5144,
+        "observed": 0.631,
+        "observed_se": 0.0353,
         "paired_ll_model_minus_market": {
-          "n": 166,
-          "delta": -0.0337,
-          "se": 0.01768,
-          "z": -1.91
+          "n": 187,
+          "delta": -0.03104,
+          "se": 0.01689,
+          "z": -1.84
         }
       },
       "closer": "modèle"
     }
   ],
   "modele_sur_outsider": {
-    "n": 1090,
-    "p_model": 0.4918,
-    "p_market": 0.4205,
-    "observed": 0.4606,
-    "observed_se": 0.0151,
+    "n": 1151,
+    "p_model": 0.4928,
+    "p_market": 0.4216,
+    "observed": 0.4718,
+    "observed_se": 0.0147,
     "paired_ll_model_minus_market": {
-      "n": 1090,
-      "delta": -0.00211,
-      "se": 0.00455,
-      "z": -0.46
+      "n": 1151,
+      "delta": -0.00431,
+      "se": 0.00442,
+      "z": -0.98
     }
   },
   "modele_sur_favori": {
-    "n": 1443,
-    "p_model": 0.6606,
-    "p_market": 0.5908,
-    "observed": 0.6286,
-    "observed_se": 0.0127,
+    "n": 1789,
+    "p_model": 0.6634,
+    "p_market": 0.5936,
+    "observed": 0.635,
+    "observed_se": 0.0114,
     "paired_ll_model_minus_market": {
-      "n": 1443,
-      "delta": -0.00263,
-      "se": 0.00391,
-      "z": -0.67
+      "n": 1789,
+      "delta": -0.0037,
+      "se": 0.00351,
+      "z": -1.05
     }
   },
   "largest": [
@@ -284,7 +293,7 @@
     {
       "date": "2016-04-09",
       "match": "PHI vs PIT",
-      "p_model_home": 0.431,
+      "p_model_home": 0.441,
       "p_market_home": 0.643,
       "home_win": 1,
       "p_open_home": 0.532,
@@ -293,74 +302,74 @@
     {
       "date": "2018-02-13",
       "match": "PIT vs OTT",
-      "p_model_home": 0.737,
+      "p_model_home": 0.731,
       "p_market_home": 0.537,
       "home_win": 1,
       "p_open_home": 0.696,
       "suspect_close": true
     },
     {
-      "date": "2016-02-04",
-      "match": "VAN vs CBJ",
-      "p_model_home": 0.525,
-      "p_market_home": 0.331,
-      "home_win": 0,
-      "p_open_home": 0.588,
-      "suspect_close": true
-    },
-    {
       "date": "2021-10-16",
       "match": "PIT vs CHI",
-      "p_model_home": 0.729,
+      "p_model_home": 0.734,
       "p_market_home": 0.554,
       "home_win": 1,
       "p_open_home": 0.63,
       "suspect_close": false
     },
     {
+      "date": "2016-02-04",
+      "match": "VAN vs CBJ",
+      "p_model_home": 0.511,
+      "p_market_home": 0.331,
+      "home_win": 0,
+      "p_open_home": 0.588,
+      "suspect_close": true
+    },
+    {
       "date": "2022-03-26",
       "match": "SJS vs ANA",
-      "p_model_home": 0.546,
+      "p_model_home": 0.544,
       "p_market_home": 0.72,
       "home_win": 1,
       "p_open_home": 0.58,
       "suspect_close": false
     },
     {
-      "date": "2016-12-20",
-      "match": "CBJ vs LAK",
-      "p_model_home": 0.647,
-      "p_market_home": 0.478,
-      "home_win": 1,
-      "p_open_home": 0.588,
-      "suspect_close": false
-    },
-    {
       "date": "2015-10-13",
       "match": "DAL vs EDM",
-      "p_model_home": 0.789,
+      "p_model_home": 0.795,
       "p_market_home": 0.626,
       "home_win": 1,
       "p_open_home": 0.604,
       "suspect_close": false
     },
     {
-      "date": "2016-03-30",
-      "match": "PHI vs WSH",
-      "p_model_home": 0.37,
-      "p_market_home": 0.53,
-      "home_win": 1,
-      "p_open_home": 0.478,
+      "date": "2015-10-08",
+      "match": "BUF vs OTT",
+      "p_model_home": 0.268,
+      "p_market_home": 0.429,
+      "home_win": 0,
+      "p_open_home": 0.468,
       "suspect_close": false
     },
     {
-      "date": "2019-03-13",
-      "match": "TOR vs CHI",
-      "p_model_home": 0.528,
-      "p_market_home": 0.686,
-      "home_win": 0,
-      "p_open_home": 0.674,
+      "date": "2017-04-08",
+      "match": "TOR vs PIT",
+      "p_model_home": 0.483,
+      "p_market_home": 0.643,
+      "home_win": 1,
+      "p_open_home": 0.58,
       "suspect_close": false
+    },
+    {
+      "date": "2016-02-06",
+      "match": "NSH vs SJS",
+      "p_model_home": 0.429,
+      "p_market_home": 0.273,
+      "home_win": 1,
+      "p_open_home": 0.524,
+      "suspect_close": true
     }
   ]
 }

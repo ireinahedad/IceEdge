@@ -122,7 +122,7 @@ def eval_variant(train_df, test_df, atk, dfn, drop_extra, params) -> dict:
                          + ll((margin <= -2).astype(float), p_ac)),
             "ml": ll(test_df["home_win"].to_numpy(float), p_ml),
             "dev": (dev(yh, lh) + dev(ya, la)) / 2.0,
-            "n_feats": len(feats), "n_rounds": int(m.best_iteration) + 1}
+            "n_feats": len(feats), "n_rounds": int(m.best_iteration) + 1, "p_ml": p_ml}
 
 
 def main():
