@@ -39,9 +39,9 @@ const sched = (id: string, startInMin: number, over: Record<string, unknown> = {
 const bundle = (home = 0.571234, hm = 0.27, am = 0.13) => ({
   live: undefined,
   byKey: {
-    'moneyline||h':     { probability: 57, probability_exact: home, model_version: 'score-nhl-v1.0' },
-    'puck_line|-1.5|h': { probability: 27, probability_exact: hm },
-    'puck_line|-1.5|a': { probability: 13, probability_exact: am },
+    'moneyline||h':     { probability: 57, probability_exact: home, probability_score_model: 57, model_version: 'score-nhl-v1.0' },
+    'puck_line|-1.5|h': { probability: 27, probability_exact: hm, probability_score_model: 57 },
+    'puck_line|-1.5|a': { probability: 13, probability_exact: am, probability_score_model: 57 },
   },
 });
 
@@ -59,10 +59,13 @@ afterEach(() => { vi.useRealTimers(); });
 describe('logique pure', () => {
   it('preMatchProb : exact d\'abord, repli sur le %, rien en direct', async () => {
     const { preMatchProb } = await import('./modelSnapshots');
-    expect(preMatchProb({ probability: 57, probability_exact: 0.5712 } as any)).toBe(0.5712);
-    expect(preMatchProb({ probability: 57 } as any)).toBe(0.57);
-    expect(preMatchProb({ probability: 57, probability_exact: 0.57, live: true } as any)).toBeNull();
-    expect(preMatchProb({ probability: 0, probability_exact: 0 } as any)).toBeNull();
+    const sm = { probability_score_model: 55 };
+    expect(preMatchProb({ ...sm, probability: 57, probability_exact: 0.5712 } as any)).toBe(0.5712);
+    expect(preMatchProb({ ...sm, probability: 57 } as any)).toBe(0.57);
+    expect(preMatchProb({ ...sm, probability: 57, probability_exact: 0.57, live: true } as any)).toBeNull();
+    expect(preMatchProb({ ...sm, probability: 0, probability_exact: 0 } as any)).toBeNull();
+    // Repli du classifieur (lit les cotes) : jamais figé.
+    expect(preMatchProb({ probability: 57, probability_exact: 0.5712, model_version: 'xgb-nhl-v4.0' } as any)).toBeNull();
     expect(preMatchProb(null)).toBeNull();
   });
 
@@ -71,8 +74,9 @@ describe('logique pure', () => {
     const key = (m: string, l: unknown, _s: unknown, h: boolean) => `${m}|${l ?? ''}|${h ? 'h' : 'a'}`;
     expect(snapshotProbs(bundle() as any, key)).toEqual({ homeWin: 0.57123, homeMinus: 0.27, awayMinus: 0.13, modelVersion: 'score-nhl-v1.0' });
     expect(snapshotProbs({ ...bundle(), live: { label: 'P2' } } as any, key)).toBeNull();
-    expect(snapshotProbs({ byKey: { 'puck_line|-1.5|h': { probability: 27 } } } as any, key)).toBeNull();
-    expect(snapshotProbs({ byKey: { 'moneyline||h': { probability: 60 } } } as any, key))
+    expect(snapshotProbs({ byKey: { 'puck_line|-1.5|h': { probability: 27, probability_score_model: 60 } } } as any, key)).toBeNull();
+    expect(snapshotProbs({ byKey: { 'moneyline||h': { probability: 60 } } } as any, key)).toBeNull();
+    expect(snapshotProbs({ byKey: { 'moneyline||h': { probability: 60, probability_score_model: 60 } } } as any, key))
       .toEqual({ homeWin: 0.6, homeMinus: null, awayMinus: null, modelVersion: null });
   });
 

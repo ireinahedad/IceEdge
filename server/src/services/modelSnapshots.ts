@@ -20,11 +20,17 @@ export interface SnapshotProbs {
 /**
  * Probabilité d'avant-match NON arrondie (0–1) d'un résultat du paquet ML.
  * `probability_exact` d'abord ; repli sur l'entier d'affichage (en %) pour un
- * service ML qui ne l'envoie pas. Un chiffre recalculé en direct n'est jamais
- * une probabilité d'avant-match : `null`.
+ * service ML qui ne l'envoie pas. `null` dans deux cas :
+ *   • chiffre recalculé en direct : pas une probabilité d'avant-match ;
+ *   • chiffre de REPLI (modèle de score indisponible, `probability_score_model`
+ *     absent) : le classifieur de repli LIT les cotes du marché, et ses handicaps
+ *     ne sont pas cohérents avec sa victoire. Mesuré le 2026-11-03 par
+ *     `ml/python/test_independance_cotes.py` : chemin normal identique au bit
+ *     près avec ou sans cotes, repli non. Le bilan ne garde que le premier —
+ *     même règle que `scoreModelProb` (valueBets.service.ts).
  */
 export function preMatchProb(r: MLPredictionResult | null | undefined): number | null {
-  if (!r || r.live) return null;
+  if (!r || r.live || r.probability_score_model == null) return null;
   const exact = r.probability_exact;
   if (typeof exact === 'number' && Number.isFinite(exact)) return exact > 0 && exact < 1 ? exact : null;
   const p = r.probability;

@@ -23,6 +23,8 @@ import pushRoutes          from './routes/push.routes';
 import widgetRoutes        from './routes/widget.routes';
 import scanRoutes          from './routes/scan.routes';
 import contentRoutes       from './routes/content.routes';
+import { createAgentsRouter } from './routes/x402.routes';
+import { loadX402Config }  from './services/x402/config';
 import { getLeaderboard }  from './services/profile.service';
 import { pool }            from './db/connection';
 import { httpLogger, logger } from './logger';
@@ -67,6 +69,13 @@ app.use(httpLogger);
 // requête « non simple » (POST JSON, en-tête Authorization). 24 h demandées ;
 // chaque navigateur applique son propre plafond (Chrome 2 h, Firefox 24 h).
 // PERF_PLAN.md, P0.1.
+// API pour agents (X402_PLAN.md, phase 2) : hôte `agents.arakice.com` seulement,
+// AVANT le CORS global (ces routes répondent `*`, sans cookie). Absente tant que
+// X402_ENABLED n'est pas `true` ; une configuration invalide fait échouer le
+// démarrage plutôt que d'encaisser sur la mauvaise adresse ou le mauvais réseau.
+const x402Config = loadX402Config();
+if (x402Config) app.use(createAgentsRouter(x402Config));
+
 app.use(cors({ origin: corsOriginCallback, credentials: true, exposedHeaders: ['X-Stale-Response'], maxAge: 86400 }));
 app.use(cookieParser());
 
