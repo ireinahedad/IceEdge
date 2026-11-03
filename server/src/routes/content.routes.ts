@@ -9,6 +9,7 @@ import crypto from 'crypto';
 import { Router, Request, Response, NextFunction } from 'express';
 import { sendError } from '../httpError';
 import * as ParlayLog from '../services/parlayLog.service';
+import { freezeMorning, markMorningPublished } from '../services/modelSnapshots.service';
 
 const router = Router();
 
@@ -75,6 +76,33 @@ router.post('/parlays/:date/posted', requireCronSecret, async (req: Request, res
       ? req.body.videoId : undefined;
     return res.json(await ParlayLog.markParlaysPosted(date, kind, videoId));
   } catch (err) { return sendError(res, err, { context: '[content/posted]' }); }
+});
+
+// ── Bilan public du modèle (X402_PLAN.md, phase 1) ─────────────────────────
+// Appelées par `.github/workflows/predictions-morning.yml`. Rien de public ici :
+// la preuve publique, c'est le commit dans le dépôt `arakice-nhl-predictions`.
+
+// POST /content/snapshots/morning  { date? } — fige les matchs du jour pas encore commencés.
+router.post('/snapshots/morning', requireCronSecret, async (req: Request, res: Response) => {
+  try {
+    const raw = req.body?.date ?? req.query.date;
+    const date = raw == null ? ParlayLog.etToday() : dateParam(raw);
+    if (!date) return res.status(400).json({ error: 'Invalid date (YYYY-MM-DD)' });
+    return res.json(await freezeMorning(date));
+  } catch (err) { return sendError(res, err, { context: '[content/snapshots/morning]' }); }
+});
+
+// POST /content/snapshots/morning/published  { gameIds: string[], commit } — après le push public.
+router.post('/snapshots/morning/published', requireCronSecret, async (req: Request, res: Response) => {
+  try {
+    const gameIds = req.body?.gameIds;
+    const commit = req.body?.commit;
+    if (!Array.isArray(gameIds) || gameIds.length > 40 || !gameIds.every((id) => typeof id === 'string')) {
+      return res.status(400).json({ error: 'gameIds must be an array of up to 40 game ids' });
+    }
+    if (typeof commit !== 'string') return res.status(400).json({ error: 'commit is required' });
+    return res.json({ marked: await markMorningPublished(gameIds, commit) });
+  } catch (err) { return sendError(res, err, { context: '[content/snapshots/published]' }); }
 });
 
 export default router;

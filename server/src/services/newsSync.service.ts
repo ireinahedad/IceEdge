@@ -18,6 +18,8 @@
  *   dans l'heure (`snapshotModelPicks`) — 1 SELECT par tour, rien sans vote.
  * • Pick'em (session C) : rappel « votes fermés dans 1 h », une fois par jour, au
  *   tour qui ouvre la fenêtre des matchs (`remindPickemLock`).
+ * • Bilan public (X402_PLAN.md, phase 1) : fige les probabilités de TOUS les
+ *   matchs qui commencent dans l'heure (`snapshotPregame`) — 1 UPSERT par match.
  *
  * Le calendrier est un `setTimeout` réarmé à chaque tour, et non un
  * `setInterval` : la cadence change selon l'heure.
@@ -34,6 +36,7 @@ import { sendToUsers, pushEnabled } from './push.service';
 import { NEWS_SOURCES } from '../data/newsSources';
 import { runRosterDiffIfDue, type RosterRunResult } from './newsRoster.service';
 import { snapshotModelPicks, remindPickemLock } from './pickem.service';
+import { snapshotPregame } from './modelSnapshots.service';
 import {
   parseAuthorFeed, teamsForPost, flagsOf, excerptOf, nextDelayMs, isRetro,
   type FeedPost, type NewsFlag,
@@ -170,7 +173,7 @@ async function notifyAdmins(rows: NewRow[]): Promise<void> {
 
 // ── Un tour ────────────────────────────────────────────────────────────────
 
-export async function runNewsSync(): Promise<{ read: number; inserted: number; alerted: number; roster: RosterRunResult; modelPicks: number; reminded: number; nextMs: number }> {
+export async function runNewsSync(): Promise<{ read: number; inserted: number; alerted: number; roster: RosterRunResult; modelPicks: number; pregame: number; reminded: number; nextMs: number }> {
   const { startsUtc, startByTeam } = await todaysGames();
   const now = Date.now();
   const sources = NEWS_SOURCES;
@@ -206,10 +209,12 @@ export async function runNewsSync(): Promise<{ read: number; inserted: number; a
   const roster = await runRosterDiffIfDue(Date.now());
   // Ne lève jamais (voir pickem.service).
   const modelPicks = await snapshotModelPicks(Date.now());
+  // Bilan public, tous les matchs (ne lève jamais, voir modelSnapshots.service).
+  const pregame = await snapshotPregame(Date.now());
   const reminded = await remindPickemLock(Date.now());
   if (inserted.length > 0 || (roster.inserted ?? 0) > 0) cache.clear();
 
-  return { read: sources.length, inserted: inserted.length, alerted: toAlert.length, roster, modelPicks, reminded, nextMs: nextDelayMs(Date.now(), startsUtc) };
+  return { read: sources.length, inserted: inserted.length, alerted: toAlert.length, roster, modelPicks, pregame, reminded, nextMs: nextDelayMs(Date.now(), startsUtc) };
 }
 
 // ── Calendrier ─────────────────────────────────────────────────────────────

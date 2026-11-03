@@ -1617,6 +1617,14 @@ export function startSettlementJob(): void {
     } catch (err: any) {
       logger.warn({ err: err.message }, '[Settlement] pick\'em non réglé');
     }
+    // Bilan public du modèle (X402_PLAN.md, phase 1). Ne lève jamais.
+    try {
+      const { settlePendingSnapshots } = await import('./modelSnapshots.service');
+      const r = await settlePendingSnapshots();
+      if (r.games > 0) logger.info(r, '[Settlement] bilan du modèle réglé');
+    } catch (err: any) {
+      logger.warn({ err: err.message }, '[Settlement] bilan du modèle non réglé');
+    }
   };
 
   // Catch-up pass shortly after boot (games may have finished while the server
