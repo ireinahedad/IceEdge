@@ -7,7 +7,15 @@
  *   X402_PAY_TO=0x…            adresse PUBLIQUE du portefeuille vendeur (jamais la clé)
  *   X402_NETWORK               eip155:84532 (Base Sepolia, défaut) | eip155:8453 (Base)
  *   X402_MAINNET_GO=true       requis pour eip155:8453 : le « go » d'Ireina (plan §9)
- *   X402_FACILITATOR_URL       défaut https://x402.org/facilitator (testnet, sans clé)
+ *   X402_FACILITATOR_URL       par défaut, selon le cas :
+ *                                • clés CDP réglées → https://api.cdp.coinbase.com/platform/v2/x402
+ *                                • sinon sur Base   → https://facilitator.payai.network (PayAI : sans compte
+ *                                  ni clé jusqu'à 1 000 règlements gratuits par portefeuille vendeur)
+ *                                • sinon (testnet)  → https://x402.org/facilitator
+ *   CDP_API_KEY_ID / CDP_API_KEY_SECRET
+ *                              facultatif : clé Coinbase Developer Platform → facilitateur CDP (seul à
+ *                              indexer dans le Bazaar de Coinbase). Le compte CDP n'accepte pas le Canada
+ *                              comme pays de résidence (constaté par Ireina le 2026-11-04) : PayAI par défaut.
  *   X402_HOST                  défaut agents.arakice.com — seul hôte servi
  *   X402_PUBLIC_URL            défaut https://<X402_HOST>
  *   X402_PRICE_GAMES           défaut $0.10 — forfait par date (voir gamesPrice ci-dessous)
@@ -20,6 +28,10 @@
 
 export const TESTNET = 'eip155:84532';
 export const MAINNET = 'eip155:8453';
+import { CDP_FACILITATOR_URL, parseCdpSecret, type CdpCredentials } from './cdpAuth';
+
+const PUBLIC_FACILITATOR_URL = 'https://x402.org/facilitator';
+export const PAYAI_FACILITATOR_URL = 'https://facilitator.payai.network';
 const ADDRESS_RE = /^0x[0-9a-fA-F]{40}$/;
 const PRICE_RE = /^\$\d+(\.\d{1,6})?$/;
 
@@ -27,6 +39,8 @@ export interface X402Config {
   payTo: `0x${string}`;
   network: typeof TESTNET | typeof MAINNET;
   facilitatorUrl: string;
+  /** Clé API CDP : présente = facilitateur Coinbase authentifié. */
+  cdp: CdpCredentials | null;
   host: string;
   publicUrl: string;
   gamesPrice: string;
@@ -52,6 +66,18 @@ export function loadX402Config(env: NodeJS.ProcessEnv = process.env): X402Config
     throw new Error('X402_NETWORK is mainnet but X402_MAINNET_GO is not true (X402_PLAN.md §9)');
   }
 
+  const cdpId = String(env.CDP_API_KEY_ID ?? '').trim();
+  const cdpSecret = String(env.CDP_API_KEY_SECRET ?? '').trim();
+  if (Boolean(cdpId) !== Boolean(cdpSecret)) throw new Error('CDP_API_KEY_ID and CDP_API_KEY_SECRET must be set together');
+  const cdp = cdpId ? { apiKeyId: cdpId, apiKeySecret: cdpSecret } : null;
+  if (cdp) parseCdpSecret(cdp.apiKeySecret); // format vérifié au démarrage
+  const defaultFacilitator = cdp ? CDP_FACILITATOR_URL : network === MAINNET ? PAYAI_FACILITATOR_URL : PUBLIC_FACILITATOR_URL;
+  const facilitatorUrl = String(env.X402_FACILITATOR_URL ?? defaultFacilitator).trim().replace(/\/$/, '');
+  if (!/^https:\/\//.test(facilitatorUrl)) throw new Error('X402_FACILITATOR_URL must be https://');
+  if (network === MAINNET && facilitatorUrl === PUBLIC_FACILITATOR_URL) {
+    throw new Error('X402_FACILITATOR_URL: x402.org/facilitator does not settle on mainnet');
+  }
+
   const gamesPrice = String(env.X402_PRICE_GAMES ?? '$0.10').trim();
   if (!PRICE_RE.test(gamesPrice)) throw new Error('X402_PRICE_GAMES must look like $0.10');
 
@@ -62,7 +88,8 @@ export function loadX402Config(env: NodeJS.ProcessEnv = process.env): X402Config
   return {
     payTo: payTo as `0x${string}`,
     network,
-    facilitatorUrl: String(env.X402_FACILITATOR_URL ?? 'https://x402.org/facilitator').trim(),
+    facilitatorUrl,
+    cdp,
     host,
     publicUrl: String(env.X402_PUBLIC_URL ?? `https://${host}`).trim().replace(/\/$/, ''),
     gamesPrice,

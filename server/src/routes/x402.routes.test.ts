@@ -212,7 +212,25 @@ describe('configuration', () => {
     expect(loadX402Config({} as any)).toBeNull();
     expect(() => loadX402Config({ X402_ENABLED: 'true', X402_PAY_TO: '0x123' } as any)).toThrow(/X402_PAY_TO/);
     expect(() => loadX402Config({ X402_ENABLED: 'true', X402_PAY_TO: PAY_TO, X402_NETWORK: 'eip155:8453' } as any)).toThrow(/MAINNET_GO/);
-    expect(loadX402Config({ X402_ENABLED: 'true', X402_PAY_TO: PAY_TO, X402_NETWORK: 'eip155:8453', X402_MAINNET_GO: 'true' } as any)?.network).toBe('eip155:8453');
+    const go = { X402_ENABLED: 'true', X402_PAY_TO: PAY_TO, X402_NETWORK: 'eip155:8453', X402_MAINNET_GO: 'true' };
+    // Sans clé CDP sur Base : PayAI (sans compte), jamais x402.org (testnet seulement).
+    expect(loadX402Config(go as any)!.facilitatorUrl).toBe('https://facilitator.payai.network');
+    expect(loadX402Config(go as any)!.cdp).toBeNull();
+    expect(() => loadX402Config({ ...go, X402_FACILITATOR_URL: 'https://x402.org/facilitator/' } as any)).toThrow(/mainnet/);
+    expect(() => loadX402Config({ ...go, X402_FACILITATOR_URL: 'http://facilitator.example' } as any)).toThrow(/https/);
+    const { generateKeyPairSync } = await import('node:crypto');
+    const jwk = generateKeyPairSync('ed25519').privateKey.export({ format: 'jwk' }) as { d: string; x: string };
+    const secret = Buffer.concat([Buffer.from(jwk.d, 'base64url'), Buffer.from(jwk.x, 'base64url')]).toString('base64');
+    const cdp = { CDP_API_KEY_ID: 'key-id', CDP_API_KEY_SECRET: secret };
+    const main = loadX402Config({ ...go, ...cdp } as any)!;
+    expect(main.network).toBe('eip155:8453');
+    expect(main.facilitatorUrl).toBe('https://api.cdp.coinbase.com/platform/v2/x402');
+    expect(() => loadX402Config({ ...go, ...cdp, X402_FACILITATOR_URL: 'https://x402.org/facilitator' } as any)).toThrow(/mainnet/);
+    expect(() => loadX402Config({ ...go, CDP_API_KEY_ID: 'key-id' } as any)).toThrow(/together/);
+    expect(() => loadX402Config({ ...go, CDP_API_KEY_ID: 'k', CDP_API_KEY_SECRET: 'pas-une-cle' } as any)).toThrow(/CDP_API_KEY_SECRET/);
+    // Testnet : clés CDP facultatives, et le facilitateur suit leur présence.
+    expect(loadX402Config({ X402_ENABLED: 'true', X402_PAY_TO: PAY_TO } as any)!.facilitatorUrl).toBe('https://x402.org/facilitator');
+    expect(loadX402Config({ X402_ENABLED: 'true', X402_PAY_TO: PAY_TO, ...cdp } as any)!.cdp?.apiKeyId).toBe('key-id');
     expect(() => loadX402Config({ X402_ENABLED: 'true', X402_PAY_TO: PAY_TO, X402_ALLOW_ANY_HOST: 'true', NODE_ENV: 'production' } as any)).toThrow();
     expect(() => loadX402Config({ X402_ENABLED: 'true', X402_PAY_TO: PAY_TO, X402_PRICE_GAMES: '10' } as any)).toThrow(/PRICE/);
   });

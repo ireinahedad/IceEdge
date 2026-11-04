@@ -32,6 +32,7 @@ import { clientIp } from '../middleware/clientIp';
 import { sendError } from '../httpError';
 import { logger } from '../logger';
 import type { X402Config } from '../services/x402/config';
+import { cdpAuthHeaders } from '../services/x402/cdpAuth';
 import { allowedDates, DISCLAIMER, SOURCE, NOT_CHECKED, MAX_GAMES } from '../services/x402/format';
 import { getAgentGames, getAgentResults, etDate } from '../services/x402/feed.service';
 
@@ -249,7 +250,12 @@ export function createAgentsRouter(cfg: X402Config, opts: AgentsRouterOptions = 
     message: { error: 'Too many requests, slow down.' },
   }));
 
-  const facilitator = opts.facilitator ?? new HTTPFacilitatorClient({ url: cfg.facilitatorUrl, timeoutMs: 30_000 });
+  // Facilitateur : celui de Coinbase (JWT à chaque appel) si une clé CDP est réglée, sinon x402.org (testnet).
+  const facilitator = opts.facilitator ?? new HTTPFacilitatorClient({
+    url: cfg.facilitatorUrl,
+    timeoutMs: 30_000,
+    ...(cfg.cdp ? { createAuthHeaders: cdpAuthHeaders(cfg.cdp, cfg.facilitatorUrl) } : {}),
+  });
   const server = new x402ResourceServer(facilitator).register(cfg.network, new ExactEvmScheme());
   router.use(paymentMiddleware(routesConfig(cfg), server, undefined, undefined, opts.syncFacilitatorOnStart ?? true));
 
@@ -293,6 +299,6 @@ export function createAgentsRouter(cfg: X402Config, opts: AgentsRouterOptions = 
   // Rien d'autre sur cet hôte.
   router.use((_req, res) => res.status(404).json({ error: 'Not found' }));
 
-  logger.info({ host: cfg.host, network: cfg.network, price: cfg.gamesPrice }, '[x402] API pour agents active');
+  logger.info({ host: cfg.host, network: cfg.network, price: cfg.gamesPrice, facilitator: cfg.facilitatorUrl, cdp: Boolean(cfg.cdp) }, '[x402] API pour agents active');
   return router;
 }
