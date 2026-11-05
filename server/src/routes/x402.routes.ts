@@ -161,7 +161,7 @@ function discoveryDocs(cfg: X402Config) {
       title: 'ArakIce NHL probabilities',
       version: '1.0.0',
       description: `${GAMES_DESCRIPTION} ${DISCLAIMER}`,
-      contact: { name: 'ArakIce', url: 'https://arakice.com' },
+      contact: { name: 'ArakIce', url: 'https://arakice.com', ...(cfg.contactEmail ? { email: cfg.contactEmail } : {}) },
       // Texte descriptif, jamais une consigne à l'agent (le Bazaar retire ces textes, plan phase 4).
       'x-guidance': `GET ${GAMES_PATH}?date=YYYY-MM-DD returns pre-game win and puck line probabilities for every upcoming NHL game that day (US Eastern game day, today to +2 days), for a flat ${cfg.gamesPrice} USDC per call via x402. GET ${RESULTS_PATH} is free and returns the publicly timestamped track record (accuracy, log-loss, Brier, calibration). Errors and days without upcoming games are not charged.`,
     },

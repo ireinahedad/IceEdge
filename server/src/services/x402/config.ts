@@ -20,6 +20,8 @@
  *   X402_PUBLIC_URL            défaut https://<X402_HOST>
  *   X402_PRICE_GAMES           défaut $0.10 — forfait par date (voir gamesPrice ci-dessous)
  *   X402_ALLOW_ANY_HOST=true   tests et essais locaux seulement (refusé en production)
+ *   X402_CONTACT_EMAIL         facultatif : publié dans /openapi.json (info.contact.email), sert de
+ *                              preuve de propriété sur x402scan. Adresse dédiée, jamais personnelle.
  *
  * Le prix : avec le schéma `exact`, il est fixé AVANT la réponse, donc avant de
  * savoir combien de matchs elle contiendra. Un forfait par date est la seule
@@ -47,6 +49,8 @@ export interface X402Config {
   allowAnyHost: boolean;
   proofRepo: string;
   iconUrl: string;
+  /** Adresse publique de contact (openapi info.contact.email, preuve de propriété x402scan). Absente = omise. */
+  contactEmail?: string | null;
 }
 
 /**
@@ -86,6 +90,10 @@ export function loadX402Config(env: NodeJS.ProcessEnv = process.env): X402Config
   const allowAnyHost = env.X402_ALLOW_ANY_HOST === 'true';
   if (allowAnyHost && env.NODE_ENV === 'production') throw new Error('X402_ALLOW_ANY_HOST is not allowed in production');
 
+  // Publiée dans /openapi.json : mettre une adresse dédiée à ArakIce, pas une adresse personnelle.
+  const contactEmail = String(env.X402_CONTACT_EMAIL ?? '').trim() || null;
+  if (contactEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contactEmail)) throw new Error('X402_CONTACT_EMAIL must be an email address');
+
   const host = String(env.X402_HOST ?? 'agents.arakice.com').trim().toLowerCase();
   return {
     payTo: payTo as `0x${string}`,
@@ -98,5 +106,6 @@ export function loadX402Config(env: NodeJS.ProcessEnv = process.env): X402Config
     allowAnyHost,
     proofRepo: String(env.X402_PROOF_REPO ?? 'ireinahedad/arakice-nhl-predictions').trim(),
     iconUrl: 'https://arakice.com/arakice-icon-192.png',
+    contactEmail,
   };
 }

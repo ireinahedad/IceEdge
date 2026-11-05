@@ -1,0 +1,21 @@
+{
+  "name": "arakice-nhl-mcp",
+  "version": "0.1.1",
+  "mcpName": "io.github.ireinahedad/arakice-nhl",
+  "description": "MCP server for ArakIce NHL pre-game probabilities: free public track record, paid same-day numbers over x402 (USDC on Base).",
+  "homepage": "https://agents.arakice.com",
+  "type": "module",
+  "bin": { "arakice-nhl-mcp": "cli.mjs" },
+  "files": ["cli.mjs", "server.mjs", "lib.mjs", "README.md"],
+  "engines": { "node": ">=20" },
+  "scripts": { "test": "node --test" },
+  "license": "MIT",
+  "keywords": ["mcp", "nhl", "hockey", "probabilities", "x402", "prediction-markets"],
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.32.1",
+    "@x402/evm": "2.28.0",
+    "@x402/fetch": "2.28.0",
+    "viem": "2.57.7",
+    "zod": "3.25.76"
+  }
+}

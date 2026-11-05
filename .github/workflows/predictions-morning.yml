@@ -19,7 +19,7 @@ name: Bilan — probabilités du matin
 
 on:
   schedule:
-    - cron: "0 15,16 * * *"
+      - cron: "41 13,14,15,16 * * *"
   workflow_dispatch:
     inputs:
       date:

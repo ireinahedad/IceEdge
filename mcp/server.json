@@ -1,0 +1,43 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.ireinahedad/arakice-nhl",
+  "title": "ArakIce NHL probabilities",
+  "description": "NHL pre-game win and puck line probabilities with a public track record; paid calls via x402.",
+  "websiteUrl": "https://agents.arakice.com",
+  "version": "0.1.1",
+  "packages": [
+    {
+      "registryType": "npm",
+      "identifier": "arakice-nhl-mcp",
+      "version": "0.1.1",
+      "transport": { "type": "stdio" },
+      "environmentVariables": [
+        {
+          "name": "ARAKICE_BUYER_PRIVATE_KEY",
+          "description": "Private key (0x + 64 hex) of a dedicated buyer wallet holding a little USDC on Base. Optional: without it only the free track record tool works.",
+          "isRequired": false,
+          "isSecret": true,
+          "format": "string"
+        },
+        {
+          "name": "ARAKICE_MAX_PER_CALL_USD",
+          "description": "Maximum USDC paid per call (default 0.25).",
+          "isRequired": false,
+          "format": "string"
+        },
+        {
+          "name": "ARAKICE_MAX_PER_DAY_USD",
+          "description": "Maximum USDC paid per UTC day (default 1.00).",
+          "isRequired": false,
+          "format": "string"
+        },
+        {
+          "name": "ARAKICE_PAY_TO",
+          "description": "Optional seller address to pin; payments to any other address are refused.",
+          "isRequired": false,
+          "format": "string"
+        }
+      ]
+    }
+  ]
+}
