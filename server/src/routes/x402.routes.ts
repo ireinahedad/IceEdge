@@ -157,7 +157,14 @@ function discoveryDocs(cfg: X402Config) {
   const results = `${cfg.publicUrl}${RESULTS_PATH}`;
   const openapi = {
     openapi: '3.1.0',
-    info: { title: 'ArakIce NHL probabilities', version: '1.0.0', description: `${GAMES_DESCRIPTION} ${DISCLAIMER}` },
+    info: {
+      title: 'ArakIce NHL probabilities',
+      version: '1.0.0',
+      description: `${GAMES_DESCRIPTION} ${DISCLAIMER}`,
+      contact: { name: 'ArakIce', url: 'https://arakice.com' },
+      // Texte descriptif, jamais une consigne à l'agent (le Bazaar retire ces textes, plan phase 4).
+      'x-guidance': `GET ${GAMES_PATH}?date=YYYY-MM-DD returns pre-game win and puck line probabilities for every upcoming NHL game that day (US Eastern game day, today to +2 days), for a flat ${cfg.gamesPrice} USDC per call via x402. GET ${RESULTS_PATH} is free and returns the publicly timestamped track record (accuracy, log-loss, Brier, calibration). Errors and days without upcoming games are not charged.`,
+    },
     servers: [{ url: cfg.publicUrl }],
     paths: {
       [GAMES_PATH]: {
@@ -172,12 +179,18 @@ function discoveryDocs(cfg: X402Config) {
             503: { description: 'Schedule or model unavailable, retry later (not charged)' },
           },
           'x-payment': { protocol: 'x402', scheme: 'exact', network: cfg.network, price: cfg.gamesPrice, asset: 'USDC' },
+          // Format lu par x402scan / @agentcash/discovery (PaymentInfoSchema) : prix en USD, sans « $ ».
+          'x-payment-info': {
+            price: { mode: 'fixed', currency: 'USD', amount: cfg.gamesPrice.replace(/^\$/, '') },
+            protocols: [{ x402: { scheme: 'exact', network: cfg.network } }],
+          },
         },
       },
       [RESULTS_PATH]: {
         get: {
           summary: 'Public track record (free)',
           description: RESULTS_DESCRIPTION,
+          security: [], // public, déclaré explicitement
           parameters: [
             { name: 'kind', in: 'query', schema: { type: 'string', enum: ['morning', 'pregame'], default: 'morning' } },
             { name: 'limit', in: 'query', schema: { type: 'integer', minimum: 1, maximum: 500, default: 200 } },
@@ -291,6 +304,8 @@ export function createAgentsRouter(cfg: X402Config, opts: AgentsRouterOptions = 
 
   router.get('/openapi.json', (_req, res) => res.set('Cache-Control', 'public, max-age=3600').json(docs.openapi));
   router.get('/.well-known/x402', (_req, res) => res.set('Cache-Control', 'public, max-age=3600').json(docs.wellKnown));
+  // Favicon attendu à la racine par les annuaires : renvoie vers l'icône PNG du site.
+  router.get(['/favicon.ico', '/favicon.png'], (_req, res) => res.set('Cache-Control', 'public, max-age=86400').redirect(302, cfg.iconUrl));
   router.get('/llms.txt', (_req, res) => res.set('Cache-Control', 'public, max-age=3600').type('text/plain').send(docs.llms));
   router.get('/', (_req, res) => res.json({
     name: 'ArakIce NHL probabilities', openapi: `${cfg.publicUrl}/openapi.json`, llms: `${cfg.publicUrl}/llms.txt`,

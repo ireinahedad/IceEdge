@@ -72,10 +72,12 @@ export function loadX402Config(env: NodeJS.ProcessEnv = process.env): X402Config
   const cdp = cdpId ? { apiKeyId: cdpId, apiKeySecret: cdpSecret } : null;
   if (cdp) parseCdpSecret(cdp.apiKeySecret); // format vérifié au démarrage
   const defaultFacilitator = cdp ? CDP_FACILITATOR_URL : network === MAINNET ? PAYAI_FACILITATOR_URL : PUBLIC_FACILITATOR_URL;
-  const facilitatorUrl = String(env.X402_FACILITATOR_URL ?? defaultFacilitator).trim().replace(/\/$/, '');
+  // `||` et non `??` : une variable Railway vidée vaut '' et doit retomber sur le défaut.
+  const facilitatorUrl = (String(env.X402_FACILITATOR_URL ?? '').trim() || defaultFacilitator).replace(/\/+$/, '');
   if (!/^https:\/\//.test(facilitatorUrl)) throw new Error('X402_FACILITATOR_URL must be https://');
-  if (network === MAINNET && facilitatorUrl === PUBLIC_FACILITATOR_URL) {
-    throw new Error('X402_FACILITATOR_URL: x402.org/facilitator does not settle on mainnet');
+  // Toute variante de x402.org (www., chemin différent) : testnet seulement.
+  if (network === MAINNET && /^https:\/\/(www\.)?x402\.org(\/|$)/i.test(facilitatorUrl)) {
+    throw new Error(`X402_FACILITATOR_URL (${facilitatorUrl}): x402.org does not settle on mainnet — delete the variable to use PayAI`);
   }
 
   const gamesPrice = String(env.X402_PRICE_GAMES ?? '$0.10').trim();
