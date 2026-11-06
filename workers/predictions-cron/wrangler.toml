@@ -1,0 +1,19 @@
+name = "arakice-predictions-cron"
+main = "src/index.js"
+compatibility_date = "2026-10-01"
+
+# Pas d'URL publique : le Worker n'a qu'un déclencheur planifié.
+workers_dev = false
+preview_urls = false
+
+[triggers]
+# UTC. 15:03 = 10:03 heure de l'Est en hiver (11:03 en été) ; 16:03 = rattrapage.
+# Premier match possible : 12:30 ET un samedi = 17:30 UTC en hiver, 16:30 UTC en été.
+crons = ["3 15 * * *", "3 16 * * *"]
+
+[vars]
+GITHUB_OWNER = "ireinahedad"
+GITHUB_REPO = "IceEdge"
+GITHUB_REF = "master"
+
+# Secret (jamais ici) : npx wrangler secret put GITHUB_TOKEN

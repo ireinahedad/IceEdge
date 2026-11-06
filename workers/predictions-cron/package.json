@@ -1,0 +1,1 @@
+{ "name": "arakice-predictions-cron", "private": true, "type": "module", "scripts": { "test": "node --test" } }
