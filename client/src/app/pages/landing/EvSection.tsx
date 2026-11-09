@@ -27,7 +27,7 @@ import { ErrorState } from "../../components/ErrorState";
 import { useMinOddsText } from "../../components/BetHandoffSheet";
 import { useBookmaker } from "../../context/BookmakerContext";
 import { useOddsFormat } from "../../context/OddsFormatContext";
-import { features } from "../../platform";
+import { useBookmakerLinks } from "../../services/sportsbookGate";
 import { nhlLogoUrl } from "../../data/teamEmoji";
 import { useI18n } from "../../i18n";
 import { predictionApiService, type ApiValueBet } from "../../services/predictionApiService";
@@ -107,6 +107,7 @@ const MAX_ROWS = 6;
 
 /** Section Value bets — rendue pour les abonnés Pro seulement (`HockeyLanding`). */
 export function EvSection({ accent }: { accent: string }) {
+  const bookmakerLinks = useBookmakerLinks();
   const { t, lang } = useI18n();
   const navigate = useNavigate();
   const { openBetFor } = useBookmaker();
@@ -183,7 +184,7 @@ export function EvSection({ accent }: { accent: string }) {
         <div className="py-6 text-center text-[#bfc8cc] text-xs">{t("home.evEmpty")}</div>
       ) : (
         <div className="flex flex-col gap-1.5">{items.map((i) => (
-          <EvRow key={i.id} item={i} onOpen={features.bookmakerLinks ? () => openFor(i) : undefined} />
+          <EvRow key={i.id} item={i} onOpen={bookmakerLinks ? () => openFor(i) : undefined} />
         ))}</div>
       )}
     </section>

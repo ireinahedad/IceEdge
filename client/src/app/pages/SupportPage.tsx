@@ -11,7 +11,7 @@ const CONTENT = {
       { q: "How are predictions calculated?", a: "ArakIce combines statistical rules (recent form, head-to-head, home ice/court advantage) with a machine-learning model trained on historical results. The numbers shown everywhere come from the ML model; the rules can be checked in a bet's detail, below the ML number." },
       { q: "Is ArakIce a bookmaker?", a: isIOS || !bookmakerLinksOn
         ? "No. ArakIce is an analytics app: it does not accept bets, hold money or link to any betting operator. Predictions are for information and entertainment only."
-        : "No. ArakIce does not accept bets. We link out to third-party bookmakers (e.g. bet365) where legally available." },
+        : "No. ArakIce does not accept bets or hold money. For visitors located in a U.S. state where DraftKings Sportsbook is legal, we show affiliate links to DraftKings (21+, 18+ in DC, KY, NH and WY); we may earn a commission if you sign up. Gambling problem? Call 1-800-GAMBLER." },
       { q: "How do I cancel my Pro subscription?", a: "Go to Profile → Settings → Subscription, then tap \"Cancel subscription\". Your access stays active until the end of the current billing period." },
       { q: "How do I delete my account?", a: "Go to Profile → Settings → Security, then tap \"Delete my account\". After you confirm your identity, your account and all associated data are erased immediately, and an active Pro subscription is cancelled." },
     ],
@@ -23,7 +23,7 @@ const CONTENT = {
       { q: "Comment les prédictions sont-elles calculées ?", a: "ArakIce combine des règles statistiques (forme récente, confrontations directes, avantage de la glace/du court) avec un modèle d'apprentissage automatique entraîné sur des résultats historiques. Les chiffres affichés partout sont ceux du modèle ML ; les règles se consultent dans le détail d'un pari, sous le chiffre ML." },
       { q: "ArakIce est-il un bookmaker ?", a: isIOS || !bookmakerLinksOn
         ? "Non. ArakIce est une application d'analyse : elle n'accepte aucun pari, ne détient aucun argent et ne renvoie vers aucun opérateur de paris. Les prédictions sont fournies à titre informatif et de divertissement."
-        : "Non. ArakIce n'accepte aucun pari. Nous redirigeons vers des bookmakers tiers (ex. bet365) là où c'est légalement disponible." },
+        : "Non. ArakIce n'accepte aucun pari et ne détient aucun argent. Aux visiteurs situés dans un État américain où DraftKings Sportsbook est légal, nous montrons des liens d'affiliation vers DraftKings (21 ans et plus, 18 ans dans DC, KY, NH et WY) ; nous pouvons toucher une commission si vous vous inscrivez. Problème de jeu ? Appelez le 1-800-GAMBLER." },
       { q: "Comment annuler mon abonnement Pro ?", a: "Allez dans Profil → Paramètres → Abonnement, puis touchez « Annuler l'abonnement ». Votre accès reste actif jusqu'à la fin de la période de facturation en cours." },
       { q: "Comment supprimer mon compte ?", a: "Allez dans Profil → Paramètres → Sécurité, puis touchez « Supprimer mon compte ». Après la reconfirmation de votre identité, votre compte et toutes les données associées sont effacés immédiatement, et un abonnement Pro actif est annulé." },
     ],

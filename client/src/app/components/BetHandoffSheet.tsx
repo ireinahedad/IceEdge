@@ -20,6 +20,7 @@ import { useBookmaker } from "../context/BookmakerContext";
 import { useOddsFormat } from "../context/OddsFormatContext";
 import { useI18n } from "../i18n";
 import { openBet } from "../services/bookmakers";
+import { SportsbookDisclosure } from "./ResponsibleGamblingNote";
 
 /**
  * « Rentable au-dessus de 2.38 » — sauf en format pourcentage, où une cote plus
@@ -106,6 +107,7 @@ export function BetHandoffHost() {
             <ExternalLink size={14} />
           </button>
         </div>
+        <SportsbookDisclosure className="mt-3 text-center" />
       </div>
     </div>
   );

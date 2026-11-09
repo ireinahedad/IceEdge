@@ -38,6 +38,9 @@ const isWeb = TARGET === 'web';
  * variable says (APPLE_PLAN §4).
  */
 export const bookmakerLinksOn = isWeb && import.meta.env.VITE_BOOKMAKER_LINKS === 'true';
+// 2026-11-09 — even with the flag on, a link only shows to a US visitor in a
+// DraftKings state: use `useBookmakerLinks()` / `bookmakerLinksAllowed()` from
+// `services/sportsbookGate.ts`, not `features.bookmakerLinks`, in UI code.
 export const isIOS = TARGET === 'ios';
 
 /** The single place where web and iOS are allowed to differ. */

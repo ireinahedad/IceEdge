@@ -25,6 +25,8 @@ import { ODDS_FORMAT_SAMPLE } from "../../services/oddsFormat";
 import { useBlocks } from "../../context/BlockContext";
 import { UserRow } from "../../components/UserIdentity";
 import { features, isIOS } from "../../platform";
+import { useBookmakerLinks } from "../../services/sportsbookGate";
+import { SportsbookDisclosure } from "../../components/ResponsibleGamblingNote";
 import { DotLoader, InputBox, ToggleSwitch, UserAvatar } from "./ProfileParts";
 import { DeleteAccountSheet } from "./DeleteAccountSheet";
 
@@ -47,6 +49,7 @@ export function SettingsTab({
   mode: AppearanceMode;
   setMode: (m: AppearanceMode) => void;
 }) {
+  const bookmakerLinks = useBookmakerLinks();
   const { t, lang, setLang } = useI18n();
   const { isPro, status: subStatus, refresh: refreshSub } = useSubscription();
   const { bookmakerId, setBookmakerId, bookmakers } = useBookmaker();
@@ -299,7 +302,7 @@ export function SettingsTab({
       {/* Sportsbook selector — which betting site the "Place bet" buttons open */}
       {/* APPLE_PLAN §4 — Guideline 5.3: nothing links out to a sportsbook on iOS,
           so there is no book to choose. */}
-      {features.bookmakerLinks && (
+      {bookmakerLinks && (
         <div className="icy-card rounded-lg px-3 py-2.5">
           <div className="flex items-center gap-1.5 mb-1.5">
             <Target size={12} className="text-white/60" />
@@ -325,6 +328,7 @@ export function SettingsTab({
               une fois, plutôt que sur chaque pastille. Dans ce bloc parce qu'il
               nomme un livre : il disparaît sur iOS (Guideline 5.3). */}
           <p className="text-[11px] text-white/55 mt-1.5">{t("profile.oddsSource")}</p>
+          <SportsbookDisclosure className="mt-1.5" />
         </div>
       )}
 

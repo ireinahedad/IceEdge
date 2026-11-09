@@ -1409,6 +1409,11 @@ const DICT: Record<string, { en: string; fr: string }> = {
   "legal.disclaimer":   { en: "For information and entertainment only — ArakIce takes no bets and handles no money. 18+. Help with gambling:", fr: "À titre informatif et de divertissement seulement — ArakIce ne prend aucun pari et ne manipule aucun argent. 18+. Aide pour le jeu :" },
   "legal.helpQc":       { en: "Québec 1 800 461-0140", fr: "Québec 1 800 461-0140" },
   "legal.helpUs":       { en: "U.S. 1-800-GAMBLER", fr: "É.-U. 1-800-GAMBLER" },
+  // DRAFTKINGS_AFFILIATE_PLAN Phase 1 (2026-11-09) — US visitors only (services/geo.ts).
+  "legal.disclaimerUs": { en: "For information and entertainment only — ArakIce takes no bets and handles no money. Sports betting is {age}+ only.", fr: "À titre informatif et de divertissement seulement — ArakIce ne prend aucun pari et ne manipule aucun argent. Les paris sportifs sont réservés aux {age} ans et plus." },
+  "legal.presentIn":    { en: "Must be {age}+ and physically present in {state} to bet with DraftKings.", fr: "Il faut avoir {age} ans ou plus et se trouver physiquement en {state} pour parier chez DraftKings." },
+  "legal.gamblingProblem": { en: "Gambling problem? Call 1-800-GAMBLER.", fr: "Problème de jeu ? Appelez le 1-800-GAMBLER." },
+  "legal.affiliate":    { en: "DraftKings links are affiliate links: ArakIce may earn a commission if you sign up. It never changes our predictions.", fr: "Les liens DraftKings sont des liens d'affiliation : ArakIce peut toucher une commission si vous vous inscrivez. Cela ne change jamais nos prédictions." },
 
   // ── 404 ──
   "notFound.title": { en: "Page not found", fr: "Page introuvable" },

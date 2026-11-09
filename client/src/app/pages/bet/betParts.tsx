@@ -10,7 +10,8 @@ import { useState, useEffect, type CSSProperties, type Ref } from "react";
 import { Plus, X, Lock, ChevronRight, AlertCircle, Info, Radio } from "lucide-react";
 import type { BetLeg } from "../../types/bet";
 import type { SlipAnalysis } from "../../context/BetContext";
-import { features } from "../../platform";
+import { useBookmakerLinks } from "../../services/sportsbookGate";
+import { SportsbookDisclosure } from "../../components/ResponsibleGamblingNote";
 import { useBookmaker, minOddsFromPct } from "../../context/BookmakerContext";
 import { useOddsFormat } from "../../context/OddsFormatContext";
 import { useI18n } from "../../i18n";
@@ -200,6 +201,7 @@ export function LegCard({ leg, index, onRemove, bookPrice, started }: {
   /** Le match de cette jambe a commencé : le serveur refusera le coupon. */
   started?: boolean;
 }) {
+  const bookmakerLinks = useBookmakerLinks();
   const { t } = useI18n();
   const { bookmaker, openBetFor } = useBookmaker();
   const { odds } = useOddsFormat();
@@ -274,7 +276,7 @@ export function LegCard({ leg, index, onRemove, bookPrice, started }: {
           {/* APPLE_PLAN §4 — Guideline 5.3: the leg keeps its price, the link out
               to the sportsbook does not ship on iOS. */}
           {/* La cote du livre est déjà sur la ligne du % : plus de pastille ici. */}
-          {features.bookmakerLinks && (
+          {bookmakerLinks && (
             <div className="mt-2 flex items-center gap-2 flex-wrap">
             <button
               onClick={goBet}
@@ -294,6 +296,7 @@ export function LegCard({ leg, index, onRemove, bookPrice, started }: {
               >{bookmaker.badge}</span>
               {t("slip.placeBet", { book: bookmaker.label })}
             </button>
+            <SportsbookDisclosure className="w-full" />
             </div>
           )}
         </div>

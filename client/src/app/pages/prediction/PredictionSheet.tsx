@@ -26,7 +26,8 @@ import { BetOddsCtx, GameLiveCtx, RevealModeCtx } from "./predictionShared";
 import { priceForBet } from "../../services/gameOdds";
 import { useOddsFormat } from "../../context/OddsFormatContext";
 import { useBookmaker, minOddsFromPct } from "../../context/BookmakerContext";
-import { features } from "../../platform";
+import { useBookmakerLinks } from "../../services/sportsbookGate";
+import { SportsbookDisclosure } from "../../components/ResponsibleGamblingNote";
 import { fairOdds } from "../../components/BookPricePill";
 import { useFoldAll, useSectionFold } from "./foldAll";
 import { useRegisterTopBets } from "./topBetsRegistry";
@@ -125,6 +126,7 @@ function PredictionSheet({ label, rulePct, serverPct, ruleNote, accent, mlProps,
   mlProps?: MLProps; factors?: RuleFactor[]; factorGroup?: string; pctScale?: number;
   mlPreset?: BetOpt["mlPreset"]; onClose: () => void;
 }) {
+  const bookmakerLinks = useBookmakerLinks();
   const { t, lang } = useI18n();
   const { odds } = useOddsFormat();
   const { table: oddsTable, bookTitle, nameByAbbr } = useContext(BetOddsCtx);
@@ -367,7 +369,7 @@ function PredictionSheet({ label, rulePct, serverPct, ruleNote, accent, mlProps,
         {bookPrice != null && (
           <button
             type="button"
-            disabled={!features.bookmakerLinks}
+            disabled={!bookmakerLinks}
             onClick={goBet}
             className="w-full flex items-center gap-2 px-3 py-2.5 rounded-xl border border-[#4ade80]/25 bg-[#4ade80]/[0.07] active:bg-[#4ade80]/15 transition-colors disabled:active:bg-[#4ade80]/[0.07]"
           >
@@ -379,6 +381,7 @@ function PredictionSheet({ label, rulePct, serverPct, ruleNote, accent, mlProps,
             </span>
           </button>
         )}
+        {bookPrice != null && <SportsbookDisclosure className="text-center -mt-1" />}
 
         {bookPrice == null && sheetFair != null && (
           <div

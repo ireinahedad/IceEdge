@@ -21,7 +21,7 @@
 
 import { useOddsFormat } from "../context/OddsFormatContext";
 import { useBookmaker, type BetTicket } from "../context/BookmakerContext";
-import { features } from "../platform";
+import { useBookmakerLinks } from "../services/sportsbookGate";
 
 /**
  * `link={false}` : la pastille n'est qu'un affichage. Sert dans le tableau de
@@ -35,13 +35,14 @@ export function BookPricePill({ price, size = "sm", link = true, ticket }: {
 }) {
   const { odds } = useOddsFormat();
   const { openBetFor } = useBookmaker();
+  const bookmakerLinks = useBookmakerLinks();
   const text = size === "md" ? "text-sm" : "text-[11px]";
   const inner = (
     <span className={`${text} font-bold text-green-400 tabular-nums`}>{odds(price)}</span>
   );
   const cls = "inline-flex items-center gap-1 bg-green-500/10 border border-green-500/20 rounded-full px-2 py-0.5";
 
-  if (!link || !features.bookmakerLinks) return <span className={cls}>{inner}</span>;
+  if (!link || !bookmakerLinks) return <span className={cls}>{inner}</span>;
   return (
     <button
       type="button"

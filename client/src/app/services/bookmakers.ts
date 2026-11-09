@@ -12,7 +12,8 @@
 // Links work without a code — they're just untracked.
 
 import { env } from "../env";
-import { features, isIOS } from "../platform";
+import { isIOS } from "../platform";
+import { bookmakerLinksAllowed } from "./sportsbookGate";
 
 export type Sport = "hockey";
 export type BookmakerId = "draftkings" | "bet365" | "stake";
@@ -119,7 +120,10 @@ export const BOOKMAKERS: Record<BookmakerId, Bookmaker> = isIOS
   : { draftkings: DRAFTKINGS, bet365: BET365, stake: STAKE };
 
 /** Ordered list for rendering selectors */
-export const BOOKMAKER_LIST: Bookmaker[] = isIOS ? [] : [DRAFTKINGS, BET365, STAKE];
+// 2026-11-09 (DRAFTKINGS_AFFILIATE_PLAN Phase 1) — links are US-only now, and
+// Stake is not licensed in any US state: DraftKings is the only book offered.
+// BET365/STAKE stay defined (types, stored ids) but are no longer selectable.
+export const BOOKMAKER_LIST: Bookmaker[] = isIOS ? [] : [DRAFTKINGS];
 
 const BOOKMAKER_STORAGE_KEY = "iceedge_bookmaker";
 const DEFAULT_BOOKMAKER: BookmakerId = "draftkings";
@@ -132,7 +136,7 @@ function isBookmakerId(v: unknown): v is BookmakerId {
 export function getSelectedBookmakerId(): BookmakerId {
   try {
     const stored = localStorage.getItem(BOOKMAKER_STORAGE_KEY);
-    if (isBookmakerId(stored)) return stored;
+    if (isBookmakerId(stored) && BOOKMAKER_LIST.some((b) => b.id === stored)) return stored;
   } catch {
     /* ignore */
   }
@@ -161,7 +165,7 @@ function openUrl(url: string): void {
   // APPLE_PLAN §4 — Guideline 5.3. Every entry point is already hidden on
   // iOS; this is the second line of defence, so a call site added later
   // cannot quietly re-open a sportsbook from inside the app.
-  if (!features.bookmakerLinks) return;
+  if (!bookmakerLinksAllowed()) return;
   window.open(url, "_blank", "noopener,noreferrer");
 }
 

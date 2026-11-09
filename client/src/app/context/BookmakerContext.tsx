@@ -8,7 +8,7 @@ import {
   type Bookmaker,
   type BookmakerId,
 } from "../services/bookmakers";
-import { features } from "../platform";
+import { bookmakerLinksAllowed } from "../services/sportsbookGate";
 
 /**
  * Ce que l'utilisateur doit retrouver chez SON livre (2026-10-02).
@@ -72,7 +72,7 @@ export function BookmakerProvider({ children }: { children: ReactNode }) {
 
   const [ticket, setTicket] = useState<BetTicket | null>(null);
   const openBetFor = useCallback((next?: BetTicket | null) => {
-    if (!features.bookmakerLinks) return;
+    if (!bookmakerLinksAllowed()) return;
     if (next) setTicket(next);
     else openBet("hockey");
   }, []);
