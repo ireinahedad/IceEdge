@@ -2,7 +2,7 @@
   "cleanUrls": true,
   "redirects": [
     {
-      "source": "/props/:slug(adin-hill|aleksander-barkov|carl-lindbom|elias-pettersson-8483678|filip-chytil|justus-annunen|maksymilian-szuber|mavrik-bourque)",
+      "source": "/props/:slug(aleksander-barkov|carl-lindbom|elias-pettersson-8483678|justus-annunen|maksymilian-szuber)",
       "destination": "/nhl-player-props",
       "permanent": false
     },
