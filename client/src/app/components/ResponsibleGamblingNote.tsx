@@ -12,12 +12,25 @@ import { useBookmakerLinks } from "../services/sportsbookGate";
  * DRAFTKINGS_AFFILIATE_PLAN Phase 1 (2026-11-09) — a US visitor (Cloudflare,
  * `services/geo.ts`) gets the US version: 21+ (18+ in DC/KY/NH/WY), the
  * 1-800-GAMBLER line, and — where a DraftKings link can show — the state they
- * must be in and the affiliate disclosure. Everyone else: unchanged.
+ * must be in and the affiliate disclosure. An Ontario visitor gets 19+,
+ * ConnexOntario and a responsible-gambling message (AGCO). Everyone else
+ * (Québec, rest of Canada, elsewhere): unchanged.
  */
 export function ResponsibleGamblingNote({ className = "", style }: { className?: string; style?: CSSProperties }) {
   const { t } = useI18n();
   const geo = useGeo();
   const linksOn = useBookmakerLinks();
+
+  // Ontario (AGCO): 19+, ConnexOntario, responsible-gambling message.
+  if (geo.country === "CA" && geo.region === "ON") {
+    return (
+      <p className={`text-[10px] leading-relaxed ${className}`} style={style}>
+        {t("legal.disclaimerOn")}{" "}
+        <a href="tel:+18665312600" className="underline underline-offset-2">{t("legal.helpOn")}</a>
+        {linksOn && <>{" "}{t("legal.affiliate")}</>}
+      </p>
+    );
+  }
 
   if (geo.country === "US") {
     const age = geo.minAge ?? 21;
@@ -50,6 +63,15 @@ export function SportsbookDisclosure({ className = "" }: { className?: string })
   const geo = useGeo();
   const linksOn = useBookmakerLinks();
   if (!linksOn) return null;
+  if (geo.market === "ON") {
+    return (
+      <p className={`text-[10px] leading-snug text-white/45 ${className}`}>
+        {t("legal.presentInOn")}{" "}
+        <a href="tel:+18665312600" className="underline underline-offset-2">{t("legal.helpOn")}</a>{" "}
+        {t("legal.affiliate")}
+      </p>
+    );
+  }
   const age = geo.minAge ?? 21;
   return (
     <p className={`text-[10px] leading-snug text-white/45 ${className}`}>

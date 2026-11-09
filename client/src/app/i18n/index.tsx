@@ -1413,6 +1413,12 @@ const DICT: Record<string, { en: string; fr: string }> = {
   "legal.disclaimerUs": { en: "For information and entertainment only — ArakIce takes no bets and handles no money. Sports betting is {age}+ only.", fr: "À titre informatif et de divertissement seulement — ArakIce ne prend aucun pari et ne manipule aucun argent. Les paris sportifs sont réservés aux {age} ans et plus." },
   "legal.presentIn":    { en: "Must be {age}+ and physically present in {state} to bet with DraftKings.", fr: "Il faut avoir {age} ans ou plus et se trouver physiquement en {state} pour parier chez DraftKings." },
   "legal.gamblingProblem": { en: "Gambling problem? Call 1-800-GAMBLER.", fr: "Problème de jeu ? Appelez le 1-800-GAMBLER." },
+  // Ontario (AGCO Registrar's Standards): 19+, ConnexOntario, a responsible
+  // gambling message on every marketing piece. NEVER add bonus / promo / free-bet
+  // copy for Ontario visitors (Standard 2.05) — nowhere in the app does any today.
+  "legal.disclaimerOn": { en: "For information and entertainment only — ArakIce takes no bets and handles no money. 19+. Please play responsibly.", fr: "À titre informatif et de divertissement seulement — ArakIce ne prend aucun pari et ne manipule aucun argent. 19 ans et plus. Jouez de façon responsable." },
+  "legal.presentInOn":  { en: "19+ and physically present in Ontario to bet with DraftKings. Please play responsibly.", fr: "19 ans et plus, et se trouver physiquement en Ontario pour parier chez DraftKings. Jouez de façon responsable." },
+  "legal.helpOn":       { en: "Need help? ConnexOntario 1-866-531-2600 (24/7).", fr: "Besoin d'aide ? ConnexOntario 1-866-531-2600 (24 h/24)." },
   "legal.affiliate":    { en: "DraftKings links are affiliate links: ArakIce may earn a commission if you sign up. It never changes our predictions.", fr: "Les liens DraftKings sont des liens d'affiliation : ArakIce peut toucher une commission si vous vous inscrivez. Cela ne change jamais nos prédictions." },
 
   // ── 404 ──

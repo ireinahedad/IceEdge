@@ -2,14 +2,14 @@
  * geo.ts — the visitor's location, as the API reads it from Cloudflare.
  *
  * DRAFTKINGS_AFFILIATE_PLAN Phase 1 (2026-11-09): sportsbook links are for US
- * visitors in a DraftKings state only. `GET /api/geo` (server/src/services/geo.ts)
+ * visitors in a DraftKings state, and for Ontario. `GET /api/geo` (server/src/services/geo.ts)
  * decides; the client never guesses from the browser language or time zone.
  *
  * Fails CLOSED: until the answer arrives, or if the call fails, the visitor
  * counts as not eligible — no link, no affiliate copy. One request per page
  * load, shared by every component through `useGeo()`.
  *
- * Testing from outside the US (dev server only): `?geo=US-NJ`, `?geo=CA-ON`,
+ * Testing from Bali (dev server only): `?geo=US-NJ`, `?geo=CA-ON`, `?geo=CA-QC`,
  * `?geo=off` to clear. Never honoured in a production build.
  */
 
@@ -21,10 +21,12 @@ export interface GeoInfo {
   country: string | null;
   region: string | null;
   sportsbookEligible: boolean;
-  minAge: 18 | 21 | null;
+  /** 'US' or 'ON' (Ontario): which age, helpline and advertising rules apply. */
+  market: "US" | "ON" | null;
+  minAge: 18 | 19 | 21 | null;
 }
 
-const UNKNOWN: GeoInfo = { country: null, region: null, sportsbookEligible: false, minAge: null };
+const UNKNOWN: GeoInfo = { country: null, region: null, sportsbookEligible: false, market: null, minAge: null };
 const OVERRIDE_KEY = "arakice_geo_override";
 /** Mirrors the default list in server/src/services/geo.ts — dev override only. */
 const DEV_STATES = new Set(["AZ","CO","CT","DC","IL","IN","IA","KS","KY","LA","ME","MD","MA","MI","MO","NH","NJ","NY","NC","OH","OR","PA","TN","VT","VA","WV","WY"]);
@@ -48,8 +50,10 @@ function devOverride(): GeoInfo | null {
     const raw = sessionStorage.getItem(OVERRIDE_KEY);
     if (!raw) return null;
     const [country, region = null] = raw.split("-");
-    const eligible = country === "US" && !!region && DEV_STATES.has(region);
-    return { country, region, sportsbookEligible: eligible, minAge: eligible ? (DEV_AGE_18.has(region!) ? 18 : 21) : null };
+    const market = country === "US" && !!region && DEV_STATES.has(region) ? "US"
+      : country === "CA" && region === "ON" ? "ON" : null;
+    const minAge = market === "ON" ? 19 : market === "US" ? (DEV_AGE_18.has(region!) ? 18 : 21) : null;
+    return { country, region, sportsbookEligible: market !== null, market, minAge };
   } catch {
     return null;
   }

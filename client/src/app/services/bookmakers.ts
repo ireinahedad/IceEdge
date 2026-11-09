@@ -83,6 +83,10 @@ const STAKE: Bookmaker = {
  * resté en localStorage n'est plus un `BookmakerId` valide → DraftKings.
  * Page NHL : `/leagues/hockey/nhl` (pas de lien par match stable).
  */
+// ⚠️ Ontario (AGCO Standard 2.05): no bonus, promo, « free bet » or sign-up
+// offer may be advertised to Ontario visitors — not in copy, not in a link's
+// landing page. Keep `sectionPath` on the plain NHL page, and check the
+// affiliate tracking link from Income Access lands on a page with no offer.
 const DRAFTKINGS: Bookmaker = {
   id: "draftkings",
   label: "DraftKings",

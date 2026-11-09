@@ -252,7 +252,7 @@ const CHROME = {
     home: "ArakIce home",
     openApp: "Open the app",
     disclaimer:
-      "ArakIce provides statistical analysis and predictions for informational and entertainment purposes only. Nothing here is financial advice or a guarantee of results. Betting involves risk and you should never wager more than you can afford to lose. Must be of legal gambling age in your jurisdiction. If gambling stops being fun, help is available. In the US, call or text 1-800-GAMBLER.",
+      "ArakIce provides statistical analysis and predictions for informational and entertainment purposes only. Nothing here is financial advice or a guarantee of results. Betting involves risk and you should never wager more than you can afford to lose. Must be of legal gambling age in your jurisdiction. If gambling stops being fun, help is available. In the US, call or text 1-800-GAMBLER. In Ontario, call ConnexOntario at 1-866-531-2600.",
     tagline: "Statistical edge for smarter sports bets.",
     // Mention de non-affiliation : noms d'équipes et de ligue cités, logos jamais.
     notAffiliated: "Not affiliated with or endorsed by the NHL or its teams. NHL and team names are trademarks of their respective owners.",
