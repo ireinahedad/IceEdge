@@ -10,6 +10,7 @@ import userRoutes          from './routes/user.routes';
 import profileRoutes       from './routes/profile.routes';
 import nhlRoutes           from './routes/nhl.routes';
 import newsRoutes          from './routes/news.routes';
+import geoRoutes           from './routes/geo.routes';
 import pickemRoutes        from './routes/pickem.routes';
 import oddsRoutes          from './routes/odds.routes';
 import manualRoutes        from './routes/manual.routes';
@@ -157,6 +158,8 @@ app.use('/api/users',         noStore, userRoutes);
 app.use('/api/nhl',           nhlRoutes);
 // Fil de nouvelles par match (F1) — public, lecture seule.
 app.use('/api/news',          newsRoutes);
+// Visitor location (Cloudflare headers) → may we show a sportsbook link? Per visitor, no-store.
+app.use('/api/geo',           geoRoutes);
 // Pick'em ICEEDGE (F3) — GET public, POST connecté. `noStore` : la réponse porte
 // le vote de la personne connectée. `writeLimiter` laisse passer les GET.
 app.use('/api/pickem',        writeLimiter, noStore, pickemRoutes);

@@ -4,25 +4,25 @@
 ## Synergie équipe / gardien
 
 ### Écart de taux de victoire selon le gardien titulaire
-- **COL avec Calvin Pickard** : 35.9% de victoires (moyenne équipe: 58.7%, écart -22.8 pts, n=78)
-- **MTL avec Jakub Dobes** : 64.3% de victoires (moyenne équipe: 41.7%, écart +22.6 pts, n=56)
-- **ANA avec Frederik Andersen** : 67.9% de victoires (moyenne équipe: 46.2%, écart +21.7 pts, n=112)
-- **COL avec Scott Wedgewood** : 75.4% de victoires (moyenne équipe: 58.7%, écart +16.7 pts, n=61)
-- **CBJ avec Daniil Tarasov** : 32.2% de victoires (moyenne équipe: 48.3%, écart -16.1 pts, n=59)
+- **FLA avec Jacob Markstrom** : 30.2% de victoires (moyenne équipe: 56.6%, écart -26.4 pts, n=43)
+- **COL avec Scott Wedgewood** : 74.6% de victoires (moyenne équipe: 54.2%, écart +20.4 pts, n=63)
+- **CBJ avec Daniil Tarasov** : 32.2% de victoires (moyenne équipe: 52.3%, écart -20.1 pts, n=59)
+- **COL avec Calvin Pickard** : 35.9% de victoires (moyenne équipe: 54.2%, écart -18.3 pts, n=78)
+- **MTL avec Jakub Dobes** : 61.7% de victoires (moyenne équipe: 44.2%, écart +17.4 pts, n=60)
 
 ### Soutien offensif reçu selon le gardien (buts marqués par l'équipe)
-- **COL devant Calvin Pickard** : 2.24 buts/match (moyenne équipe: 3.31, écart -1.07, n=78)
-- **LAK devant Pheonix Copley** : 3.63 buts/match (moyenne équipe: 2.74, écart +0.88, n=43)
+- **FLA devant Jacob Markstrom** : 2.16 buts/match (moyenne équipe: 3.30, écart -1.14, n=43)
+- **COL devant Darcy Kuemper** : 3.75 buts/match (moyenne équipe: 2.99, écart +0.76, n=53)
+- **COL devant Calvin Pickard** : 2.24 buts/match (moyenne équipe: 2.99, écart -0.75, n=78)
 - **STL devant Ville Husso** : 3.79 buts/match (moyenne équipe: 3.04, écart +0.75, n=53)
-- **NJD devant Vitek Vanecek** : 3.60 buts/match (moyenne équipe: 2.98, écart +0.62, n=80)
-- **TOR devant James Reimer** : 2.62 buts/match (moyenne équipe: 3.16, écart -0.53, n=184)
+- **COL devant Scott Wedgewood** : 3.67 buts/match (moyenne équipe: 2.99, écart +0.67, n=63)
 
 ### xG offensif généré selon le gardien en poste
-- **COL devant Calvin Pickard** : 2.497 xG/match (moyenne équipe: 3.084, écart -0.587, n=78)
-- **FLA devant James Reimer** : 2.861 xG/match (moyenne équipe: 3.361, écart -0.500, n=111)
-- **OTT devant Matt Murray** : 2.672 xG/match (moyenne équipe: 3.161, écart -0.488, n=44)
-- **LAK devant Pheonix Copley** : 3.406 xG/match (moyenne équipe: 2.922, écart +0.484, n=43)
-- **CAR devant James Reimer** : 3.055 xG/match (moyenne équipe: 3.507, écart -0.453, n=45)
+- **FLA devant Jacob Markstrom** : 2.507 xG/match (moyenne équipe: 3.441, écart -0.934, n=43)
+- **COL devant Mackenzie Blackwood** : 3.437 xG/match (moyenne équipe: 2.829, écart +0.608, n=78)
+- **COL devant Scott Wedgewood** : 3.414 xG/match (moyenne équipe: 2.829, écart +0.585, n=63)
+- **COL devant Darcy Kuemper** : 3.311 xG/match (moyenne équipe: 2.829, écart +0.482, n=53)
+- **OTT devant Matt Murray** : 2.672 xG/match (moyenne équipe: 3.145, écart -0.473, n=44)
 
 ## Constance des équipes
 
@@ -50,27 +50,27 @@
 ## Constance des gardiens (GSAx = buts évités vs attendu)
 
 ### Gardiens les plus imprévisibles
-- Jakub Dobes : écart-type GSAx 1.832 (moyenne 0.535, n=56)
-- Arvid Soderblom : écart-type GSAx 1.82 (moyenne -0.232, n=106)
-- Karel Vejmelka : écart-type GSAx 1.777 (moyenne 0.108, n=248)
-- Jonas Johansson : écart-type GSAx 1.763 (moyenne -0.389, n=94)
-- Cayden Primeau : écart-type GSAx 1.731 (moyenne -0.415, n=50)
+- Devon Levi : écart-type GSAx 1.961 (moyenne 0.202, n=42)
+- Jakub Dobes : écart-type GSAx 1.871 (moyenne 0.402, n=60)
+- Arvid Soderblom : écart-type GSAx 1.813 (moyenne -0.254, n=108)
+- Karel Vejmelka : écart-type GSAx 1.768 (moyenne 0.096, n=256)
+- Samuel Ersson : écart-type GSAx 1.741 (moyenne -0.234, n=134)
 
 ### Gardiens les plus réguliers
-- Akira Schmid : écart-type GSAx 1.311 (moyenne 0.04, n=70)
-- Joonas Korpisalo : écart-type GSAx 1.361 (moyenne -0.116, n=307)
-- Linus Ullmark : écart-type GSAx 1.427 (moyenne 0.143, n=326)
-- Tristan Jarry : écart-type GSAx 1.428 (moyenne 0.057, n=301)
-- Scott Wedgewood : écart-type GSAx 1.442 (moyenne 0.137, n=184)
+- Akira Schmid : écart-type GSAx 1.289 (moyenne 0.03, n=74)
+- Linus Ullmark : écart-type GSAx 1.425 (moyenne 0.164, n=333)
+- Yaroslav Askarov : écart-type GSAx 1.432 (moyenne -0.147, n=61)
+- Scott Wedgewood : écart-type GSAx 1.434 (moyenne 0.133, n=186)
+- Tristan Jarry : écart-type GSAx 1.441 (moyenne 0.047, n=304)
 
 ## Extrêmes historiques
 
 ### Plus gros blowouts de l'historique
 - 2016-11-04 : CBJ 10-0 MTL (écart 10 buts)
+- 2021-03-17 : NYR 9-0 PHI (écart 9 buts)
+- 2017-10-05 : CHI 10-1 PIT (écart 9 buts)
 - 2016-12-10 : MTL 10-1 COL (écart 9 buts)
-- 2009-04-07 : CAR 9-0 NYI (écart 9 buts)
-- 2017-12-02 : MTL 10-1 DET (écart 9 buts)
-- 2012-01-05 : BOS 9-0 CGY (écart 9 buts)
+- 2022-03-27 : PIT 11-2 DET (écart 9 buts)
 
 ### Plus grosses surprises vs le modèle Elo
 - 2023-10-26 : BOS 3-4 ANA — ANA gagne alors que sa proba pré-match était de 82.4% (côté domicile)

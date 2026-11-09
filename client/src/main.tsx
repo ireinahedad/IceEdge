@@ -100,6 +100,14 @@ try {
 
   createRoot(rootEl).render(<App />);
 
+  // DRAFTKINGS_AFFILIATE_PLAN Phase 2 (2026-11-09) — Vercel Web Analytics: a
+  // bot-free visitor count for the affiliate application. Same-origin script
+  // (/_vercel/insights), so the CSP `script-src 'self'` allows it. Web build
+  // only (inline literal so Rollup drops it from iOS), production only.
+  if (import.meta.env.VITE_TARGET !== "ios" && import.meta.env.PROD) {
+    void import("@vercel/analytics").then((m) => m.inject({ framework: "vite" }));
+  }
+
   // Register the service worker (PWA install + push notifications).
   // R6 — WKWebView has no service worker, and iOS notifications go through
   // APNs, so the iOS build must not try to register one.

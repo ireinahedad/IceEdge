@@ -7,25 +7,25 @@
         "score": "9-1"
       },
       {
-        "date": "2019-03-08",
-        "opponent": "MTL",
-        "score": "8-2"
+        "date": "2011-01-07",
+        "opponent": "CBJ",
+        "score": "6-0"
       },
       {
-        "date": "2016-03-14",
-        "opponent": "NJD",
-        "score": "7-1"
+        "date": "2013-10-10",
+        "opponent": "NYR",
+        "score": "6-0"
       }
     ],
     "worst_games": [
       {
-        "date": "2022-12-13",
-        "opponent": "TOR",
+        "date": "2025-12-03",
+        "opponent": "UTA",
         "score": "0-7"
       },
       {
-        "date": "2025-12-03",
-        "opponent": "UTA",
+        "date": "2022-12-13",
+        "opponent": "TOR",
         "score": "0-7"
       },
       {
@@ -115,31 +115,31 @@
         "score": "9-0"
       },
       {
-        "date": "2012-03-19",
-        "opponent": "TOR",
-        "score": "8-0"
-      },
-      {
         "date": "2011-12-23",
         "opponent": "FLA",
         "score": "8-0"
+      },
+      {
+        "date": "2026-01-10",
+        "opponent": "NYR",
+        "score": "10-2"
       }
     ],
     "worst_games": [
       {
-        "date": "2018-10-03",
+        "date": "2021-04-11",
         "opponent": "WSH",
-        "score": "0-7"
-      },
-      {
-        "date": "2016-02-09",
-        "opponent": "LAK",
-        "score": "2-9"
+        "score": "1-8"
       },
       {
         "date": "2024-12-10",
         "opponent": "WPG",
         "score": "1-8"
+      },
+      {
+        "date": "2018-10-03",
+        "opponent": "WSH",
+        "score": "0-7"
       }
     ]
   },
@@ -173,9 +173,9 @@
         "score": "0-7"
       },
       {
-        "date": "2021-03-15",
-        "opponent": "WSH",
-        "score": "0-6"
+        "date": "2023-03-02",
+        "opponent": "BOS",
+        "score": "1-7"
       }
     ]
   },
@@ -204,14 +204,14 @@
         "score": "1-8"
       },
       {
-        "date": "2017-12-19",
-        "opponent": "TOR",
-        "score": "1-8"
-      },
-      {
         "date": "2011-01-17",
         "opponent": "BOS",
         "score": "0-7"
+      },
+      {
+        "date": "2017-12-19",
+        "opponent": "TOR",
+        "score": "1-8"
       }
     ]
   },
@@ -228,8 +228,8 @@
         "score": "8-1"
       },
       {
-        "date": "2017-02-25",
-        "opponent": "NYI",
+        "date": "2025-04-12",
+        "opponent": "WSH",
         "score": "7-0"
       }
     ],
@@ -240,14 +240,14 @@
         "score": "1-9"
       },
       {
-        "date": "2023-04-01",
-        "opponent": "FLA",
-        "score": "0-7"
-      },
-      {
         "date": "2011-11-05",
         "opponent": "PHI",
         "score": "2-9"
+      },
+      {
+        "date": "2023-04-06",
+        "opponent": "NJD",
+        "score": "1-8"
       }
     ]
   },
@@ -307,38 +307,38 @@
     ],
     "worst_games": [
       {
-        "date": "2017-03-25",
-        "opponent": "FLA",
-        "score": "0-7"
-      },
-      {
         "date": "2023-12-31",
         "opponent": "DAL",
         "score": "1-8"
       },
       {
-        "date": "2011-11-19",
-        "opponent": "EDM",
-        "score": "2-9"
+        "date": "2023-10-30",
+        "opponent": "ARI",
+        "score": "1-8"
+      },
+      {
+        "date": "2017-03-25",
+        "opponent": "FLA",
+        "score": "0-7"
       }
     ]
   },
   "COL": {
     "best_games": [
       {
-        "date": "2025-11-08",
-        "opponent": "EDM",
-        "score": "9-1"
-      },
-      {
         "date": "2021-01-15",
         "opponent": "STL",
         "score": "8-0"
       },
       {
-        "date": "2023-01-14",
-        "opponent": "OTT",
-        "score": "7-0"
+        "date": "2025-11-08",
+        "opponent": "EDM",
+        "score": "9-1"
+      },
+      {
+        "date": "2026-03-30",
+        "opponent": "CGY",
+        "score": "9-2"
       }
     ],
     "worst_games": [
@@ -372,8 +372,8 @@
         "score": "9-2"
       },
       {
-        "date": "2021-01-22",
-        "opponent": "NSH",
+        "date": "2025-11-13",
+        "opponent": "MTL",
         "score": "7-0"
       }
     ],
@@ -389,9 +389,9 @@
         "score": "1-8"
       },
       {
-        "date": "2011-01-24",
-        "opponent": "VAN",
-        "score": "1-7"
+        "date": "2019-02-14",
+        "opponent": "TBL",
+        "score": "0-6"
       }
     ]
   },
@@ -403,26 +403,26 @@
         "score": "9-1"
       },
       {
-        "date": "2017-11-15",
-        "opponent": "CGY",
+        "date": "2011-12-17",
+        "opponent": "LAK",
         "score": "8-2"
       },
       {
-        "date": "2008-12-18",
-        "opponent": "SJS",
-        "score": "6-0"
+        "date": "2011-12-10",
+        "opponent": "WPG",
+        "score": "7-1"
       }
     ],
     "worst_games": [
       {
-        "date": "2022-03-27",
-        "opponent": "PIT",
-        "score": "2-11"
-      },
-      {
         "date": "2017-12-02",
         "opponent": "MTL",
         "score": "1-10"
+      },
+      {
+        "date": "2022-03-27",
+        "opponent": "PIT",
+        "score": "2-11"
       },
       {
         "date": "2009-02-28",
@@ -434,6 +434,11 @@
   "EDM": {
     "best_games": [
       {
+        "date": "2026-02-26",
+        "opponent": "LAK",
+        "score": "8-1"
+      },
+      {
         "date": "2024-04-15",
         "opponent": "SJS",
         "score": "9-2"
@@ -442,11 +447,6 @@
         "date": "2011-11-19",
         "opponent": "CHI",
         "score": "9-2"
-      },
-      {
-        "date": "2009-03-19",
-        "opponent": "COL",
-        "score": "8-1"
       }
     ],
     "worst_games": [
@@ -461,14 +461,19 @@
         "score": "1-9"
       },
       {
-        "date": "2023-10-11",
-        "opponent": "VAN",
+        "date": "2016-02-07",
+        "opponent": "NYI",
         "score": "1-8"
       }
     ]
   },
   "FLA": {
     "best_games": [
+      {
+        "date": "2017-03-25",
+        "opponent": "CHI",
+        "score": "7-0"
+      },
       {
         "date": "2024-02-17",
         "opponent": "TBL",
@@ -478,14 +483,14 @@
         "date": "2023-04-01",
         "opponent": "CBJ",
         "score": "7-0"
-      },
-      {
-        "date": "2022-01-15",
-        "opponent": "CBJ",
-        "score": "9-2"
       }
     ],
     "worst_games": [
+      {
+        "date": "2022-04-29",
+        "opponent": "MTL",
+        "score": "2-10"
+      },
       {
         "date": "2011-12-23",
         "opponent": "BOS",
@@ -495,20 +500,15 @@
         "date": "2026-01-16",
         "opponent": "CAR",
         "score": "1-9"
-      },
-      {
-        "date": "2022-04-29",
-        "opponent": "MTL",
-        "score": "2-10"
       }
     ]
   },
   "LAK": {
     "best_games": [
       {
-        "date": "2016-11-08",
-        "opponent": "TOR",
-        "score": "7-0"
+        "date": "2025-03-30",
+        "opponent": "SJS",
+        "score": "8-1"
       },
       {
         "date": "2016-02-09",
@@ -516,9 +516,9 @@
         "score": "9-2"
       },
       {
-        "date": "2025-03-30",
-        "opponent": "SJS",
-        "score": "8-1"
+        "date": "2016-11-08",
+        "opponent": "TOR",
+        "score": "7-0"
       }
     ],
     "worst_games": [
@@ -528,8 +528,8 @@
         "score": "0-7"
       },
       {
-        "date": "2022-02-28",
-        "opponent": "BOS",
+        "date": "2009-11-13",
+        "opponent": "ATL",
         "score": "0-7"
       },
       {
@@ -542,19 +542,19 @@
   "MIN": {
     "best_games": [
       {
-        "date": "2020-01-18",
-        "opponent": "DAL",
-        "score": "7-0"
-      },
-      {
         "date": "2015-01-15",
         "opponent": "BUF",
         "score": "7-0"
       },
       {
-        "date": "2011-01-19",
-        "opponent": "CGY",
-        "score": "6-0"
+        "date": "2020-01-18",
+        "opponent": "DAL",
+        "score": "7-0"
+      },
+      {
+        "date": "2022-01-24",
+        "opponent": "MTL",
+        "score": "8-2"
       }
     ],
     "worst_games": [
@@ -569,22 +569,22 @@
         "score": "1-8"
       },
       {
-        "date": "2012-03-06",
-        "opponent": "COL",
-        "score": "1-7"
+        "date": "2025-02-01",
+        "opponent": "OTT",
+        "score": "0-6"
       }
     ]
   },
   "MTL": {
     "best_games": [
       {
-        "date": "2017-12-02",
-        "opponent": "DET",
+        "date": "2016-12-10",
+        "opponent": "COL",
         "score": "10-1"
       },
       {
-        "date": "2016-12-10",
-        "opponent": "COL",
+        "date": "2017-12-02",
+        "opponent": "DET",
         "score": "10-1"
       },
       {
@@ -605,8 +605,8 @@
         "score": "1-8"
       },
       {
-        "date": "2011-03-24",
-        "opponent": "BOS",
+        "date": "2025-11-13",
+        "opponent": "DAL",
         "score": "0-7"
       }
     ]
@@ -614,19 +614,19 @@
   "NJD": {
     "best_games": [
       {
-        "date": "2023-04-06",
-        "opponent": "CBJ",
-        "score": "8-1"
-      },
-      {
         "date": "2023-02-25",
         "opponent": "PHI",
         "score": "7-0"
       },
       {
-        "date": "2022-02-08",
-        "opponent": "MTL",
-        "score": "7-1"
+        "date": "2023-04-06",
+        "opponent": "CBJ",
+        "score": "8-1"
+      },
+      {
+        "date": "2024-10-30",
+        "opponent": "VAN",
+        "score": "6-0"
       }
     ],
     "worst_games": [
@@ -641,8 +641,8 @@
         "score": "1-8"
       },
       {
-        "date": "2022-02-01",
-        "opponent": "TOR",
+        "date": "2016-03-14",
+        "opponent": "ANA",
         "score": "1-7"
       }
     ]
@@ -660,17 +660,12 @@
         "score": "8-0"
       },
       {
-        "date": "2015-11-14",
-        "opponent": "WPG",
-        "score": "7-0"
+        "date": "2014-11-18",
+        "opponent": "TOR",
+        "score": "9-2"
       }
     ],
     "worst_games": [
-      {
-        "date": "2021-01-22",
-        "opponent": "DAL",
-        "score": "0-7"
-      },
       {
         "date": "2023-03-19",
         "opponent": "NYR",
@@ -680,6 +675,11 @@
         "date": "2024-02-15",
         "opponent": "DAL",
         "score": "2-9"
+      },
+      {
+        "date": "2021-01-22",
+        "opponent": "DAL",
+        "score": "0-7"
       }
     ]
   },
@@ -696,9 +696,9 @@
         "score": "8-1"
       },
       {
-        "date": "2010-01-12",
+        "date": "2020-01-14",
         "opponent": "DET",
-        "score": "6-0"
+        "score": "8-2"
       }
     ],
     "worst_games": [
@@ -713,8 +713,8 @@
         "score": "0-7"
       },
       {
-        "date": "2008-12-11",
-        "opponent": "PIT",
+        "date": "2025-04-10",
+        "opponent": "NYR",
         "score": "2-9"
       }
     ]
@@ -727,25 +727,25 @@
         "score": "9-0"
       },
       {
-        "date": "2025-04-10",
-        "opponent": "NYI",
-        "score": "9-2"
-      },
-      {
         "date": "2010-12-12",
         "opponent": "WSH",
+        "score": "7-0"
+      },
+      {
+        "date": "2011-03-06",
+        "opponent": "PHI",
         "score": "7-0"
       }
     ],
     "worst_games": [
       {
-        "date": "2026-01-10",
-        "opponent": "BOS",
+        "date": "2009-02-06",
+        "opponent": "DAL",
         "score": "2-10"
       },
       {
-        "date": "2009-02-06",
-        "opponent": "DAL",
+        "date": "2026-01-10",
+        "opponent": "BOS",
         "score": "2-10"
       },
       {
@@ -768,9 +768,9 @@
         "score": "7-1"
       },
       {
-        "date": "2012-02-20",
-        "opponent": "NYI",
-        "score": "6-0"
+        "date": "2025-10-25",
+        "opponent": "WSH",
+        "score": "7-1"
       }
     ],
     "worst_games": [
@@ -785,17 +785,17 @@
         "score": "2-9"
       },
       {
-        "date": "2009-12-23",
-        "opponent": "PIT",
-        "score": "2-8"
+        "date": "2021-01-25",
+        "opponent": "VAN",
+        "score": "1-7"
       }
     ]
   },
   "PHI": {
     "best_games": [
       {
-        "date": "2013-02-18",
-        "opponent": "NYI",
+        "date": "2008-10-28",
+        "opponent": "ATL",
         "score": "7-0"
       },
       {
@@ -804,9 +804,9 @@
         "score": "9-2"
       },
       {
-        "date": "2010-11-11",
-        "opponent": "CAR",
-        "score": "8-1"
+        "date": "2013-02-18",
+        "opponent": "NYI",
+        "score": "7-0"
       }
     ],
     "worst_games": [
@@ -816,14 +816,14 @@
         "score": "0-9"
       },
       {
-        "date": "2011-03-06",
-        "opponent": "NYR",
+        "date": "2023-02-25",
+        "opponent": "NJD",
         "score": "0-7"
       },
       {
-        "date": "2024-03-09",
-        "opponent": "TBL",
-        "score": "0-7"
+        "date": "2022-04-12",
+        "opponent": "WSH",
+        "score": "2-9"
       }
     ]
   },
@@ -835,14 +835,14 @@
         "score": "11-2"
       },
       {
-        "date": "2018-10-25",
-        "opponent": "CGY",
-        "score": "9-1"
-      },
-      {
         "date": "2023-11-04",
         "opponent": "SJS",
         "score": "10-2"
+      },
+      {
+        "date": "2018-10-25",
+        "opponent": "CGY",
+        "score": "9-1"
       }
     ],
     "worst_games": [
@@ -857,9 +857,9 @@
         "score": "0-7"
       },
       {
-        "date": "2023-02-11",
-        "opponent": "LAK",
-        "score": "0-6"
+        "date": "2024-11-11",
+        "opponent": "DAL",
+        "score": "1-7"
       }
     ]
   },
@@ -871,14 +871,14 @@
         "score": "8-1"
       },
       {
+        "date": "2023-11-22",
+        "opponent": "SJS",
+        "score": "7-1"
+      },
+      {
         "date": "2024-10-29",
         "opponent": "MTL",
         "score": "8-2"
-      },
-      {
-        "date": "2023-12-14",
-        "opponent": "CHI",
-        "score": "7-1"
       }
     ],
     "worst_games": [
@@ -888,14 +888,14 @@
         "score": "1-7"
       },
       {
-        "date": "2022-01-21",
-        "opponent": "STL",
-        "score": "0-5"
+        "date": "2026-10-17",
+        "opponent": "FLA",
+        "score": "3-8"
       },
       {
-        "date": "2022-12-30",
+        "date": "2025-12-04",
         "opponent": "EDM",
-        "score": "2-7"
+        "score": "4-9"
       }
     ]
   },
@@ -924,14 +924,14 @@
         "score": "1-10"
       },
       {
-        "date": "2023-11-04",
-        "opponent": "PIT",
-        "score": "2-10"
-      },
-      {
         "date": "2022-03-05",
         "opponent": "NSH",
         "score": "0-8"
+      },
+      {
+        "date": "2023-11-04",
+        "opponent": "PIT",
+        "score": "2-10"
       }
     ]
   },
@@ -979,9 +979,9 @@
         "score": "8-0"
       },
       {
-        "date": "2020-01-07",
-        "opponent": "VAN",
-        "score": "9-2"
+        "date": "2024-03-09",
+        "opponent": "PHI",
+        "score": "7-0"
       },
       {
         "date": "2024-12-05",
@@ -991,29 +991,24 @@
     ],
     "worst_games": [
       {
-        "date": "2012-02-25",
-        "opponent": "PIT",
+        "date": "2024-02-17",
+        "opponent": "FLA",
+        "score": "2-9"
+      },
+      {
+        "date": "2023-12-02",
+        "opponent": "DAL",
         "score": "1-8"
       },
       {
         "date": "2011-01-05",
         "opponent": "PIT",
         "score": "1-8"
-      },
-      {
-        "date": "2010-12-02",
-        "opponent": "BOS",
-        "score": "1-8"
       }
     ]
   },
   "TOR": {
     "best_games": [
-      {
-        "date": "2017-12-19",
-        "opponent": "CAR",
-        "score": "8-1"
-      },
       {
         "date": "2022-12-13",
         "opponent": "ANA",
@@ -1023,6 +1018,11 @@
         "date": "2023-12-16",
         "opponent": "PIT",
         "score": "7-0"
+      },
+      {
+        "date": "2017-12-19",
+        "opponent": "CAR",
+        "score": "8-1"
       }
     ],
     "worst_games": [
@@ -1032,13 +1032,13 @@
         "score": "0-8"
       },
       {
-        "date": "2011-11-05",
-        "opponent": "BOS",
+        "date": "2016-11-08",
+        "opponent": "LAK",
         "score": "0-7"
       },
       {
-        "date": "2016-01-09",
-        "opponent": "SJS",
+        "date": "2011-01-19",
+        "opponent": "NYR",
         "score": "0-7"
       }
     ]
@@ -1051,13 +1051,13 @@
         "score": "7-0"
       },
       {
-        "date": "2025-04-08",
-        "opponent": "SEA",
-        "score": "7-1"
-      },
-      {
         "date": "2024-11-30",
         "opponent": "VGK",
+        "score": "6-0"
+      },
+      {
+        "date": "2026-10-01",
+        "opponent": "CHI",
         "score": "6-0"
       }
     ],
@@ -1092,9 +1092,9 @@
         "score": "8-1"
       },
       {
-        "date": "2018-02-11",
-        "opponent": "DAL",
-        "score": "6-0"
+        "date": "2009-10-07",
+        "opponent": "MTL",
+        "score": "7-1"
       }
     ],
     "worst_games": [
@@ -1164,8 +1164,8 @@
         "score": "7-0"
       },
       {
-        "date": "2024-12-10",
-        "opponent": "BOS",
+        "date": "2019-03-08",
+        "opponent": "CAR",
         "score": "8-1"
       }
     ],
@@ -1176,13 +1176,13 @@
         "score": "0-7"
       },
       {
-        "date": "2011-12-10",
-        "opponent": "DET",
+        "date": "2020-01-17",
+        "opponent": "TBL",
         "score": "1-7"
       },
       {
-        "date": "2020-01-17",
-        "opponent": "TBL",
+        "date": "2019-02-20",
+        "opponent": "COL",
         "score": "1-7"
       }
     ]
@@ -1190,9 +1190,9 @@
   "WSH": {
     "best_games": [
       {
-        "date": "2018-10-03",
+        "date": "2021-04-11",
         "opponent": "BOS",
-        "score": "7-0"
+        "score": "8-1"
       },
       {
         "date": "2010-01-09",
@@ -1200,9 +1200,9 @@
         "score": "8-1"
       },
       {
-        "date": "2022-04-12",
-        "opponent": "PHI",
-        "score": "9-2"
+        "date": "2018-10-03",
+        "opponent": "BOS",
+        "score": "7-0"
       }
     ],
     "worst_games": [

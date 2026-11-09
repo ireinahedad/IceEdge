@@ -4,9 +4,9 @@
     "factor": "road_trip_len",
     "label": "longueur du road trip",
     "bucket": "(2.0, 14.0]",
-    "n": 14078,
-    "save_pct": 0.8975,
-    "base_save_pct": 0.9001,
+    "n": 14160,
+    "save_pct": 0.8974,
+    "base_save_pct": 0.9,
     "delta_pp": -0.26,
     "p_value": 2e-06,
     "significant": true
@@ -16,11 +16,11 @@
     "factor": "days_away",
     "label": "jours loin de la maison",
     "bucket": "(3.0, 340.0]",
-    "n": 12604,
-    "save_pct": 0.8979,
-    "base_save_pct": 0.9001,
-    "delta_pp": -0.23,
-    "p_value": 0.000128,
+    "n": 12684,
+    "save_pct": 0.8978,
+    "base_save_pct": 0.9,
+    "delta_pp": -0.22,
+    "p_value": 0.000133,
     "significant": true
   },
   {
@@ -28,11 +28,11 @@
     "factor": "distance_km",
     "label": "distance parcourue",
     "bucket": "(-0.001, 185.427]",
-    "n": 15566,
-    "save_pct": 0.9022,
-    "base_save_pct": 0.9001,
+    "n": 15658,
+    "save_pct": 0.9021,
+    "base_save_pct": 0.9,
     "delta_pp": 0.21,
-    "p_value": 3.9e-05,
+    "p_value": 4.3e-05,
     "significant": true
   },
   {
@@ -40,11 +40,11 @@
     "factor": "alt_gain",
     "label": "gain d'altitude",
     "bucket": "(-2.0, 4.0]",
-    "n": 15340,
-    "save_pct": 0.9017,
-    "base_save_pct": 0.9001,
-    "delta_pp": 0.16,
-    "p_value": 0.002389,
+    "n": 15431,
+    "save_pct": 0.9016,
+    "base_save_pct": 0.9,
+    "delta_pp": 0.15,
+    "p_value": 0.002536,
     "significant": true
   },
   {
@@ -52,11 +52,11 @@
     "factor": "distance_km",
     "label": "distance parcourue",
     "bucket": "(857.916, 4469.161]",
-    "n": 15300,
-    "save_pct": 0.8989,
-    "base_save_pct": 0.9001,
+    "n": 15395,
+    "save_pct": 0.8988,
+    "base_save_pct": 0.9,
     "delta_pp": -0.12,
-    "p_value": 0.018211,
+    "p_value": 0.022492,
     "significant": true
   }
 ]
