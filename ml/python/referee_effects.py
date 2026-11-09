@@ -35,7 +35,6 @@ import re
 import unicodedata
 from datetime import datetime, timezone
 
-import numpy as np
 import pandas as pd
 
 REF_FEATS = ["ref_pen", "ref_pp"]

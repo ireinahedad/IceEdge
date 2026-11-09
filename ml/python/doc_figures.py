@@ -36,7 +36,7 @@ import matplotlib.pyplot as plt
 from matplotlib.patches import Rectangle
 from matplotlib.ticker import FuncFormatter
 
-from game_dynamics import BUCKET_LABELS, EDGES, LEAD_CLIP, MatchDynamics, read_game_dynamics, regulation_matrix
+from game_dynamics import EDGES, LEAD_CLIP, MatchDynamics, read_game_dynamics, regulation_matrix
 from score_model import ScoreDistribution, joint_matrix, p_ot_for, read_ot_model
 
 HERE = os.path.dirname(os.path.abspath(__file__))

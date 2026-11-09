@@ -27,7 +27,6 @@ import argparse
 import json
 import os
 
-import numpy as np
 import pandas as pd
 
 from insights_common import (
@@ -36,7 +35,6 @@ from insights_common import (
     MIN_TEAM_SEASONS,
     active_names,
     apply_significance,
-    current_season,
     is_active_team,
     normalize_team,
     split_relocations,

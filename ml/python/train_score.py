@@ -55,7 +55,7 @@ import pandas as pd
 import xgboost as xgb
 
 from score_model import (GAMMA_MAX, GAMMA_MIN, MAX_GOALS, ScoreDistribution,
-                         ScoreEnsemble, apply_logistic, apply_margin_correction,
+                         ScoreEnsemble, apply_logistic,
                          fit_logistic, fit_margin_correction, joint_matrix, logit,
                          stretch_lambdas)
 

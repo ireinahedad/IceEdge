@@ -17,7 +17,6 @@ RÈGLE FIXÉE AVANT LE RUN. Le but est de SIMPLIFIER le service, pas de gagner :
 la couche ré-ajustée sur le moteur remplace l'actuelle si elle ne perd pas à
 z ≥ +1 contre elle (log-loss moneyline, apparié), pour C comme pour C5.
 """
-import glob
 from lab import *
 import game_dynamics as GD
 from score_model import ScoreDistribution

@@ -242,8 +242,6 @@ def refresh_level(season: int, models_dir: str, data_path: str) -> dict:
     """
     import json
 
-    import numpy as np
-
     out = {"season": int(season), "k": 1.0, "obs_sum": 0.0, "lam_sum": 0.0,
            "n_games": 0, "prior_games": None, "verdict": "REJETER",
            "as_of": None, "generated": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%MZ"),

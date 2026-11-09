@@ -3496,7 +3496,6 @@ def predict_team(f: TeamFuturesFeatures) -> MLResponse:
         FeatureImportance(name="Penalty kill %",    importance=round(abs(f.pk_pct - 80) * 0.002, 3), direction="positive" if f.pk_pct > 80 else "negative"),
     ], key=lambda x: x.importance, reverse=True)
 
-    prop_label = {"cup": "Stanley Cup", "conf": "Conference Final", "playoff": "Playoff berth"}.get(f.prop_type, f.prop_type)
     return MLResponse(
         probability=round(prob * 100),
         probability_exact=round(float(prob), 6),
