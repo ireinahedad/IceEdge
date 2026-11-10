@@ -195,6 +195,7 @@ const SECTIONS = [
   ["/best-nhl-picks-today", "Best NHL Picks Today", "the strongest edges of the night"],
   ["/nhl-player-props", "NHL Player Props", "shots, points and saves projections"],
   ["/nhl-prediction-accuracy", "NHL Prediction Accuracy", "out-of-sample results and calibration"],
+  ["/nhl-teams", "NHL Teams", "all 32 teams: record, next game, model win chance, recent results vs the model"],
   ["/nhl-matchups", "NHL Matchups", "head-to-head history for every pair of teams"],
   ["/stats/chart/all-teams", "NHL Team Stats Charts", "all 32 teams compared"],
   ["/about", "About ArakIce", "the model, methodology and responsible gambling"],

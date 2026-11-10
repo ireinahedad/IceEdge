@@ -20,3 +20,4 @@ Allow: /
 
 Sitemap: https://arakice.com/sitemap.xml
 Sitemap: https://arakice.com/sitemap-games.xml
+Sitemap: https://arakice.com/sitemap-teams.xml
