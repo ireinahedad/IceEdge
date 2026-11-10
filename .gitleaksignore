@@ -19,3 +19,8 @@ cc30409e8f996fd5218fcbff0f5806a36de08ce3:server/README.md:generic-api-key:5
 #    Ne JAMAIS recopier ce jeton dans un commentaire : gitleaks le redétecte à chaque fois.
 0c97b0b2934efaca43207f6ee91a21a45de9584b:.gitleaksignore:generic-api-key:10
 b82a54e6843d453e13324fae457547cc6ecc0f5f:.gitleaksignore:generic-api-key:18
+#
+# 5. Faux positif : clé IndexNow dans client/scripts/indexnow.mjs (2026-11-10).
+#    Publique par conception — servie telle quelle dans client/public/<clé>.txt
+#    pour que Bing vérifie le site. Ne pas recopier la clé ici.
+7d4ee338e87dd5f73a4677b5a2ae17a78063f829:client/scripts/indexnow.mjs:generic-api-key:19
