@@ -15,6 +15,9 @@ name: SEO — pages de match
 on:
   schedule:
     - cron: "0 11 * * *"
+  # Second passage : déclenché par predictions-morning.yml (workflow_dispatch)
+  # seulement quand le gel du matin a publié un fichier. Les pages d'avant-match
+  # reprennent alors la probabilité que le dépôt public vient de prouver.
   workflow_dispatch:
     inputs:
       days_back:

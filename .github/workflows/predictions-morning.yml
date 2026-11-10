@@ -33,6 +33,8 @@ concurrency:
 
 permissions:
   contents: read
+  # Pour relancer seo-gameday.yml une fois le fichier du jour poussé.
+  actions: write
 
 jobs:
   freeze:
@@ -91,3 +93,12 @@ jobs:
           DAY: ${{ steps.freeze.outputs.date }}
           SHA: ${{ steps.push.outputs.sha }}
         run: node server/scripts/predictions-publish.mjs confirm --repo=predictions --date="$DAY" --commit="$SHA"
+
+      # Les pages de match d'avant-match affichent le chiffre du matin : on les
+      # régénère dès qu'il est public, au lieu d'attendre le run de 11:00 UTC du
+      # lendemain. Seulement si ce passage a vraiment poussé un fichier.
+      - name: Régénérer les pages de match
+        if: steps.push.outputs.sha != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run seo-gameday.yml --repo "${{ github.repository }}" -f days_back=1

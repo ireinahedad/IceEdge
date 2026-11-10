@@ -25,8 +25,16 @@
  * Asset URLs in dist/index.html are absolute (`/assets/...`, Vite `base: "/"`),
  * so a copy at any depth resolves correctly. Verified by assertAssetsAbsolute().
  *
- * Body content stays client-rendered. That is fine: Google executes JS, and the
- * parts that drive the sitelink display — title and description — are static.
+ * Body content: Google executes JS, but GPTBot, ClaudeBot, PerplexityBot and
+ * most other AI crawlers do NOT — they read the raw HTML and, with an empty
+ * <div id="root">, saw nothing but a title. So every shell (and the homepage,
+ * dist/index.html) also gets a static block INSIDE #root: what ArakIce is, the
+ * key facts from llms.txt (single source of truth), tonight's game pages with
+ * the model's public number, and the main sections. React's createRoot()
+ * replaces the container's children on first render, so visitors never get a
+ * second copy; a CSS delay (opacity 0 for 2.5 s) keeps it from flashing while
+ * the bundle loads, and shows it to anyone without JS. Same words as the app,
+ * same for every visitor: not cloaking.
  *
  * Usage:  node scripts/route-shells.mjs         (runs as part of `npm run build`)
  *         DIST_DIR=… SITE_URL=… node scripts/route-shells.mjs
@@ -63,6 +71,7 @@ const ROUTES = [
     desc: "Machine learning win probabilities, totals and puck line context for every NHL game on the slate, updated as odds move.",
     heading: "NHL Predictions",
     blurb: "Model win probabilities, totals and puck-line context for every game on the slate.",
+    games: true,
   },
   {
     out: "schedule.html",
@@ -71,6 +80,7 @@ const ROUTES = [
     desc: "Every NHL game playing tonight with ArakIce's model probabilities, start times and the edges our model sees against the book.",
     heading: "Tonight's NHL Games",
     blurb: "Every game on today's slate with model probabilities, start times and the edges against the book.",
+    games: true,
   },
   {
     out: "stats.html",
@@ -168,7 +178,106 @@ function assertAssetsAbsolute(html) {
   }
 }
 
-function shellFor(base, route) {
+// ── Crawlable static content inside #root ──────────────────────────────────
+
+const STATIC_CSS = `<style>
+      .seo-static { max-width: 760px; margin: 0 auto; padding: 40px 20px; color: var(--color-text-muted, #92A08A);
+        font: 15px/1.65 'Inter', 'Inter Fallback', system-ui, sans-serif; opacity: 0; animation: seo-static-in 0s linear 2.5s forwards; }
+      .seo-static h1, .seo-static h2 { color: var(--color-text, #F3F7F0); font-family: 'Oswald', 'Oswald Fallback', sans-serif; }
+      .seo-static a { color: var(--color-accent, #9BF019); }
+      @keyframes seo-static-in { to { opacity: 1; } }
+    </style>
+  </head>`;
+
+const SECTIONS = [
+  ["/nhl-predictions-today", "NHL Predictions Today", "tonight's games with model win probabilities"],
+  ["/match", "Tonight's NHL game previews", "one page per game: model win chance, form, rest, head to head"],
+  ["/best-nhl-picks-today", "Best NHL Picks Today", "the strongest edges of the night"],
+  ["/nhl-player-props", "NHL Player Props", "shots, points and saves projections"],
+  ["/nhl-prediction-accuracy", "NHL Prediction Accuracy", "out-of-sample results and calibration"],
+  ["/nhl-matchups", "NHL Matchups", "head-to-head history for every pair of teams"],
+  ["/stats/chart/all-teams", "NHL Team Stats Charts", "all 32 teams compared"],
+  ["/about", "About ArakIce", "the model, methodology and responsible gambling"],
+];
+
+/** "Key facts" bullets from dist/llms.txt — the one place those numbers live. */
+async function keyFacts() {
+  try {
+    const txt = await fs.readFile(path.join(DIST, "llms.txt"), "utf-8");
+    const lead = (txt.match(/^>\s*(.+)$/m) || [])[1] || "";
+    const block = (txt.split(/^Key facts:\s*$/m)[1] || "").split(/^##/m)[0];
+    const facts = block.split("\n").map((l) => l.match(/^-\s+(.+)$/)?.[1]).filter(Boolean);
+    return { lead, facts };
+  } catch {
+    return { lead: "", facts: [] };
+  }
+}
+
+const etToday = () => new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
+
+/**
+ * Tonight's game pages written by gameday-gen.mjs (copied into dist/ by Vite):
+ * today's ET date, or the latest earlier slate. Label = the page's <h1>, plus
+ * the model's public answer when the page carries one (FAQPage JSON-LD).
+ */
+async function tonightsGames() {
+  const root = path.join(DIST, "match");
+  let dates;
+  try {
+    dates = (await fs.readdir(root)).filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d) && d <= etToday()).sort();
+  } catch {
+    return { date: null, games: [] };
+  }
+  const date = dates[dates.length - 1];
+  if (!date) return { date: null, games: [] };
+  const files = (await fs.readdir(path.join(root, date))).filter((f) => f.endsWith(".html") && f !== "index.html");
+  const games = [];
+  for (const f of files.sort()) {
+    const html = await fs.readFile(path.join(root, date, f), "utf-8");
+    const h1 = (html.match(/<h1>([\s\S]*?)<\/h1>/) || [])[1];
+    if (!h1) continue;
+    const label = h1.split(" — ")[0].replace(/&amp;/g, "&");
+    let answer = "";
+    const ld = html.match(/<script type="application\/ld\+json">\s*([\s\S]*?)\s*<\/script>/);
+    if (ld) {
+      try {
+        const faq = (JSON.parse(ld[1])["@graph"] || []).find((n) => n["@type"] === "FAQPage");
+        answer = faq?.mainEntity?.[0]?.acceptedAnswer?.text?.split(/(?<=\.)\s/)[0] || "";
+      } catch { /* page without a readable graph: link only */ }
+    }
+    games.push({ href: `/match/${date}/${f.replace(/\.html$/, "")}`, label, answer });
+  }
+  return { date, games };
+}
+
+/** The block that goes inside <div id="root">. `route` null = homepage. */
+function staticBlock(route, facts, tonight) {
+  const h1 = route ? route.heading : "ArakIce: NHL predictions from a machine learning model";
+  const intro = route ? route.blurb : facts.lead;
+  const li = (href, name, what) => `          <li><a href="${href}">${esc(name)}</a>${what ? `: ${esc(what)}` : ""}</li>`;
+  const parts = [`<div class="seo-static">`, `      <h1>${esc(h1)}</h1>`];
+  if (intro) parts.push(`      <p>${esc(intro)}</p>`);
+  if ((!route || route.games) && tonight.games.length) {
+    parts.push(`      <h2>Tonight's NHL games${tonight.date ? ` (${esc(tonight.date)})` : ""}</h2>`, `      <ul>`,
+      ...tonight.games.map((g) => li(g.href, `${g.label} prediction`, g.answer)), `      </ul>`);
+  }
+  if (!route && facts.facts.length) {
+    parts.push(`      <h2>Key facts</h2>`, `      <ul>`, ...facts.facts.map((f) => `          <li>${esc(f)}</li>`), `      </ul>`,
+      `      <p>Every morning's pre-game probabilities are committed to a public GitHub repository before puck drop: <a href="https://github.com/ireinahedad/arakice-nhl-predictions">arakice-nhl-predictions</a>.</p>`);
+  }
+  parts.push(`      <h2>${route ? "More from ArakIce" : "Sections"}</h2>`, `      <ul>`,
+    ...(route ? [li("/", "ArakIce home", "all NHL predictions and tools")] : []),
+    ...SECTIONS.filter(([href]) => !route || href !== route.loc).map(([href, n, w]) => li(href, n, w)),
+    `      </ul>`, `    </div>`);
+  return parts.join("\n");
+}
+
+function withStatic(html, label, block) {
+  html = sub(html, `${label}: <div id="root">`, /<div id="root"><\/div>/, `<div id="root">${block}</div>`);
+  return sub(html, `${label}: </head>`, /<\/head>/, STATIC_CSS);
+}
+
+function shellFor(base, route, facts, tonight) {
   const url = SITE + route.loc;
   let html = base;
 
@@ -236,7 +345,7 @@ function shellFor(base, route) {
     `    </noscript>`;
   html = sub(html, "<noscript> block", /<noscript>[\s\S]*?<\/noscript>/, noscript);
 
-  return html;
+  return withStatic(html, route.loc, staticBlock(route, facts, tonight));
 }
 
 async function main() {
@@ -250,6 +359,10 @@ async function main() {
 
   assertAssetsAbsolute(base);
 
+  const facts = await keyFacts();
+  const tonight = await tonightsGames();
+  console.log(`  static content: ${facts.facts.length} key facts, ${tonight.games.length} game(s) for ${tonight.date ?? "—"}`);
+
   const seen = new Set();
   for (const route of ROUTES) {
     if (seen.has(route.out)) throw new Error(`route-shells: duplicate output ${route.out}`);
@@ -257,11 +370,13 @@ async function main() {
 
     const dest = path.join(DIST, route.out);
     await fs.mkdir(path.dirname(dest), { recursive: true });
-    await fs.writeFile(dest, shellFor(base, route), "utf-8");
+    await fs.writeFile(dest, shellFor(base, route, facts, tonight), "utf-8");
     console.log(`  ${route.loc.padEnd(26)} → dist/${route.out.split(path.sep).join("/")}`);
   }
 
-  console.log(`route-shells: wrote ${ROUTES.length} route shells.`);
+  // Homepage last: the shells above were copied from the untouched base.
+  await fs.writeFile(indexPath, withStatic(base, "/", staticBlock(null, facts, tonight)), "utf-8");
+  console.log(`route-shells: wrote ${ROUTES.length} route shells + homepage static content.`);
 }
 
 main().catch((err) => {

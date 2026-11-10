@@ -21,10 +21,17 @@
  *
  * CE QUI EST PUBLIÉ, CE QUI NE L'EST PAS
  * Tout le factuel est public : fiches, forme, repos, déplacements, confrontation,
- * résultat. La probabilité du modèle ne l'est pas — elle s'ouvre dans
- * l'application. La page doit donc tenir debout SANS elle : si elle n'a rien à
- * dire d'autre que « ouvrez l'app », elle n'est pas écrite (voir `enoughToSay`).
- * C'est la leçon des 417 pages joueur refusées par Search Console.
+ * résultat. Et, depuis novembre 2026, la probabilité de victoire du matin et le
+ * −1,5 : exactement les chiffres déjà commités dans le dépôt PUBLIC
+ * `arakice-nhl-predictions` (predictions-morning.yml). Une page titrée
+ * « Prediction » qui ne donnait pas de pronostic ratait l'intention de la
+ * recherche, et les assistants IA ne citent que les pages qui répondent. Restent
+ * dans l'application : l'écart avec le livre, les value bets, les props, les
+ * combinés. Jamais de total (décision D3, X402_PLAN.md : pas de signal mesuré).
+ * La page doit quand même tenir debout SANS le chiffre (fichier pas encore gelé
+ * le matin) : si elle n'a rien à dire d'autre que « ouvrez l'app », elle n'est
+ * pas écrite (voir `enoughToSay`). C'est la leçon des 417 pages joueur refusées
+ * par Search Console.
  *
  * DONNÉES — et pourquoi aucune clé d'API n'est nécessaire
  *   · api-web.nhle.com  : calendrier, classement, calendrier par club, feuille
@@ -82,6 +89,12 @@ const PRUNE_DAYS = Number(process.env.MATCH_PRUNE_DAYS || 0);
 const GAME_TYPES = new Set([2, 3]);
 
 const H2H_JSON = process.env.H2H_JSON || path.join(__dirname, "h2h-compact.json");
+
+// Bilan public du modèle. Lu dans un clone local (PREDICTIONS_DIR, pour les
+// tests et --dry) ou sur raw.githubusercontent.com (CI). Absent = la page sort
+// sans le bloc « Qui va gagner », comme avant.
+const PRED_REPO = process.env.PREDICTIONS_REPO || "ireinahedad/arakice-nhl-predictions";
+const PRED_DIR = process.env.PREDICTIONS_DIR || "";
 
 // Base de l'API surchargeable : c'est ce qui permet de rejouer un programme
 // complet contre des fixtures locales sans toucher au réseau, donc de tester
@@ -147,6 +160,26 @@ const L = {
     hubCtaH: "Every game, with the model's number",
     hubCtaP: "ArakIce projects a win probability and a total for each of these games, and flags the ones where the number sits away from the book.",
     ctaBtn: "Open ArakIce",
+    ctaPredH: "Edges and player props for this game",
+    ctaPredP: "The win probability is free on this page. In the app, ArakIce compares it to the sportsbook line, flags where the value is, and projects props for every player in this game.",
+    predH: (a, b) => `Who will win ${a} vs ${b}?`,
+    predLead: (fav, dog, p, q) => `arakiceML gives the ${fav} a ${p}% chance to win this game, overtime and shootout included, against ${q}% for the ${dog}.`,
+    predEven: (a, b) => `arakiceML sees this game as a coin flip: 50% for the ${a}, 50% for the ${b}, overtime and shootout included.`,
+    predPL: (t, p) => `Chance the ${t} win by two goals or more (−1.5 puck line): ${p}%.`,
+    predWhen: (t) => `Recorded at ${t}, before puck drop, and published in ArakIce's public prediction record.`,
+    predProof: "See the timestamped file",
+    predGoalies: "Starting goalies were not confirmed yet at that time, so the model assumed each team's usual starter.",
+    predNote: "This is a probability, not a lock: a 60% favourite is expected to lose four games out of ten.",
+    predStatWin: (ab) => `${ab} win chance`,
+    predStatPL: (ab) => `${ab} −1.5`,
+    predFinalH: "What the model said before the game",
+    predFinalHit: (fav, p) => `Before puck drop, arakiceML had the ${fav} as the favourite at ${p}%, and they won.`,
+    predFinalMiss: (fav, p, w) => `Before puck drop, arakiceML had the ${fav} as the favourite at ${p}%. The ${w} won instead.`,
+    predFinalEven: (w) => `Before puck drop, arakiceML had this game at 50-50. The ${w} won.`,
+    predFinalNote: "One game says very little about a model. What matters is whether its 60% calls come in about 60% of the time over hundreds of games:",
+    predAccLink: "see the accuracy record",
+    descPred: (fav, dog, p, d) => `arakiceML gives the ${fav} a ${p}% chance to beat the ${dog} on ${d}, plus records, rest and head to head.`,
+    descPredShort: (fav, p, d) => `arakiceML gives the ${fav} a ${p}% win chance on ${d}. Records, rest and head to head.`,
     resultH: "How it finished",
     shots: "shots on goal",
     stars: "Three stars",
@@ -192,6 +225,26 @@ const L = {
     hubCtaH: "Chaque match, avec le chiffre du modèle",
     hubCtaP: "ArakIce projette une probabilité de victoire et un total pour chacun de ces matchs, et signale ceux où le chiffre s'éloigne du preneur aux livres.",
     ctaBtn: "Ouvrir ArakIce",
+    ctaPredH: "Les écarts et les props de ce match",
+    ctaPredP: "La probabilité de victoire est gratuite sur cette page. Dans l'application, ArakIce la compare à la cote du preneur aux livres, signale où se trouve la valeur et projette les props de chaque joueur du match.",
+    predH: (a, b) => `Qui va gagner ${a} c. ${b} ?`,
+    predLead: (fav, dog, p, q) => `Selon arakiceML, prolongation et tirs de barrage compris : ${fav}, ${p} % de chances de gagner ; ${dog}, ${q} %.`,
+    predEven: (a, b) => `Pour arakiceML, ce match est à pile ou face : ${a}, 50 % ; ${b}, 50 %, prolongation et tirs de barrage compris.`,
+    predPL: (t, p) => `Victoire par deux buts ou plus (écart −1,5), ${t} : ${p} %.`,
+    predWhen: (t) => `Chiffres enregistrés à ${t}, avant la mise au jeu, et publiés dans le bilan public d'ArakIce.`,
+    predProof: "Voir le fichier horodaté",
+    predGoalies: "Les gardiens partants n'étaient pas encore confirmés à cette heure : le modèle a supposé le titulaire habituel de chaque équipe.",
+    predNote: "C'est une probabilité, pas une certitude : un favori à 60 % perd quatre matchs sur dix.",
+    predStatWin: (ab) => `${ab} victoire`,
+    predStatPL: (ab) => `${ab} −1,5`,
+    predFinalH: "Ce que le modèle disait avant le match",
+    predFinalHit: (fav, p) => `Avant la mise au jeu, le favori d'arakiceML : ${fav}, à ${p} %. Le favori l'a emporté.`,
+    predFinalMiss: (fav, p, w) => `Avant la mise au jeu, le favori d'arakiceML : ${fav}, à ${p} %. Victoire finale : ${w}.`,
+    predFinalEven: (w) => `Avant la mise au jeu, arakiceML voyait ce match à 50-50. Victoire finale : ${w}.`,
+    predFinalNote: "Un seul match ne dit presque rien d'un modèle. Ce qui compte, c'est que ses 60 % se réalisent environ 60 % du temps sur des centaines de matchs :",
+    predAccLink: "voir le bilan de précision",
+    descPred: (fav, dog, p, d) => `Le ${d}, arakiceML donne ${p} % de chances de victoire : ${fav} contre ${dog}. Fiches, repos et historique.`,
+    descPredShort: (fav, p, d) => `Le ${d}, arakiceML donne ${p} % de chances de victoire : ${fav}. Fiches, repos, historique.`,
     resultH: "Comment ça s'est terminé",
     shots: "tirs au but",
     stars: "Trois étoiles",
@@ -279,6 +332,92 @@ async function loadCompactH2H() {
     console.warn(`  ⚠️  ${H2H_JSON} illisible — pages générées sans historique. Lancer « npm run seo:h2h ».`);
     return new Map();
   }
+}
+
+// ── Bilan public du modèle ───────────────────────────────────────────────────
+/**
+ * Probabilités du matin, par gameId, pour chaque date de la fenêtre. Lit le
+ * fichier commité par predictions-morning.yml — jamais l'API : la page ne
+ * montre que ce que le dépôt public prouve déjà, à la décimale près. Tolérant :
+ * fichier pas encore gelé (run de 11:00 UTC), 404 ou réseau muet = pas de bloc.
+ */
+async function loadPredictions(dates) {
+  const out = new Map();
+  await pMap(dates, async (date) => {
+    const rel = `data/${date.slice(0, 4)}/${date}.json`;
+    let doc = null;
+    try {
+      if (PRED_DIR) {
+        doc = JSON.parse(await fs.readFile(path.join(PRED_DIR, rel), "utf-8"));
+      } else {
+        const res = await fetch(`https://raw.githubusercontent.com/${PRED_REPO}/HEAD/${rel}`, { signal: AbortSignal.timeout(15000) });
+        if (res.ok) doc = await res.json();
+      }
+    } catch { doc = null; }
+    for (const g of doc?.games ?? []) {
+      const p = g?.probabilities;
+      if (!g?.gameId || typeof p?.homeWin !== "number" || !(p.homeWin > 0 && p.homeWin < 1)) continue;
+      out.set(String(g.gameId), {
+        home: g.home, away: g.away,
+        homeWin: p.homeWin,
+        homeMinus: typeof p.homeMinus1_5 === "number" ? p.homeMinus1_5 : null,
+        awayMinus: typeof p.awayMinus1_5 === "number" ? p.awayMinus1_5 : null,
+        goaliesConfirmed: !!g.goaliesConfirmed,
+        recordedAt: g.recordedAt || null,
+        proofUrl: `https://github.com/${PRED_REPO}/blob/HEAD/${rel}`,
+      });
+    }
+  }, 4);
+  return out;
+}
+
+/** Le favori, en pourcentages entiers qui somment à 100. */
+function predView(pred, a, b) {
+  const homeP = Math.round(pred.homeWin * 100);
+  const awayP = 100 - homeP;
+  const even = homeP === 50;
+  const favHome = homeP > 50;
+  const fav = favHome ? b : a, dog = favHome ? a : b;
+  const favMinus = favHome ? pred.homeMinus : pred.awayMinus;
+  return {
+    even, fav, dog, favHome,
+    p: favHome ? homeP : awayP, q: favHome ? awayP : homeP,
+    homeP, awayP,
+    favMinusP: favMinus == null ? null : Math.round(favMinus * 100),
+  };
+}
+
+function predictionBlock(lang, a, b, pred, final) {
+  const T = L[lang];
+  if (!pred) return "";
+  const v = predView(pred, a, b);
+  const fn = teamName(v.fav, lang), dn = teamName(v.dog, lang);
+  const an = teamName(a, lang), bn = teamName(b, lang);
+
+  if (final && final.homeScore != null && final.awayScore != null) {
+    const w = final.homeScore > final.awayScore ? b : a;
+    const wn = teamName(w, lang);
+    const line = v.even ? T.predFinalEven(wn)
+      : w.abbr === v.fav.abbr ? T.predFinalHit(fn, v.p) : T.predFinalMiss(fn, v.p, wn);
+    return `      <h2>${esc(T.predFinalH)}</h2>
+      <p>${esc(line)} <a href="${pred.proofUrl}" rel="nofollow">${esc(T.predProof)}</a>.</p>
+      <p>${esc(T.predFinalNote)} <a href="${SITE}/nhl-prediction-accuracy">${esc(T.predAccLink)}</a>.</p>`;
+  }
+
+  const cell = (val, lab) => `        <div class="stat"><div class="value">${esc(val)}</div><div class="label">${esc(lab)}</div></div>`;
+  const pct = (n) => (lang === "fr" ? `${n} %` : `${n}%`);
+  const cells = [cell(pct(v.awayP), T.predStatWin(a.abbr)), cell(pct(v.homeP), T.predStatWin(b.abbr))];
+  if (!v.even && v.favMinusP != null) cells.push(cell(pct(v.favMinusP), T.predStatPL(v.fav.abbr)));
+  const lead = v.even ? T.predEven(an, bn) : T.predLead(fn, dn, v.p, v.q);
+  const pl = !v.even && v.favMinusP != null ? ` ${T.predPL(fn, v.favMinusP)}` : "";
+  const when = pred.recordedAt ? `${T.predWhen(faceoffTime(pred.recordedAt, lang))} ` : "";
+  return `      <h2>${esc(T.predH(shortName(a, lang), shortName(b, lang)))}</h2>
+      <p>${esc(lead + pl)}</p>
+      <div class="stats-row">
+${cells.join("\n")}
+      </div>
+      <p>${esc(when)}<a href="${pred.proofUrl}" rel="nofollow">${esc(T.predProof)}</a>.${pred.goaliesConfirmed ? "" : ` ${esc(T.predGoalies)}`}</p>
+      <p>${esc(T.predNote)}</p>`;
 }
 
 // ── Données NHL ──────────────────────────────────────────────────────────────
@@ -455,9 +594,10 @@ const pagePath = (lang, date, slug) => `${L[lang].matchPath}/${date}/${slug}`;
  * calendrier. Sans ça c'est un gabarit autour de deux logos — exactement ce que
  * Search Console a refusé 417 fois côté joueurs.
  */
-function enoughToSay({ final, series, restA, restB, a, b }) {
+function enoughToSay({ final, series, restA, restB, a, b, pred }) {
   if (final) return true;
   let n = 0;
+  if (pred) n++;
   if (series && series.length >= 3) n++;
   if ((restA && (restA.b2b || restA.tripLen >= 3 || restA.rest != null)) ||
       (restB && (restB.b2b || restB.tripLen >= 3 || restB.rest != null))) n++;
@@ -577,7 +717,7 @@ ${rows}
   return out;
 }
 
-function gamePage({ lang, game, a, b, series, ra, rb, final, sameDay }) {
+function gamePage({ lang, game, a, b, series, ra, rb, final, sameDay, pred }) {
   const T = L[lang];
   const slug = gameSlug(a, b);
   const canonical = pagePath(lang, game.date, slug);
@@ -605,7 +745,11 @@ function gamePage({ lang, game, a, b, series, ra, rb, final, sameDay }) {
         ? fit(TITLE_MAX, `${sa} c. ${sb} : pronostic et avant-match, ${dm} | ArakIce`, `${sa} c. ${sb} : pronostic, ${dm} | ArakIce`)
         : fit(TITLE_MAX, `${sa} vs ${sb} Prediction & Preview, ${dm} | ArakIce`, `${sa} vs ${sb} Prediction, ${dm} | ArakIce`));
 
-  const desc = isFinal
+  const pv = pred && !isFinal ? predView(pred, a, b) : null;
+  const desc = pv && !pv.even
+    ? fit(DESC_MAX, T.descPred(teamName(pv.fav, lang), teamName(pv.dog, lang), pv.p, dShort),
+                    T.descPredShort(shortName(pv.fav, lang), pv.p, dShort))
+    : isFinal
     ? (lang === "fr"
         ? fit(DESC_MAX, `${an} c. ${bn} du ${dShort} : pointage final, tirs au but, sommaire des buts et les trois étoiles.`,
                         `${sa} c. ${sb} du ${dShort} : pointage final, tirs, sommaire des buts et trois étoiles.`)
@@ -672,6 +816,21 @@ function gamePage({ lang, game, a, b, series, ra, rb, final, sameDay }) {
         awayTeam: team(a, an),
         organizer: { "@type": "SportsOrganization", name: "National Hockey League" },
       },
+      // La question que la page titre, et sa réponse en une phrase : la forme
+      // que les moteurs de réponse (AI Overviews, ChatGPT, Perplexity) extraient.
+      pv ? {
+        "@type": "FAQPage",
+        "@id": `${pageUrl}#faq`,
+        mainEntity: [{
+          "@type": "Question",
+          name: T.predH(sa, sb),
+          acceptedAnswer: {
+            "@type": "Answer",
+            text: (pv.even ? T.predEven(an, bn) : T.predLead(teamName(pv.fav, lang), teamName(pv.dog, lang), pv.p, pv.q))
+              + (!pv.even && pv.favMinusP != null ? ` ${T.predPL(teamName(pv.fav, lang), pv.favMinusP)}` : ""),
+          },
+        }],
+      } : undefined,
       {
         "@type": "BreadcrumbList",
         "@id": `${pageUrl}#breadcrumb`,
@@ -683,6 +842,9 @@ function gamePage({ lang, game, a, b, series, ra, rb, final, sameDay }) {
       },
     ],
   };
+
+  // Un nœud absent (pas de FAQ sans chiffre) deviendrait `null` dans le tableau.
+  jsonld["@graph"] = jsonld["@graph"].filter(Boolean);
 
   const others = sameDay
     .filter((g) => g.id !== game.id)
@@ -699,12 +861,13 @@ function gamePage({ lang, game, a, b, series, ra, rb, final, sameDay }) {
         <div class="team"><img src="${nhlLogo(b.abbr)}" alt="${esc(bn)}" width="72" height="72" /><div class="abbr">${esc(b.abbr)}</div></div>
       </div>
     </section>
+${isFinal ? "" : predictionBlock(lang, a, b, pred, null)}
 ${statsRow(lang, a, b)}
-${isFinal ? resultBlock(lang, a, b, final) : contextBlock(lang, a, b, ra, rb)}
+${isFinal ? resultBlock(lang, a, b, final) + "\n" + predictionBlock(lang, a, b, pred, final) : contextBlock(lang, a, b, ra, rb)}
 ${seriesBlock(lang, a, b, series)}
     <div class="cta-box">
-      <p class="cta-title">${esc(isFinal ? T.ctaFinalH : T.ctaH)}</p>
-      <p>${esc(isFinal ? T.ctaFinalP : T.ctaP(an, bn))}</p>
+      <p class="cta-title">${esc(isFinal ? T.ctaFinalH : pv ? T.ctaPredH : T.ctaH)}</p>
+      <p>${esc(isFinal ? T.ctaFinalP : pv ? T.ctaPredP : T.ctaP(an, bn))}</p>
       <a class="btn" href="${SITE}/">${esc(T.ctaBtn)}</a>
     </div>
       <h2>${esc(T.modelH)}</h2>
@@ -829,6 +992,8 @@ async function main() {
 
   const games = await fetchGames(dates);
   console.log(`  ${games.length} matchs dans la fenêtre`);
+  const preds = await loadPredictions(dates);
+  console.log(`  ${preds.size} probabilité(s) du bilan public`);
   if (!games.length) {
     // Hors saison : on réécrit quand même les deux hubs (sinon ils annoncent
     // éternellement le programme du dernier jour de la saison) et on laisse le
@@ -876,7 +1041,11 @@ async function main() {
     const ra = restContext(seasons.get(a.abbr) || [], g.date, a.abbr);
     const rb = restContext(seasons.get(b.abbr) || [], g.date, b.abbr);
     const final = finals.get(g.id) || null;
-    if (!enoughToSay({ final, series, restA: ra, restB: rb, a, b })) { skipped++; continue; }
+    // Garde-fou d'alignement : le fichier public et le calendrier doivent
+    // parler des mêmes équipes, sinon on n'affiche rien plutôt qu'un chiffre inversé.
+    const p0 = preds.get(String(g.id));
+    const pred = p0 && p0.home === b.abbr && p0.away === a.abbr ? p0 : null;
+    if (!enoughToSay({ final, series, restA: ra, restB: rb, a, b, pred })) { skipped++; continue; }
 
     for (const lang of ["en", "fr"]) {
       const sameDay = (byDate.get(g.date) || []).map((x) => ({
@@ -884,7 +1053,7 @@ async function main() {
         homeName: lang === "fr" ? x.homeNameFr : x.homeName,
         awayName: lang === "fr" ? x.awayNameFr : x.awayName,
       }));
-      const html = gamePage({ lang, game: g, a, b, series, ra, rb, final, sameDay });
+      const html = gamePage({ lang, game: g, a, b, series, ra, rb, final, sameDay, pred });
       const rel = lang === "fr"
         ? path.join("fr", "match", g.date, `${gameSlug(a, b)}.html`)
         : path.join("match", g.date, `${gameSlug(a, b)}.html`);

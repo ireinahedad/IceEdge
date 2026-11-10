@@ -1,5 +1,22 @@
 User-agent: *
 Allow: /
 
+# AI search and assistant crawlers: explicitly welcome. Being read by these is
+# how ArakIce gets cited in ChatGPT, Claude, Perplexity and Google AI answers.
+# (If Cloudflare's "Block AI bots" / managed robots.txt is on for arakice.com,
+# it overrides this file: keep it off.)
+User-agent: OAI-SearchBot
+User-agent: ChatGPT-User
+User-agent: GPTBot
+User-agent: Claude-SearchBot
+User-agent: Claude-User
+User-agent: ClaudeBot
+User-agent: PerplexityBot
+User-agent: Perplexity-User
+User-agent: Google-Extended
+User-agent: Applebot-Extended
+User-agent: Bingbot
+Allow: /
+
 Sitemap: https://arakice.com/sitemap.xml
 Sitemap: https://arakice.com/sitemap-games.xml
