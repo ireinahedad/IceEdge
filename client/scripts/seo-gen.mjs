@@ -374,86 +374,198 @@ function ctaBox(heading, text, label) {
 }
 
 // ── Templates ────────────────────────────────────────────────────────────────
+// ── Player prop pages ────────────────────────────────────────────────────────
+// WHY THIS SHAPE (Nov 2026)
+// The old template was ~650 words of prose where only the name changed — the
+// "content volume over quality" pattern, and nothing a search for "<player>
+// shots prop" or an AI assistant could quote. The page now leads with the
+// numbers a prop bettor actually checks, all computed from this season's game
+// log: how often the player cleared the common lines, home vs road, last 10 vs
+// season, last five games. One short paragraph on method, one CTA. The model's
+// own projection stays in the app.
+
+const toiMin = (t) => {
+  if (t == null) return null;
+  const [m, s] = String(t).split(":").map(Number);
+  return Number.isFinite(m) ? m + (Number.isFinite(s) ? s / 60 : 0) : null;
+};
+const avg = (xs) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null);
+const shortGameDate = (iso) =>
+  new Date(`${iso}T12:00:00Z`).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
+
+/** Rows of the season game log, normalised for skaters and goalies. */
+function logRows(p) {
+  // Champ attendu absent (format de l'API changé) = pas de tableaux, plutôt
+  // que des zéros présentés comme des statistiques.
+  const key = p.pos === "G" ? "shotsAgainst" : "shots";
+  const log = (p.gameLog || []).filter((g) => g && g.gameDate && g[key] != null);
+  return log.map((g) => {
+    const sa = Number(g.shotsAgainst ?? NaN), ga = Number(g.goalsAgainst ?? NaN);
+    return {
+      date: g.gameDate, opp: g.opponentAbbrev, home: g.homeRoadFlag === "H",
+      goals: Number(g.goals || 0), assists: Number(g.assists || 0), points: Number(g.points || 0),
+      shots: Number(g.shots || 0), toi: toiMin(g.toi),
+      started: Number(g.gamesStarted || 0) === 1 || (toiMin(g.toi) ?? 0) >= 40,
+      saves: Number.isFinite(sa) && Number.isFinite(ga) ? sa - ga : null, sa: Number.isFinite(sa) ? sa : null, ga: Number.isFinite(ga) ? ga : null,
+      decision: g.decision || "",
+    };
+  }).sort((a, b) => b.date.localeCompare(a.date)); // newest first
+}
+
+/** Over-rates on the lines books actually post. */
+function lineRates(rows, isGoalie) {
+  const lines = isGoalie
+    ? [["Saves", "saves", [22.5, 25.5, 28.5]]]
+    : [["Shots on goal", "shots", [1.5, 2.5, 3.5]], ["Points", "points", [0.5, 1.5]], ["Goals", "goals", [0.5]]];
+  const pool = isGoalie ? rows.filter((r) => r.started && r.saves != null) : rows;
+  const out = [];
+  for (const [label, key, ls] of lines) for (const l of ls) {
+    const n = pool.filter((r) => r[key] > l).length;
+    out.push({ label, line: l, n, of: pool.length, pct: pool.length ? Math.round((100 * n) / pool.length) : 0 });
+  }
+  return { rates: out, pool };
+}
+
 function playerPage(p) {
   const isGoalie = p.pos === "G";
   const posName = { C: "center", L: "left wing", R: "right wing", D: "defenseman", G: "goaltender" }[p.pos] || "player";
   const team = p.teamName || p.team;
   const s = p.stats || {};
   const gp = Number(s.gamesPlayed || 0);
+  const rows = logRows(p);
+  const { rates, pool } = lineRates(rows, isGoalie);
+  const f1 = (x) => (x == null ? "—" : x.toFixed(1));
+  const rate = (r) => `${r.n} of ${r.of} ${isGoalie ? "starts" : "games"} (${r.pct}%)`;
+  const find = (label, line) => rates.find((r) => r.label === label && r.line === line);
 
-  // Per-game rates → genuinely unique numbers per player (reduces duplicate-content risk).
-  let rateBlock = "";
-  if (!isGoalie && gp > 0) {
-    const ppg = (Number(s.points || 0) / gp).toFixed(2);
-    const spg = (Number(s.shots || 0) / gp).toFixed(1);
-    const gpg = (Number(s.goals || 0) / gp).toFixed(2);
-    rateBlock = `      <h2>What ${esc(p.name)}'s rates tell us</h2>
-      <p>Across ${gp} games, ${esc(p.name)} is averaging about <strong>${ppg} points</strong> and <strong>${spg} shots on goal</strong> per game, at roughly ${gpg} goals a night. Rates matter more than raw totals for props, because a prop line is a single game question, and a pace of ${spg} shots is the base the model adjusts up or down for the specific matchup, ice time and pace. When ${esc(p.name)}'s role or linemates change, those rates are the first thing to move.</p>`;
-  } else if (isGoalie && gp > 0) {
-    const svp = s.savePctg != null ? Number(s.savePctg).toFixed(3) : null;
-    rateBlock = `      <h2>What ${esc(p.name)}'s numbers tell us</h2>
-      <p>Over ${gp} appearances${svp ? ` at a ${svp} save percentage` : ""}, ${esc(p.name)} gives the model a base workload and stopping rate to build on. For goaltender props, the swing factor is volume: the model estimates how many shots ${esc(team)}'s opponent is likely to generate, then pairs that with ${esc(p.name)}'s save rate to project saves. A busy opponent lifts the saves projection even when the win is in doubt. A quiet one suppresses it.</p>`;
+  // ── The answer sentence + splits ──
+  let answer = "", splits = [];
+  if (pool.length) {
+    if (isGoalie) {
+      const sv = pool.map((r) => r.saves);
+      const svHome = pool.filter((r) => r.home).map((r) => r.saves), svRoad = pool.filter((r) => !r.home).map((r) => r.saves);
+      const last10 = pool.slice(0, 10).map((r) => r.saves);
+      const r25 = find("Saves", 25.5);
+      answer = `${p.name} has made ${f1(avg(sv))} saves per start across ${pool.length} starts this season, and has gone over 25.5 saves in ${rate(r25)}. Over his last ${last10.length} starts he is averaging ${f1(avg(last10))}.`;
+      splits = [["Saves per start, season", f1(avg(sv))], [`Saves per start, last ${last10.length}`, f1(avg(last10))],
+        ["At home", f1(avg(svHome))], ["On the road", f1(avg(svRoad))]];
+    } else {
+      const sh = rows.map((r) => r.shots), last10 = rows.slice(0, 10).map((r) => r.shots);
+      const shHome = rows.filter((r) => r.home).map((r) => r.shots), shRoad = rows.filter((r) => !r.home).map((r) => r.shots);
+      const toi = avg(rows.map((r) => r.toi).filter((x) => x != null));
+      const r25 = find("Shots on goal", 2.5), rp = find("Points", 0.5), rg = find("Goals", 0.5);
+      const trend = avg(last10) - avg(sh);
+      const trendTxt = Math.abs(trend) < 0.2 ? "in line with his season rate" : trend > 0 ? `up from ${f1(avg(sh))} on the season` : `down from ${f1(avg(sh))} on the season`;
+      answer = `${p.name} has gone over 2.5 shots on goal in ${rate(r25)} this season, recorded a point in ${rate(rp)} and scored in ${rate(rg)}. Over his last ${last10.length} games he is averaging ${f1(avg(last10))} shots, ${trendTxt}.`;
+      splits = [["Shots per game, season", f1(avg(sh))], [`Shots per game, last ${last10.length}`, f1(avg(last10))],
+        ["Shots per game at home", f1(avg(shHome))], ["Shots per game on the road", f1(avg(shRoad))],
+        ...(toi != null ? [["Ice time per game", `${Math.floor(toi)}:${String(Math.round((toi % 1) * 60)).padStart(2, "0")}`]] : [])];
+    }
   }
+
   const statCards = isGoalie
-    ? [
-        ["GP", s.gamesPlayed], ["W", s.wins], ["GAA", s.goalsAgainstAvg != null ? Number(s.goalsAgainstAvg).toFixed(2) : null],
-        ["SV%", s.savePctg != null ? Number(s.savePctg).toFixed(3) : null], ["SO", s.shutouts],
-      ]
-    : [
-        ["GP", s.gamesPlayed], ["G", s.goals], ["A", s.assists], ["P", s.points], ["SOG", s.shots],
-      ];
-  const cardsHtml = statCards
-    .filter(([, v]) => v != null && v !== "")
-    .map(([l, v]) => `        <div class="stat"><div class="value">${esc(v)}</div><div class="label">${esc(l)}</div></div>`)
-    .join("\n");
+    ? [["GP", s.gamesPlayed], ["W", s.wins], ["GAA", s.goalsAgainstAvg != null ? Number(s.goalsAgainstAvg).toFixed(2) : null],
+       ["SV%", s.savePctg != null ? Number(s.savePctg).toFixed(3) : null], ["SO", s.shutouts]]
+    : [["GP", s.gamesPlayed], ["G", s.goals], ["A", s.assists], ["P", s.points], ["SOG", s.shots]];
+  const cardsHtml = statCards.filter(([, v]) => v != null && v !== "")
+    .map(([l, v]) => `        <div class="stat"><div class="value">${esc(v)}</div><div class="label">${esc(l)}</div></div>`).join("\n");
 
-  const propsFocus = isGoalie
-    ? `For a goaltender like ${esc(p.name)}, the props that matter most are saves and, on the totals side, the game's over/under. Both driven by how many shots the opposition is likely to generate. Our model estimates ${esc(p.name)}'s expected workload from the quality of shots ${esc(team)} tends to allow, the pace of the opponent, and rest, then compares that projection to the posted save line.`
-    : `For a skater like ${esc(p.name)}, shots on goal and points are the headline props. Shots are the more stable of the two. They depend on ice time, role and how many attempts ${esc(team)} generates. Points swing more with linemates and finishing luck. The model projects each from ${esc(p.name)}'s usage and matchup, then flags where that number diverges from the sportsbook line.`;
-
-  const stats = p.stats && p.stats.gamesPlayed
-    ? `      <h2>${esc(p.name)}'s season at a glance</h2>
-      <div class="stats-row">
-${cardsHtml}
+  const ratesTable = pool.length ? `      <h2>How often ${esc(p.name)} clears common prop lines</h2>
+      <div class="h2h-wrap">
+        <table class="h2h">
+          <thead><tr><th>Prop</th><th>Line</th><th>Over</th><th>Rate</th></tr></thead>
+          <tbody>
+${rates.map((r) => `          <tr><td>${esc(r.label)}</td><td class="num">${r.line}</td><td class="num">${r.n} of ${r.of}</td><td class="num">${r.pct}%</td></tr>`).join("\n")}
+          </tbody>
+        </table>
       </div>
-      <p>These are ${esc(p.name)}'s current regular season totals. They form the base rate the model starts from before adjusting for tonight's specific matchup, opponent quality, rest and role.</p>`
-    : "";
+      <p class="src">${isGoalie ? `Starts only (${pool.length}), this regular season.` : `All ${rows.length} games this regular season.`} A hit rate is history, not a projection: it ignores the opponent, rest and goaltending, which is what the model adds.</p>` : "";
 
-  // FAQPage retiré : Google ne l'affiche plus que pour les sites de santé et
-  // gouvernementaux (août 2023). Le balisage n'apportait plus rien.
-  const jsonld = null;
+  const splitsHtml = splits.length ? `      <h2>Splits</h2>
+      <div class="h2h-wrap">
+        <table class="h2h">
+          <tbody>
+${splits.map(([k, v]) => `          <tr><td>${esc(k)}</td><td class="num">${esc(v)}</td></tr>`).join("\n")}
+          </tbody>
+        </table>
+      </div>` : "";
+
+  const last5 = rows.slice(0, 5);
+  const last5Html = last5.length ? `      <h2>Last ${last5.length} games</h2>
+      <div class="h2h-wrap">
+        <table class="h2h">
+          <thead><tr>${(isGoalie ? ["Date", "Opponent", "Result", "Shots against", "Saves", "Goals against"] : ["Date", "Opponent", "G", "A", "P", "SOG", "TOI"]).map((h) => `<th>${h}</th>`).join("")}</tr></thead>
+          <tbody>
+${last5.map((r) => {
+    const opp = `${r.home ? "vs" : "@"} ${r.opp}`;
+    const cells = isGoalie
+      ? [shortGameDate(r.date), opp, r.decision || "—", r.sa ?? "—", r.saves ?? "—", r.ga ?? "—"]
+      : [shortGameDate(r.date), opp, r.goals, r.assists, r.points, r.shots, r.toi != null ? `${Math.floor(r.toi)}:${String(Math.round((r.toi % 1) * 60)).padStart(2, "0")}` : "—"];
+    return `          <tr>${cells.map((c, i) => `<td${i > 1 ? ' class="num"' : ""}>${esc(c)}</td>`).join("")}</tr>`;
+  }).join("\n")}
+          </tbody>
+        </table>
+      </div>` : "";
+
+  const method = isGoalie
+    ? `For ${esc(p.name)}'s saves line, the swing factor is volume. arakiceML estimates how many shots tonight's opponent is likely to generate against the ${esc(team)}, adjusts for rest and the starting goalie being confirmed, and pairs that with ${esc(p.name)}'s save rate. A busy opponent lifts the saves projection even when the win is in doubt.`
+    : `arakiceML starts from ${esc(p.name)}'s ice time and shot rate, then adjusts for the specific game: the opponent's shot suppression, pace, rest and back-to-backs, and the goaltender on the other side. Shots are the more stable prop; points swing more with linemates and finishing luck, so their projection carries more uncertainty.`;
+
+  const jsonld = {
+    "@context": "https://schema.org",
+    "@type": "ProfilePage",
+    url: `${SITE}/props/${p.slug}`,
+    name: `${p.name} Prop Predictions`,
+    mainEntity: {
+      "@type": "Person",
+      name: p.name,
+      jobTitle: `${posName[0].toUpperCase()}${posName.slice(1)}`,
+      memberOf: { "@type": "SportsTeam", name: team, sport: "Ice hockey" },
+    },
+    isPartOf: { "@type": "WebSite", "@id": `${SITE}/#website`, name: "ArakIce", url: `${SITE}/` },
+  };
+
+  const lede = answer
+    || `Season numbers and betting context for ${p.name} of the ${team}. Tonight's projection and the edge against the line are in the app.`;
 
   const body = `    <section class="hero">
       <p class="eyebrow">${esc(team)} · ${esc(posName)}</p>
       <h1>${esc(p.name)} Prop Predictions</h1>
-      <p class="lede">Projections and betting context for ${esc(p.name)} of the ${esc(team)}. See how ArakIce models ${esc(p.name)}'s props, ${isGoalie ? "saves and totals" : "shots and points included"}, and where the numbers point against the sportsbook line.</p>
+      <p class="lede">${esc(lede)}</p>
     </section>
-    <p>If you follow ${esc(p.name)}, you already know the box score only tells part of the story. Prop betting rewards understanding the <em>process</em> behind the numbers: the ice time, the role, the matchup and the pace that decide how many chances a ${esc(posName)} actually gets. This page explains how ArakIce turns that context into a projection for ${esc(p.name)}, and how to use it without fooling yourself.</p>
-${ctaBox(`See ${p.name}'s live projection tonight`, `When ${p.name} is playing, ArakIce shows the projection and the edge against the current prop line, updated through the day.`, "Open ArakIce")}
-${stats}
-      <h2>How we project ${esc(p.name)}'s props</h2>
-      <p>${propsFocus}</p>
-      <p>The projection is not a season average dressed up. It weighs the specific game: the opponent ${esc(team)} faces, whether either team is playing a second night in a row or sitting deep in a road trip, the goaltending on the other side, and the referee crew where it affects scoring. Those factors are weighed per matchup, so ${esc(p.name)}'s number on a rested home night against a weak defense looks very different from a tired night against an elite one.</p>
-${rateBlock}
-      <h2>Which ${esc(p.name)} props to watch</h2>
-      <p>The best prop bets are the ones where the model and the market disagree most, not simply the ones with the biggest names attached. When ${esc(p.name)}'s projection clearly exceeds the posted line, that gap is the reason to bet the over; when it falls short, the under or a pass is the disciplined play. Treat the size of the gap as your guide to stake size, and remember that even a strong edge will miss plenty of individual nights.</p>
-${ctaBox(`Track ${p.name} in the app`, `Follow ${p.name}'s projections game by game and get the edge against the line the moment it moves.`, "Open ArakIce")}
+${gp ? `      <h2>${esc(p.name)}'s season at a glance</h2>
+      <div class="stats-row">
+${cardsHtml}
+      </div>` : ""}
+${ratesTable}
+${splitsHtml}
+${last5Html}
+      <h2>How arakiceML projects ${esc(p.name)}'s props</h2>
+      <p>${method}</p>
+${ctaBox(`${p.name}'s projection tonight`, `When ${p.name} plays, ArakIce shows the model's projection for his ${isGoalie ? "saves" : "shots and points"} and the gap against the posted line, updated through the day.`, "Open ArakIce")}
+      <p class="src">Season and game-log data from the NHL public API${p.logDate ? `, as of ${esc(p.logDate)}` : ""}.</p>
       <section class="related">
         <h2>Explore more</h2>
         <ul>
-          <li><a href="${SITE}/nhl-player-props">All NHL player prop predictions</a></li>
-          <li><a href="${SITE}/best-nhl-picks-today">Best NHL picks today</a></li>
-          <li><a href="${SITE}/">Open the ArakIce app</a></li>
+          <li><a href="${SITE}/nhl-player-props">All NHL player prop pages</a></li>
+          <li><a href="${SITE}/nhl-predictions-today">NHL predictions today</a></li>
+          <li><a href="${SITE}/match">Tonight's NHL games</a></li>
         </ul>
       </section>`;
 
+  const descStat = (() => {
+    if (!pool.length) return null;
+    if (isGoalie) { const r = find("Saves", 25.5); return `${p.name} saves prop: over 25.5 in ${r.n} of ${r.of} starts this season`; }
+    const r = find("Shots on goal", 2.5); return `${p.name} shots prop: over 2.5 SOG in ${r.n} of ${r.of} games this season`;
+  })();
+
   return layout({
-    title: fit(TITLE_MAX,
-      `${p.name} Prop Predictions & Projections | ArakIce`,
-      `${p.name} Prop Predictions | ArakIce`),
-    desc: fit(DESC_MAX,
-      `${p.name} (${team}) prop predictions: ${isGoalie ? "save and totals" : "shots, points and more"} projections and betting context from ArakIce's NHL model.`,
-      `${p.name} prop predictions: ${isGoalie ? "saves and totals" : "shots, points and more"}, from ArakIce's NHL model.`),
+    title: fit(TITLE_MAX, `${p.name} Prop Predictions & Projections | ArakIce`, `${p.name} Prop Predictions | ArakIce`),
+    desc: descStat
+      ? fit(DESC_MAX, `${descStat}, plus hit rates, home/road splits and last five games.`, `${descStat}.`)
+      : fit(DESC_MAX,
+          `${p.name} (${team}) prop predictions: ${isGoalie ? "save and totals" : "shots, points and more"} projections and betting context from ArakIce's NHL model.`,
+          `${p.name} prop predictions: ${isGoalie ? "saves and totals" : "shots, points and more"}, from ArakIce's NHL model.`),
     canonicalPath: `/props/${p.slug}`,
     jsonld,
     body,
@@ -835,6 +947,16 @@ async function fetchPlayers(teams, allow = new Set()) {
     p.slug = slug;
     out.push(p);
   }
+  // Journal de la saison, seulement pour les joueurs qui ont une page : la
+  // matière des taux de réussite par ligne. Échec = page sans ces tableaux.
+  const logDate = new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "America/New_York" });
+  await pMap(out, async (p) => {
+    try {
+      const g = await getJSON(`${API}/player/${p.id}/game-log/now`);
+      p.gameLog = Array.isArray(g.gameLog) ? g.gameLog : [];
+      p.logDate = logDate;
+    } catch { p.gameLog = []; }
+  });
   return out;
 }
 
@@ -854,6 +976,17 @@ function sampleData() {
     { id: 8478420, name: "Mikko Rantanen", pos: "R", team: "DAL", teamName: "Dallas Stars", slug: "mikko-rantanen", stats: { gamesPlayed: 70, goals: 30, assists: 50, points: 80, shots: 220 } },
     { id: 8481691, name: "Yaroslav Askarov", pos: "G", team: "SJS", teamName: "San Jose Sharks", slug: "yaroslav-askarov", stats: { gamesPlayed: 40, wins: 18, goalsAgainstAvg: 2.80, savePctg: 0.905, shutouts: 2 } },
   ];
+  // Journaux inventés eux aussi (déterministes), pour couvrir les tableaux.
+  for (const p of players) {
+    p.logDate = "sample";
+    p.gameLog = Array.from({ length: 14 }, (_, i) => {
+      const d = new Date(Date.UTC(2026, 9, 10 + i * 2)).toISOString().slice(0, 10);
+      const k = (i * 7 + p.id) % 5;
+      return p.pos === "G"
+        ? { gameDate: d, opponentAbbrev: ["EDM", "CGY", "VAN"][i % 3], homeRoadFlag: i % 2 ? "H" : "R", gamesStarted: 1, shotsAgainst: 24 + k * 2, goalsAgainst: k % 4, decision: k % 2 ? "W" : "L", toi: "60:00" }
+        : { gameDate: d, opponentAbbrev: ["EDM", "CGY", "VAN"][i % 3], homeRoadFlag: i % 2 ? "H" : "R", goals: k % 3 === 0 ? 1 : 0, assists: k % 2, points: (k % 3 === 0 ? 1 : 0) + (k % 2), shots: k + 1, toi: `${18 + k}:30` };
+    });
+  }
   const pairs = [{ a: teams.CGY, b: teams.EDM }];
   return { teams, players, pairs };
 }
