@@ -83,3 +83,6 @@ jobs:
           # replace au-dessus de son commit au lieu d'échouer au push.
           git pull --rebase origin "${GITHUB_REF_NAME}"
           git push origin "HEAD:${GITHUB_REF_NAME}"
+
+      - name: Prévenir Bing (IndexNow)
+        run: cd "$GITHUB_WORKSPACE" && node client/scripts/indexnow.mjs
