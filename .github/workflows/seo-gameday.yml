@@ -73,7 +73,7 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           # Chemins explicites : un `git add -A` embarquerait tout ce qui traîne
           # dans le runner, ce que le dépôt a déjà payé une fois.
-          git add client/public/match client/public/fr/match client/public/sitemap-games.xml client/public/nhl-prediction-accuracy.html client/public/nhl-predictions-today.html
+          git add client/public/match client/public/fr/match client/public/sitemap-games.xml client/public/nhl-prediction-accuracy.html client/public/nhl-predictions-today.html client/public/nhl-prediction-accuracy.html client/public/nhl-predictions-today.html client/public/team client/public/nhl-teams.html client/public/sitemap-teams.xml
           if git diff --cached --quiet; then
             echo "Rien à publier (hors saison, ou aucun match dans la fenêtre)."
             exit 0
