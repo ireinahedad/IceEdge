@@ -178,6 +178,14 @@ const L = {
     predFinalEven: (w) => `Before puck drop, arakiceML had this game at 50-50. The ${w} won.`,
     predFinalNote: "One game says very little about a model. What matters is whether its 60% calls come in about 60% of the time over hundreds of games:",
     predAccLink: "see the accuracy record",
+    slateH: (d) => `arakiceML predictions for ${d}`,
+    slateCols: ["Game", "Puck drop", "Model favourite", "Win chance"],
+    slateEven: "Coin flip",
+    slateNote: "Pre-game win probabilities, overtime and shootout included, recorded in the morning and committed to ArakIce's public prediction record before the first puck drop.",
+    slateProof: "See the timestamped file",
+    slatePending: "The model's numbers for this slate are published in the morning, Eastern time, before the first game.",
+    slateMore: "Edges against the odds, totals and player props are in the app.",
+    hubDescPred: (n, d) => `arakiceML win probabilities for all ${n} NHL games on ${d}, plus form, rest and the head to head for each matchup.`,
     descPred: (fav, dog, p, d) => `arakiceML gives the ${fav} a ${p}% chance to beat the ${dog} on ${d}, plus records, rest and head to head.`,
     descPredShort: (fav, p, d) => `arakiceML gives the ${fav} a ${p}% win chance on ${d}. Records, rest and head to head.`,
     resultH: "How it finished",
@@ -243,6 +251,14 @@ const L = {
     predFinalEven: (w) => `Avant la mise au jeu, arakiceML voyait ce match à 50-50. Victoire finale : ${w}.`,
     predFinalNote: "Un seul match ne dit presque rien d'un modèle. Ce qui compte, c'est que ses 60 % se réalisent environ 60 % du temps sur des centaines de matchs :",
     predAccLink: "voir le bilan de précision",
+    slateH: (d) => `Les pronostics d'arakiceML du ${d}`,
+    slateCols: ["Match", "Mise au jeu", "Favori du modèle", "Chances de victoire"],
+    slateEven: "Pile ou face",
+    slateNote: "Probabilités de victoire d'avant-match, prolongation et tirs de barrage compris, enregistrées le matin et commitées dans le bilan public d'ArakIce avant la première mise au jeu.",
+    slateProof: "Voir le fichier horodaté",
+    slatePending: "Les chiffres du modèle pour ce programme sont publiés le matin, heure de l'Est, avant le premier match.",
+    slateMore: "Les écarts avec les cotes, les totaux et les props des joueurs sont dans l'application.",
+    hubDescPred: (n, d) => `Les probabilités de victoire d'arakiceML pour les ${n} matchs de la LNH du ${d}, avec la forme, le repos et l'historique de chaque confrontation.`,
     descPred: (fav, dog, p, d) => `Le ${d}, arakiceML donne ${p} % de chances de victoire : ${fav} contre ${dog}. Fiches, repos et historique.`,
     descPredShort: (fav, p, d) => `Le ${d}, arakiceML donne ${p} % de chances de victoire : ${fav}. Fiches, repos, historique.`,
     resultH: "Comment ça s'est terminé",
@@ -893,6 +909,38 @@ ${others ? `        <h3>${esc(T.other)}</h3>\n        <ul>\n${others}\n        <
 // sociaux (server/src/services/content/parlayPosts.ts) partagent. Sans elle,
 // le lien d'un post tombait sur la 404 de l'app. Contrairement au hub du jour,
 // elle ne change jamais de programme : le lien d'hier reste juste demain.
+/**
+ * Le programme d'un soir avec le chiffre public du modèle. `games` : entrées de
+ * `byDate` localisées (homeName/awayName, time, pred). Rend "" si aucun match
+ * de la liste n'a de chiffre : la liste simple du hub reste alors seule.
+ */
+function slateTable(lang, date, games) {
+  const T = L[lang];
+  if (!games.some((g) => g.pred)) return "";
+  const pct = (n) => (lang === "fr" ? `${n} %` : `${n}%`);
+  const rows = games.map((g) => {
+    const href = `${SITE}${pagePath(lang, g.date, g.slug)}`;
+    let fav = "—", p = "—";
+    if (g.pred) {
+      const homeP = Math.round(g.pred.homeWin * 100);
+      if (homeP === 50) { fav = T.slateEven; p = pct(50); }
+      else { fav = homeP > 50 ? g.homeName : g.awayName; p = pct(Math.max(homeP, 100 - homeP)); }
+    }
+    return `          <tr><td><a href="${href}">${esc(g.awayName)} ${esc(T.vs)} ${esc(g.homeName)}</a></td><td>${esc(g.time || "")}</td><td>${esc(fav)}</td><td class="num">${esc(p)}</td></tr>`;
+  }).join("\n");
+  const proof = games.find((g) => g.pred)?.pred.proofUrl;
+  return `      <h2>${esc(T.slateH(longDate(date, lang)))}</h2>
+      <div class="h2h-wrap">
+        <table class="h2h">
+          <thead><tr>${T.slateCols.map((c) => `<th>${esc(c)}</th>`).join("")}</tr></thead>
+          <tbody>
+${rows}
+          </tbody>
+        </table>
+      </div>
+      <p class="src">${esc(T.slateNote)}${proof ? ` <a href="${proof}" rel="nofollow">${esc(T.slateProof)}</a>.` : ""} ${esc(T.slateMore)}</p>`;
+}
+
 function hubPage({ lang, date, games, dated = false }) {
   const T = L[lang];
   const dLong = longDate(date, lang);
@@ -914,6 +962,7 @@ function hubPage({ lang, date, games, dated = false }) {
       <h1>${esc(T.hubH1(dLong))}</h1>
       <p class="lede">${esc(T.hubLede)}</p>
     </section>
+${slateTable(lang, date, games)}
       <section class="related">
         <h2>${esc(T.breadcrumbGames)}</h2>
 ${games.length ? `        <ul>\n${items}\n        </ul>` : `        <p>${esc(T.hubEmpty)}</p>`}
@@ -932,7 +981,7 @@ ${games.length ? `        <ul>\n${items}\n        </ul>` : `        <p>${esc(T.h
       </section>`;
   return layout({
     title: T.hubTitle(dShort),
-    desc: T.hubDesc(games.length, dShort),
+    desc: games.some((g) => g.pred) ? fit(DESC_MAX, T.hubDescPred(games.length, dShort), T.hubDesc(games.length, dShort)) : T.hubDesc(games.length, dShort),
     canonicalPath: canonical, jsonld, body,
     lang, alternates, ogLocale: T.ogLocale,
   });
@@ -1030,6 +1079,7 @@ async function main() {
       homeName: b.name, awayName: a.name,
       homeNameFr: b.nameFr, awayNameFr: a.nameFr,
       startTimeUTC: g.startTimeUTC,
+      pred: (() => { const p = preds.get(String(g.id)); return p && p.home === b.abbr && p.away === a.abbr ? p : null; })(),
     });
   }
 
@@ -1089,6 +1139,10 @@ async function main() {
     await write(path.join(OUT_DIR, rel), hubPage({ lang, date: today, games: list }));
   }
 
+  await fillPredictionsToday(OUT_DIR, today, (byDate.get(today) || []).map((x) => ({
+    ...x, time: faceoffTime(x.startTimeUTC, "en"),
+  })));
+
   if (PRUNE_DAYS > 0) {
     const removed = await prune(OUT_DIR, shiftDate(today, -PRUNE_DAYS));
     if (removed) console.log(`  ${removed} journée(s) supprimée(s) au-delà de ${PRUNE_DAYS} jours`);
@@ -1096,6 +1150,29 @@ async function main() {
 
   const n = await writeGamesSitemap(OUT_DIR);
   console.log(`Terminé. ${written} page(s) écrite(s), ${skipped} match(s) sans assez de matière, ${n} URL dans sitemap-games.xml.`);
+}
+
+/**
+ * /nhl-predictions-today est écrite à la main (seo-gen ne la touche pas), mais
+ * son titre promet les pronostics du jour. On remplit la zone entre les
+ * marqueurs avec le programme du soir ; le reste de la page ne bouge pas.
+ * Marqueurs absents = on ne touche à rien (et on le dit).
+ */
+async function fillPredictionsToday(outDir, today, games) {
+  const file = path.join(outDir, "nhl-predictions-today.html");
+  const src = DRY ? path.join(__dirname, "..", "public", "nhl-predictions-today.html") : file;
+  let html;
+  try { html = await fs.readFile(src, "utf-8"); } catch { return; }
+  const re = /<!-- tonight:start -->[\s\S]*?<!-- tonight:end -->/;
+  if (!re.test(html)) { console.warn("  ⚠️  nhl-predictions-today.html : marqueurs tonight absents, page laissée telle quelle"); return; }
+  const T = L.en;
+  const table = slateTable("en", today, games);
+  const inner = table
+    || (games.length
+      ? `      <h2>${esc(T.slateH(longDate(today, "en")))}</h2>\n      <p>${esc(T.slatePending)} <a href="${SITE}/match">${esc(T.relAll)}</a>.</p>`
+      : `      <p>${esc(T.hubEmpty)} <a href="${SITE}/match">${esc(T.relAll)}</a>.</p>`);
+  const out = html.replace(re, () => `<!-- tonight:start -->\n${inner}\n    <!-- tonight:end -->`);
+  if (out !== html) await write(file, out);
 }
 
 async function write(full, html) {
