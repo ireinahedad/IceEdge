@@ -57,6 +57,9 @@ jobs:
           MATCH_DAYS_AHEAD: "2"
         run: node scripts/gameday-gen.mjs
 
+      - name: Pages d'équipe
+        run: node scripts/team-gen.mjs
+
       # F5 (NEWS_CONSENSUS_PLAN.md) : section « model vs. users » de la page de
       # précision. Vide tant qu'il y a moins de 300 picks réglés. Ne fait jamais
       # échouer le run : API muette = page inchangée.
