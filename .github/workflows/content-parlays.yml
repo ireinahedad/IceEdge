@@ -55,7 +55,7 @@ permissions:
 jobs:
   parlays:
     name: Combinés — ${{ github.event.inputs.mode || 'pick' }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04   # Ubuntu 26 (ubuntu-latest depuis le 2026-11-11) casse « playwright install --with-deps »
     timeout-minutes: 30
     defaults:
       run:

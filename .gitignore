@@ -124,3 +124,7 @@ server/arb-snapshots/
 
 # Binaire de publication du registre MCP (21 Mo) : à garder en local, ne pas versionner
 mcp/mcp-publisher.exe
+
+# Notes locales pour decembre 2026 (calendrier sans Claude) — jamais dans le depot public
+CALENDRIER_SANS_CLAUDE.html
+NOTES_JANVIER.md
