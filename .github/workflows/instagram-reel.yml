@@ -1,0 +1,63 @@
+name: Instagram — Reel du jour
+
+# MARKETING_PLAN.md, phase D. L'API Instagram ne programme pas les publications :
+# content-parlays.yml prépare le Reel à 06:00 UTC (conteneur chez Meta + file
+# d'attente instagram/<date>.json sur R2), et ce workflow le PUBLIE 2 h avant le
+# 1er match. Il passe toutes les heures à :40 de 14:40 à 03:40 UTC et publie dès
+# que l'heure visée est à moins de 30 min (GitHub peut retarder un passage).
+#
+# Chaque passage : un script sans dépendance (pas de npm ci), une lecture R2 et
+# un appel Meta. Aucun appel à l'API ArakIce, donc Neon n'est jamais réveillé.
+#
+# Lancement manuel : « check » vérifie le jeton, le quota et le Reel en attente
+# sans rien publier ; « publish » publie tout de suite si un Reel est prêt.
+
+on:
+  schedule:
+    - cron: "40 14-23 * * *"
+    - cron: "40 0-3 * * *"
+  workflow_dispatch:
+    inputs:
+      action:
+        description: "check (vérifier, ne rien publier) ou publish (publier si prêt)"
+        type: choice
+        options: [check, publish]
+        default: check
+
+concurrency:
+  group: instagram-reel
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  reel:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    if: vars.PARLAYS_INSTAGRAM == 'on' || github.event_name == 'workflow_dispatch'
+    defaults:
+      run:
+        working-directory: server
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          sparse-checkout: server/scripts/instagram-publish.mjs
+          sparse-checkout-cone-mode: false
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+
+      - name: Publier si c'est l'heure
+        env:
+          INSTAGRAM_ACCESS_TOKEN: ${{ secrets.INSTAGRAM_ACCESS_TOKEN }}
+          INSTAGRAM_USER_ID:      ${{ secrets.INSTAGRAM_USER_ID }}
+          R2_PUBLIC_URL:          ${{ secrets.R2_PUBLIC_URL }}
+          ACTION:                 ${{ github.event.inputs.action || 'publish' }}
+        run: |
+          if [ "$ACTION" = "check" ]; then
+            node scripts/instagram-publish.mjs --check
+          else
+            node scripts/instagram-publish.mjs
+          fi

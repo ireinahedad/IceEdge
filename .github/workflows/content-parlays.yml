@@ -116,6 +116,11 @@ jobs:
           R2_BUCKET:             ${{ secrets.R2_BUCKET }}
           R2_PUBLIC_URL:         ${{ secrets.R2_PUBLIC_URL }}
           PARLAYS_YOUTUBE_PRIVACY: ${{ vars.PARLAYS_YOUTUBE_PRIVACY || 'unlisted' }}
+          # Instagram (2026-11-12) : Reel préparé ici, publié le soir par instagram-reel.yml.
+          # Désactivé tant que la variable de dépôt PARLAYS_INSTAGRAM ne vaut pas « on ».
+          PARLAYS_INSTAGRAM:      ${{ vars.PARLAYS_INSTAGRAM }}
+          INSTAGRAM_ACCESS_TOKEN: ${{ secrets.INSTAGRAM_ACCESS_TOKEN }}
+          INSTAGRAM_USER_ID:      ${{ secrets.INSTAGRAM_USER_ID }}
           DUE_DATE: ${{ steps.due.outputs.date }}
           DRY_RUN: ${{ github.event.inputs.dry_run }}
         run: |

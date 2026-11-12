@@ -5,7 +5,9 @@
  * utilisé par les avatars) :
  *   • YouTube Shorts — `videos.insert` en envoi « resumable » ;
  *   • R2             — le mp4 dans le bucket public `arakice-content` ;
- *   • Resend         — le courriel « à publier sur TikTok » (lien + légende).
+ *   • Resend         — le courriel « à publier sur TikTok » (lien + légende) ;
+ *   • Instagram      — Reel préparé (conteneur) le matin, publié le soir par
+ *                      `scripts/instagram-publish.mjs` (l'API ne programme pas).
  * Aucun secret n'est jamais écrit dans la console.
  */
 
@@ -94,6 +96,27 @@ export async function uploadYoutube(file: string, meta: YoutubeMeta): Promise<st
 
 /** Dépose le mp4 dans le bucket public, renvoie son URL publique. */
 export async function uploadR2(file: string, key: string): Promise<string> {
+  return putR2(key, await fs.readFile(file), 'video/mp4', {
+    ContentDisposition: `attachment; filename="${key.split('/').pop()}"`,
+    CacheControl: 'public, max-age=604800',
+  });
+}
+
+/** Petit JSON public (file d'attente Instagram) : jamais mis en cache. */
+export async function putR2Json(key: string, data: unknown): Promise<string> {
+  return putR2(key, Buffer.from(JSON.stringify(data, null, 2)), 'application/json', { CacheControl: 'no-store' });
+}
+
+/** Lit un JSON public déposé par putR2Json ; null s'il n'existe pas. */
+export async function getR2Json<T>(key: string): Promise<T | null> {
+  const res = await fetch(`${need('R2_PUBLIC_URL').replace(/\/+$/, '')}/${key}?t=${Date.now()}`, { cache: 'no-store' });
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error(`R2 : lecture de ${key} → HTTP ${res.status}`);
+  return (await res.json()) as T;
+}
+
+async function putR2(key: string, body: Buffer, contentType: string,
+  extra: { ContentDisposition?: string; CacheControl?: string }): Promise<string> {
   const accountId = need('R2_ACCOUNT_ID');
   const client = new S3Client({
     region: 'auto',
@@ -103,10 +126,9 @@ export async function uploadR2(file: string, key: string): Promise<string> {
   await client.send(new PutObjectCommand({
     Bucket: need('R2_BUCKET'),
     Key: key,
-    Body: await fs.readFile(file),
-    ContentType: 'video/mp4',
-    ContentDisposition: `attachment; filename="${key.split('/').pop()}"`,
-    CacheControl: 'public, max-age=604800',
+    Body: body,
+    ContentType: contentType,
+    ...extra,
   }));
   return `${need('R2_PUBLIC_URL').replace(/\/+$/, '')}/${key}`;
 }
@@ -152,4 +174,42 @@ export async function sendTiktokMail(m: TiktokMail): Promise<void> {
     }),
   });
   if (!res.ok) throw new Error(`Resend : HTTP ${res.status} ${await res.text().catch(() => '')}`);
+}
+
+// ─── Instagram (Reels) ───────────────────────────────────────────────────────
+//
+// L'API publie tout de suite et ne programme pas. Le matin, on crée seulement le
+// CONTENEUR (Meta télécharge et traite la vidéo depuis R2 ; il expire après
+// 24 h) ; `scripts/instagram-publish.mjs` le publie le soir, 2 h avant le 1er match.
+// La file d'attente est un JSON public sur R2 (`instagram/<date>.json`) : aucun
+// secret dedans, et l'état « publié » se lit chez Meta (status_code PUBLISHED).
+
+/** Jeton « Instagram » (IGAA…) → graph.instagram.com ; jeton Facebook (EAA…) → graph.facebook.com. */
+export function instagramHost(token: string): string {
+  return token.startsWith('EAA') ? 'https://graph.facebook.com/v25.0' : 'https://graph.instagram.com/v25.0';
+}
+
+export interface InstagramQueue {
+  date: string;
+  containerId: string;
+  /** ISO : heure visée de publication (1er match − 2 h). */
+  publishAt: string;
+  videoUrl: string;
+  createdAt: string;
+}
+
+/** Crée le conteneur Reel, renvoie son id. Rien n'est encore visible sur Instagram. */
+export async function createInstagramReel(videoUrl: string, caption: string): Promise<string> {
+  const token = need('INSTAGRAM_ACCESS_TOKEN');
+  const res = await fetch(`${instagramHost(token)}/${need('INSTAGRAM_USER_ID')}/media`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      media_type: 'REELS', video_url: videoUrl, caption: caption.slice(0, 2200),
+      share_to_feed: 'true', access_token: token,
+    }),
+  });
+  const body: any = await res.json().catch(() => ({}));
+  if (!res.ok || !body.id) throw new Error(`Instagram : conteneur refusé (HTTP ${res.status} ${body.error?.message ?? ''})`);
+  return body.id;
 }

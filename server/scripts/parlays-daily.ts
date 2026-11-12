@@ -20,6 +20,11 @@
  *      Short « pick » est envoyé en privé et PROGRAMMÉ (`publishAt`) pour sortir
  *      2 h avant le 1er match ; le gel ayant lieu à 06:00 UTC (14 h à Bali).
  *   4. TIKTOK — mp4 sur R2 + courriel à NOTIFY_EMAIL, puis drapeau `tiktok_<mode>`.
+ *   5. INSTAGRAM (pick, si la variable PARLAYS_INSTAGRAM vaut « on ») — version
+ *      1080×1920 AVEC musique sur R2, conteneur Reel créé chez Meta, et file
+ *      d'attente `instagram/<date>.json` sur R2. La publication elle-même a lieu
+ *      le soir (2 h avant le 1er match) : `scripts/instagram-publish.mjs`,
+ *      workflow `instagram-reel.yml`. Le JSON sert de drapeau.
  *
  * IDEMPOTENT. Chaque envoi est précédé d'une lecture des drapeaux et suivi de
  * leur pose : un run relancé après une panne reprend où le précédent s'est
@@ -35,7 +40,10 @@ import path from 'path';
 import { spawn } from 'child_process';
 import type { ParlayPost } from '../src/services/content/parlayPosts';
 import { youtubePublishAt } from '../src/services/content/parlayPosts';
-import { uploadYoutube, uploadR2, sendTiktokMail, type Privacy } from './lib/parlayPublish';
+import {
+  uploadYoutube, uploadR2, sendTiktokMail, putR2Json, getR2Json, createInstagramReel,
+  type Privacy, type InstagramQueue,
+} from './lib/parlayPublish';
 
 const SERVER_DIR = path.resolve(__dirname, '..');
 const OUTPUT_ROOT = path.resolve(SERVER_DIR, '..', 'content', 'output');
@@ -125,6 +133,21 @@ async function variants(mp4: string, seconds: number): Promise<{ youtube: string
   return { youtube, tiktok, music };
 }
 
+/**
+ * Version Instagram : 1080×1920 (Reels refuse la 4K), AVEC la musique si elle
+ * existe (l'API ne peut pas ajouter un son de la bibliothèque Instagram).
+ * Limites Reels : H.264, ≤ 25 Mb/s, AAC ≤ 48 kHz / 128 kb/s.
+ */
+async function instagramVariant(youtube: string, music: boolean): Promise<string> {
+  const out = path.join(path.dirname(youtube), 'instagram.mp4');
+  await run(ffmpegBin(), ['-y', '-loglevel', 'error', '-i', youtube, '-map', '0:v:0',
+    ...(music ? ['-map', '0:a:0', '-c:a', 'aac', '-b:a', '128k', '-ar', '48000'] : ['-an']),
+    '-vf', 'scale=1080:1920:flags=lanczos,format=yuv420p,setsar=1',
+    '-c:v', 'libx264', '-preset', 'slow', '-crf', '18', '-maxrate', '20M', '-bufsize', '40M',
+    '-r', '30', '-movflags', '+faststart', out]);
+  return out;
+}
+
 /** « 21:00 » à Bali, pour le courriel. */
 const baliTime = (iso: string) => new Date(iso).toLocaleTimeString('fr-CA', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Makassar' });
 
@@ -168,7 +191,10 @@ async function main() {
   const tkKey = mode === 'pick' ? 'tiktokPickSentAt' : 'tiktokResultSentAt';
   const ytDone: string | null = before[0]?.[ytKey] ?? null;
   const tkDone = Boolean(before.length && before.every((p) => p[tkKey]));
-  if (!dryRun && ytDone && tkDone) { summary('- Déjà publié : rien à faire.'); return; }
+  const igOn = mode === 'pick' && process.env.PARLAYS_INSTAGRAM?.trim() === 'on';
+  const igKey = `instagram/${date}.json`;
+  const igDone = igOn && !dryRun ? Boolean(await getR2Json<InstagramQueue>(igKey)) : false;
+  if (!dryRun && ytDone && tkDone && (!igOn || igDone)) { summary('- Déjà publié : rien à faire.'); return; }
   if (dryRun && mode === 'pick' && !before.length) summary('- Rien de gelé : aperçu des combinés affichés en ce moment sur le site (non gelés, hors bilan).');
 
   // 2. Vidéo.
@@ -236,6 +262,21 @@ async function main() {
     summary(`- TikTok : courriel envoyé (vidéo : ${videoUrl})`);
   } else {
     summary('- TikTok : courriel déjà envoyé');
+  }
+
+  // 5. Instagram : conteneur Reel le matin, publication le soir (instagram-reel.yml).
+  if (igOn && !igDone) {
+    const igFile = await instagramVariant(v.youtube, v.music);
+    const igUrl = await uploadR2(igFile, `parlays/${key}-instagram.mp4`);
+    const caption = `${post.caption_instagram}\n\n${post.hashtags.join(' ')}`;
+    const containerId = await createInstagramReel(igUrl, caption);
+    const starts = before.map((p) => Date.parse(p.firstStartUTC ?? '')).filter(Number.isFinite);
+    // Même règle que YouTube : 2 h avant le 1er match ; sans heure connue, dès que possible.
+    const publishAt = new Date(starts.length ? Math.min(...starts) - 2 * 3_600_000 : Date.now()).toISOString();
+    await putR2Json(igKey, { date, containerId, publishAt, videoUrl: igUrl, createdAt: new Date().toISOString() } satisfies InstagramQueue);
+    summary(`- Instagram : Reel préparé (conteneur ${containerId}), publication vers ${baliTime(publishAt)} heure de Bali`);
+  } else if (igOn) {
+    summary('- Instagram : Reel déjà préparé');
   }
 }
 

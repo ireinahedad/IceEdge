@@ -1,0 +1,54 @@
+name: Instagram — renouveler le jeton
+
+# Le jeton Instagram expire après 60 jours. Ce workflow le renouvelle chaque
+# lundi (il doit avoir au moins 24 h) et range la nouvelle valeur dans le secret
+# INSTAGRAM_ACCESS_TOKEN.
+#
+# Écrire un secret exige un jeton GitHub personnel : secret SECRETS_PAT
+# (fine-grained, ce dépôt seulement, permission « Secrets : Read and write »).
+# Sans lui, le renouvellement a quand même lieu ; si Meta renvoie une nouvelle
+# valeur, le run échoue pour prévenir (elle ne peut pas être rangée).
+
+on:
+  schedule:
+    - cron: "17 3 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    defaults:
+      run:
+        working-directory: server
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          sparse-checkout: server/scripts/instagram-publish.mjs
+          sparse-checkout-cone-mode: false
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+
+      - name: Renouveler
+        id: refresh
+        env:
+          INSTAGRAM_ACCESS_TOKEN: ${{ secrets.INSTAGRAM_ACCESS_TOKEN }}
+        run: node scripts/instagram-publish.mjs --refresh
+
+      - name: Ranger le nouveau jeton
+        if: steps.refresh.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.SECRETS_PAT }}
+          NEW_TOKEN: ${{ steps.refresh.outputs.token }}
+        run: |
+          if [ -z "$GH_TOKEN" ]; then
+            echo "::error::Meta a renvoyé une nouvelle valeur mais SECRETS_PAT est absent : impossible de la ranger. Ajouter SECRETS_PAT, puis relancer."
+            exit 1
+          fi
+          printf '%s' "$NEW_TOKEN" | gh secret set INSTAGRAM_ACCESS_TOKEN --repo "$GITHUB_REPOSITORY"
+          echo "Secret INSTAGRAM_ACCESS_TOKEN mis à jour."
