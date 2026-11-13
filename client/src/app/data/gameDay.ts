@@ -17,14 +17,17 @@
 export type Lang = "en" | "fr" | string;
 
 /**
- * La semaine de l'accueil : aujourd'hui et les 7 jours suivants, en dates
+ * La semaine de l'accueil : hier, aujourd'hui et les 7 jours suivants, en dates
  * `YYYY-MM-DD` (même calcul que l'accueil a toujours fait). Partagée entre
  * `HockeyLanding` et le préchargement de `main.tsx` (PERF_PLAN.md, P2.4) : les
  * deux doivent demander EXACTEMENT la même URL `/games/range`, sinon le
  * préchargement serait perdu.
  */
 export function homeWeek(now = new Date()): { offset: number; d: Date; dateStr: string }[] {
-  return Array.from({ length: 8 }, (_, offset) => {
+  // Depuis le 2026-11-14 (demande du user) : la veille aussi (offset −1), pour
+  // revenir aux matchs d'hier et à leurs scores avec la flèche de gauche.
+  return Array.from({ length: 9 }, (_, i) => {
+    const offset = i - 1;
     const d = new Date(now);
     d.setDate(d.getDate() + offset);
     return { offset, d, dateStr: d.toISOString().split("T")[0] };

@@ -604,7 +604,7 @@ export function UpcomingGameRow({ game, onOpenSheet, showOdds = true }: {
   // Chaque case est sélectionnable (`PickCell`) : voir `HomePick` pour la
   // forme exacte de la jambe posée.
   const teamRow = (
-    side: { id: string; logo: string; abbr: string },
+    side: { id: string; logo: string; abbr: string; score?: number },
     other: { id: string },
     isHome: boolean,
     line: number, pl: number | null, plPrice: number | undefined,
@@ -622,6 +622,10 @@ export function UpcomingGameRow({ game, onOpenSheet, showOdds = true }: {
           <span className="text-white text-xs font-medium truncate">{side.abbr}</span>
           {/* Petit « H » : l'équipe à domicile (2026-09-29). */}
           {isHome && <span className="text-[#8a9ea6] text-[10px] font-bold leading-none flex-shrink-0" title={t("home.homeTeam")}>H</span>}
+          {/* Match terminé (hier) : le score final à côté de l'équipe. */}
+          {game.final && side.score != null && (
+            <span className="text-white text-xs font-bold tabular-nums ml-1 flex-shrink-0">{side.score}</span>
+          )}
         </div>
         {/* Handicap */}
         <PickCell
@@ -668,8 +672,14 @@ export function UpcomingGameRow({ game, onOpenSheet, showOdds = true }: {
             de demain ou d'après-demain, et « 19:00 » seul ne dit pas lequel. */}
         <div className="flex flex-col items-center justify-center min-w-[44px] flex-shrink-0 pt-6">
           {day && <span className="text-[#bfc8cc] text-[11px] whitespace-nowrap">{day}</span>}
-          <span className="text-xs font-medium" style={{ color: accent }}>{game.time}</span>
-          <span className="text-[#bfc8cc] text-[11px]">ET</span>
+          {game.final ? (
+            <span className="text-xs font-bold uppercase" style={{ color: accent }}>{t("home.final")}</span>
+          ) : (
+            <>
+              <span className="text-xs font-medium" style={{ color: accent }}>{game.time}</span>
+              <span className="text-[#bfc8cc] text-[11px]">ET</span>
+            </>
+          )}
         </div>
 
         {/* Équipes + tableau Handicap / Vainqueur (2026-09-27).

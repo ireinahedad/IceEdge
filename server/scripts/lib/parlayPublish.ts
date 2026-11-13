@@ -109,7 +109,7 @@ export async function putR2Json(key: string, data: unknown): Promise<string> {
 
 /** Lit un JSON public déposé par putR2Json ; null s'il n'existe pas. */
 export async function getR2Json<T>(key: string): Promise<T | null> {
-  const res = await fetch(`${need('R2_PUBLIC_URL').replace(/\/+$/, '')}/${key}?t=${Date.now()}`, { cache: 'no-store' });
+  const res = await fetch(`${need('R2_PUBLIC_URL').replace(/\/+$/, '')}/${key}?t=${Date.now()}`);  // ?t= suffit à contourner le cache ; « cache » n'existe pas dans le RequestInit de Node
   if (res.status === 404) return null;
   if (!res.ok) throw new Error(`R2 : lecture de ${key} → HTTP ${res.status}`);
   return (await res.json()) as T;

@@ -542,6 +542,8 @@ const DICT: Record<string, { en: string; fr: string }> = {
   "home.noGames":        { en: "No games scheduled", fr: "Aucun match prévu" },
   "home.upcomingMatches":{ en: "Upcoming Matches",  fr: "Matchs à venir" },
   "home.noMatches":      { en: "No matches scheduled", fr: "Aucun match prévu" },
+  "home.yesterdayGames": { en: "Yesterday's Games", fr: "Matchs d'hier" },
+  "home.final":          { en: "Final",             fr: "Final" },
   "home.tonightGames":   { en: "Tonight's Games",   fr: "Matchs de ce soir" },
   "home.tomorrowGames":  { en: "Tomorrow's Games",  fr: "Matchs de demain" },
   "home.gamesOn":        { en: "{date} Games",      fr: "Matchs du {date}" },

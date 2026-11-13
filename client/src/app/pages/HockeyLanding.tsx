@@ -210,7 +210,7 @@ export function HockeyLanding() {
   }
   /** Au-delà de J+2, pas de cote (demande du user, 2026-10-02). */
   const dayOffset = gameDays[dayIdx]?.offset ?? 0;
-  const showOdds = dayOffset <= 2;
+  const showOdds = dayOffset >= 0 && dayOffset <= 2;
 
   // En-tête qui se réduit au défilement (2026-09-27). Ce n'est pas la fenêtre
   // qui défile mais le conteneur de `App.tsx` : on écoute donc TOUS les
@@ -283,17 +283,24 @@ export function HockeyLanding() {
         const week = days.map(({ offset, d, dateStr }) => ({
           offset,
           dateStr,
-          label: offset === 0 ? t("home.tonightGames")
+          label: offset === -1 ? t("home.yesterdayGames")
+            : offset === 0 ? t("home.tonightGames")
             : offset === 1 ? t("home.tomorrowGames")
             : t("home.gamesOn", { date: d.toLocaleDateString(locale, { weekday: "long", month: "short", day: "numeric" }) }),
+          // Hier : les matchs TERMINÉS (avec leur score) ; les autres jours,
+          // seulement ceux à venir ou en cours, comme avant.
           games: range.filter((g) =>
             String(g.gameDate ?? "").slice(0, 10) === dateStr &&
-            ["scheduled", "live", "preview"].includes(g.status)).sort(byFaceoff),
+            (offset < 0 ? g.status === "final" : ["scheduled", "live", "preview"].includes(g.status))).sort(byFaceoff),
         })).filter((x) => x.games.length > 0);
         // La journée que le lecteur regardait avant de quitter l'accueil, si
         // elle est toujours dans la semaine ; sinon la première, comme avant.
         const savedDay = readSavedDay();
-        const startIdx = Math.max(0, week.findIndex((w) => w.dateStr === savedDay));
+        // Sans journée gardée, on ouvre sur ce soir (ou la prochaine soirée),
+        // jamais sur hier : la veille ne se voit qu'en reculant d'un pas.
+        const firstUpcoming = Math.max(0, week.findIndex((w) => w.offset >= 0));
+        const savedIdx = week.findIndex((w) => w.dateStr === savedDay);
+        const startIdx = savedIdx >= 0 ? savedIdx : firstUpcoming;
         const scheduled = week[startIdx]?.games ?? [];
         const label = week[startIdx]?.label ?? t("home.tonightGames");
         // Un match EN DIRECT figure dans les deux listes (`scheduled` garde le

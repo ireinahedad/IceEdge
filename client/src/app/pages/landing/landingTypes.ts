@@ -32,6 +32,8 @@ export interface DisplayGame {
    */
   gameDate?: string;
   startTimeUTC?: string | null;
+  /** Match terminé (journée d'hier sur l'accueil) : la carte montre le score final. */
+  final?: boolean;
   overUnder?: number;
   totalPct?: number | null;
   // Vrais prix moneyline (décimaux) du livre relayé par le serveur — DraftKings,
@@ -88,6 +90,7 @@ export function toDisplayGameBase(game: NHLGame, homePct?: number | null): Displ
     time: game.startTime,
     gameDate: game.gameDate,
     startTimeUTC: game.startTimeUTC ?? null,
+    final: game.status === "final",
     overUnder: 5.5,
     totalPct,
     team1: { id: game.homeTeam.abbreviation.toLowerCase(), abbr: game.homeTeam.abbreviation, name: game.homeTeam.name, score: game.homeTeam.score, logo: nhlLogoUrl(game.homeTeam.abbreviation), winPct: homePct },
