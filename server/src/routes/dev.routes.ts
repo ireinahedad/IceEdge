@@ -6,7 +6,8 @@
  * GET  /api/dev/ml-info          — ML service health + model info + feature importances
  * POST /api/dev/ml-test          — Run a live test prediction and return the full response
  * GET  /api/dev/ml-reports       — Rapports d'entraînement/backtest + fraîcheur des artefacts
- * GET  /api/dev/data-health      — Fraîcheur des données : odds_log, quota, volumes
+ * GET  /api/dev/data-health      — Fraîcheur des données : odds_log, quota, volumes,
+ *                                  séries odds_snapshots et props_snapshots
  * GET  /api/dev/live-performance — Calibration, hit rate et ROI des paris réellement réglés
  * GET  /api/dev/metrics          — Compteurs : appels sortants, caches, event loop, mémoire
  * POST /api/dev/metrics/reset    — Ouvre une nouvelle fenêtre de mesure
@@ -27,6 +28,7 @@ import { snapshotMetrics, resetMetrics } from '../metrics';
 import { chatService } from '../services/chat.service';
 import { pool } from '../db/connection';
 import { extrasBudgetState } from '../services/oddsClient';
+import { propsBudgetState } from '../services/propsLogger.service';
 import { sendError } from '../httpError';
 import { getBestBetLog, settlePendingBestBets } from '../services/bestBetLog.service';
 
@@ -169,7 +171,7 @@ router.get('/ml-reports', async (_req: Request, res: Response) => {
 // utilisateur en entier.
 router.get('/data-health', async (_req: Request, res: Response) => {
   try {
-    const [oddsLog, quota, slips, snapshots] = await Promise.all([
+    const [oddsLog, quota, slips, snapshots, props] = await Promise.all([
       pool.query(
         `SELECT COUNT(*)::int                                            AS rows,
                 MIN(game_date)                                           AS first_date,
@@ -250,6 +252,41 @@ router.get('/data-health', async (_req: Request, res: Response) => {
                     WHERE observed_at >= NOW() - INTERVAL '24 hours' GROUP BY 1) t) AS rows_today_by_book
            FROM odds_snapshots`,
       ).catch(() => null),
+
+      // 5. `props_snapshots` (migration 054, 2026-11-16) — la série des cotes de
+      //    props joueur. Même défaut silencieux que la 031 : `collectProps`
+      //    avale ses erreurs d'écriture match par match pour ne pas perdre la
+      //    passe entière, donc des logs normaux ne prouvent rien. Et la donnée
+      //    est strictement irrattrapable : The Odds API ne vend pas
+      //    d'historique de props pour la LNH.
+      //
+      //    `passes_today` doit atteindre 2 en fin de journée de saison
+      //    (ouverture 15 h 25 UTC + clôture 23 h 15 UTC). À 0 alors que des
+      //    matchs sont au calendrier : ODDS_PROPS_ENABLED, la clé, ou le budget.
+      pool.query(
+        `SELECT COUNT(*)::int                                     AS rows,
+                COUNT(DISTINCT observed_at)::int                  AS passes,
+                COUNT(DISTINCT observed_at) FILTER (
+                  WHERE observed_at >= NOW() - INTERVAL '24 hours'
+                )::int                                            AS passes_today,
+                COUNT(*) FILTER (
+                  WHERE observed_at >= NOW() - INTERVAL '24 hours'
+                )::int                                            AS rows_today,
+                COUNT(DISTINCT player)::int                       AS players,
+                MIN(game_date)                                    AS first_date,
+                MAX(game_date)                                    AS last_date,
+                MAX(observed_at)                                  AS last_observed,
+                COUNT(DISTINCT (game_date, home_team, away_team))::int AS games,
+                -- Un marché demandé mais jamais renvoyé ne coûte rien chez le
+                -- fournisseur ; il ne doit pour autant pas passer pour collecté.
+                (SELECT json_object_agg(m, n) FROM (
+                   SELECT market AS m, COUNT(*)::int AS n
+                     FROM props_snapshots GROUP BY 1) t)           AS rows_by_market,
+                (SELECT json_object_agg(b, n) FROM (
+                   SELECT bookmaker AS b, COUNT(*)::int AS n
+                     FROM props_snapshots GROUP BY 1) t)           AS rows_by_book
+           FROM props_snapshots`,
+      ).catch(() => null),
     ]);
 
     res.json({
@@ -258,6 +295,9 @@ router.get('/data-health', async (_req: Request, res: Response) => {
       odds_snapshots: snapshots?.rows[0] ?? { error: 'table ou colonne indisponible (migrations 031 / 038 ?)' },
       // Marchés de match par événement : crédits dépensés aujourd'hui / plafond.
       odds_extras: extrasBudgetState(),
+      props_snapshots: props?.rows[0] ?? { error: 'table indisponible (migration 054 ?)' },
+      // Props joueur : crédits dépensés aujourd'hui / plafond, et marchés visés.
+      props_budget: propsBudgetState(),
       slips:     slips?.rows[0]   ?? { error: 'table indisponible' },
       retrieved_at: new Date().toISOString(),
     });

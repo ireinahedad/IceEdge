@@ -186,10 +186,10 @@ export function collectorBookParam(): string {
 /**
  * Cotes pour la COLLECTE, chez le livre de collecte, **sans cache**.
  *
- * `markets` : `h2h,spreads,totals` pour une passe complète (3 crédits),
- * `h2h,spreads` pour une passe de clôture (2 crédits) — les totaux sont clos
- * pour de bon (leur CLV est sous leur propre placebo, 2026-08-23), le
- * moneyline a un CLV réel et la puck line porte la règle A2.
+ * `markets` : `h2h,spreads,totals` (3 crédits) pour toutes les passes depuis
+ * le 2026-11-16 — le moneyline a un CLV réel, la puck line porte la règle A2,
+ * et les totaux sont repris parce que la comparaison au marché de la section
+ * 7.10 n'a aucune ligne postérieure à novembre 2022 (cf. `COLLECT_COST`).
  *
  * **NE PASSE VOLONTAIREMENT PAS PAR `oddsCache`.** Ce cache sert l'affichage,
  * chez un autre livre : y déposer la réponse de la collecte afficherait aux

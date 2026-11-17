@@ -34,19 +34,29 @@ const LOCK_TTL_MS = 5 * 60 * 1000;
 /**
  * Coût d'une passe, en crédits The Odds API : 1 par marché et par région.
  *
- * `full` et `close` demandent tous deux h2h + spreads depuis le 2026-10-01
- * (avant : `full` ajoutait les totaux, clos pour de bon). Jusqu'au 2026-09-27 la passe du soir s'appelait `spreads`
- * et ne prenait que la puck line (1 crédit), contrainte du quota gratuit.
- * Voir `SLOTS`.
+ * `full` et `close` demandent h2h + spreads + totals depuis le 2026-11-16
+ * (3 crédits). Entre le 2026-10-01 et cette date les totaux n'étaient plus
+ * collectés, au motif que leur CLV passait sous son propre placebo (mesure du
+ * 2026-08-23). Les deux raisons de les reprendre sont des mesures, pas des
+ * paris : la comparaison des totaux au marché (section 7.10 du document
+ * technique) s'arrête en novembre 2022 faute de lignes récentes, et elle montre
+ * justement que le modèle y perd nettement — c'est le défaut le plus net du
+ * modèle, et il est aujourd'hui impossible à suivre. Le CLV des totaux, lui,
+ * bat désormais son placebo (+0,0026 net, z +6,7, recalculé le 2026-11-16),
+ * donc le motif de 2026-08-23 ne tient plus non plus.
+ *
+ * Jusqu'au 2026-09-27 la passe du soir s'appelait `spreads` et ne prenait que
+ * la puck line (1 crédit), contrainte du quota gratuit. Voir `SLOTS`.
  */
-const COLLECT_COST: Record<PassKind, number> = { full: 2, close: 2 };
+const COLLECT_COST: Record<PassKind, number> = { full: 3, close: 3 };
 
 /** Marchés demandés à The Odds API pour chaque passe. */
 const PASS_MARKETS: Record<PassKind, string> = {
-  // Depuis le 2026-10-01 (décision du user) : moneyline + puck line ±1.5
-  // seulement, sur tous les matchs. Les totaux ne sont plus collectés.
-  full: 'h2h,spreads',
-  close: 'h2h,spreads',
+  // Depuis le 2026-11-16 : moneyline + puck line ±1.5 + totaux, sur tous les
+  // matchs. Les colonnes `total*` d'`odds_snapshots` (031) les attendent déjà :
+  // elles sont restées vides du 2026-10-01 au 2026-11-16.
+  full: 'h2h,spreads,totals',
+  close: 'h2h,spreads,totals',
 };
 
 /** Quels marchés une passe demande. Stocké tel quel dans `odds_snapshots`. */
