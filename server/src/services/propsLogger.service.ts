@@ -79,8 +79,24 @@ const PROPS_MARKETS: string[] = ((process.env.ODDS_PROPS_MARKETS ?? '').trim()
  */
 const PROPS_DAILY_BUDGET = readPositive('ODDS_PROPS_DAILY_BUDGET', 60);
 
-/** Horizon : on ne price pas un match qui a déjà commencé. */
-const HORIZON_MS = 36 * 60 * 60_000;
+/**
+ * Horizon : les matchs de LA soirée en cours, et eux seuls.
+ *
+ * On ne price pas un match déjà commencé (`t > now`), mais le plafond haut
+ * compte autant. Les matchs de la LNH commencent entre 00 h et 03 h 30 UTC,
+ * soit 8 à 12 h après la passe d'ouverture de 15 h 25 UTC. À 36 h, cette passe
+ * ramassait AUSSI la soirée du lendemain (32 à 36 h), avec deux conséquences :
+ * le budget partait sur des matchs qui seraient de toute façon pricés le
+ * lendemain, et la rotation pouvait faire sauter des matchs de ce soir au
+ * profit de ceux de demain — or une paire ouverture/clôture n'a de sens que si
+ * les deux passes décrivent la même soirée.
+ *
+ * 18 h couvre la soirée (12 h au plus) et les matchs d'après-midi (18 h UTC,
+ * 2 h 35 après la passe), sans atteindre la soirée suivante. Les matchs
+ * d'après-midi gardent une ouverture mais pas de clôture : à 23 h 15 UTC ils
+ * ont déjà commencé, et `t > now` les écarte — c'est voulu.
+ */
+const HORIZON_MS = 18 * 60 * 60_000;
 
 /** Coût supposé du premier appel, avant d'avoir vu `x-requests-last`. */
 const FIRST_CALL_ESTIMATE = Math.max(1, PROPS_MARKETS.length);
