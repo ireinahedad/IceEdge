@@ -230,7 +230,10 @@ export const router = createBrowserRouter([
       { path: "/profile",                            element: withSuspense(<Protected><ProfilePage /></Protected>)    },
       ...(features.proUpgrade && ProPage && ProSuccessPage
         ? [
-            { path: "/pro",                           element: withSuspense(<Protected><ProPage /></Protected>)        },
+            // Ouverte aux visiteurs non connectés (2026-11-18, demande du user) :
+            // ils voient l'offre ; la connexion n'est demandée qu'au clic sur
+            // un bouton (essai, abonnement, code promo — voir ProPage).
+            { path: "/pro",                           element: withSuspense(<ProPage />)                         },
             { path: "/pro/success",                   element: withSuspense(<Protected><ProSuccessPage /></Protected>) },
           ]
         : []),
