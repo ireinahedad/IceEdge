@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useCallback, useEffect, useMemo } from "react";
 // Même module que la route serveur, importé tel quel : voir l'en-tête de parlay.ts.
+import { trackEvent } from "../analytics";
 import { combineParlayLegs } from "../../../../server/src/services/parlay";
 import { predictionApiService } from "../services/predictionApiService";
 import type { BetLeg } from "../types/bet";
@@ -260,6 +261,7 @@ export function BetProvider({ children }: { children: React.ReactNode }) {
   }, [legs]);
 
   const addLeg = useCallback((leg: BetLeg) => {
+    trackEvent("slip_add_leg");
     // Sans match, le serveur refuse le coupon (`legSettlementProblem`) : mieux
     // vaut que le chemin fautif se signale ici, à l'ajout, qu'au dépôt.
     if (!leg.gameId) {

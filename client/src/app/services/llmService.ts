@@ -5,6 +5,7 @@
  */
 
 import { authedFetch } from './authService';
+import { trackEvent } from '../analytics';
 import type { SlipIntent } from '../../../../server/src/services/slipCommand';
 
 /**
@@ -200,6 +201,7 @@ async function askLLMDetailed(
   prompt: string,
   opts: { taskType: LLMTaskType; locale: 'fr' | 'en'; model?: string; bet?: BetPayload }
 ): Promise<LLMAnswer> {
+  trackEvent(`ai_${opts.taskType}`);
   const res = await authedFetch('/llm', {
     method: 'POST',
     timeoutMs: LLM_TIMEOUT_MS,

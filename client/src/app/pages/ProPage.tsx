@@ -1,4 +1,5 @@
 import { lazy, Suspense, useEffect, useState } from "react";
+import { trackEvent } from "../analytics";
 import { useLocation, useNavigate } from "react-router";
 import { useAuth } from "../context/AuthContext";
 import { useI18n } from "../i18n";
@@ -138,6 +139,7 @@ export function ProPage() {
   }, [user?.id]);
 
   async function handleUpgrade() {
+    trackEvent("pro_checkout_click");
     // APPLE_PLAN §7 — Guideline 3.1.1: a paid upgrade on iOS must go through
     // In-App Purchase, never Stripe Checkout. Every button below is hidden
     // when the flag is off; this guard is what makes that non-negotiable.
@@ -165,6 +167,7 @@ export function ProPage() {
     setError(null);
     setLoading(true);
     try {
+      trackEvent("pro_trial_click");
       const status = await apiStartTrial();
       setSub(status);
       if (status.isPro) navigate("/pro/success");

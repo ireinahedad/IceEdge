@@ -11,6 +11,7 @@ import { BlockProvider } from "./context/BlockContext";
 import { LanguageProvider } from "./i18n";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { BetHandoffHost } from "./components/BetHandoffSheet";
+import { AnalyticsBridge } from "./components/AnalyticsBridge";
 
 function AppShell() {
   const { theme } = useSport();
@@ -37,6 +38,9 @@ function AppShell() {
           livre (voir components/BetHandoffSheet.tsx). Ici, sous tous les
           providers, parce qu'elle lit le livre choisi ET le format de cote. */}
       <BetHandoffHost />
+
+      {/* Balises Clarity : connecté, gratuit ou Pro (voir analytics.ts). */}
+      <AnalyticsBridge />
 
       {/* Global toast notifications — success/error feedback across the app */}
       <LazyToaster />

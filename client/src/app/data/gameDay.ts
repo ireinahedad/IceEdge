@@ -75,6 +75,7 @@ export function dayHeading(iso: string | null | undefined, lang: Lang): string {
   const n = daysFromToday(d);
   if (n === 0) return `${lang === "fr" ? "Aujourd'hui" : "Today"} · ${full}`;
   if (n === 1) return `${lang === "fr" ? "Demain" : "Tomorrow"} · ${full}`;
+  if (n === -1) return `${lang === "fr" ? "Hier" : "Yesterday"} · ${full}`;
   return cap(full);
 }
 

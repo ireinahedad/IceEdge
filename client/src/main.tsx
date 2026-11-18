@@ -106,6 +106,8 @@ try {
   // only (inline literal so Rollup drops it from iOS), production only.
   if (import.meta.env.VITE_TARGET !== "ios" && import.meta.env.PROD) {
     void import("@vercel/analytics").then((m) => m.inject({ framework: "vite" }));
+    // Microsoft Clarity (2026-11-18) : clics, défilement, sessions + provenance.
+    void import("./app/analytics").then((m) => m.initAnalytics());
   }
 
   // Register the service worker (PWA install + push notifications).

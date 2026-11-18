@@ -185,6 +185,12 @@ export function HockeyLanding() {
   type RawGame = Awaited<ReturnType<typeof nhlApiService.getLiveGames>>[number];
   const [gameDays, setGameDays] = useState<{ offset: number; dateStr: string; label: string; games: RawGame[] }[]>([]);
   const [dayIdx, setDayIdx] = useState(0);
+  /**
+   * Matchs d'hier (terminés, avec score), montrés SOUS les matchs de ce soir
+   * dans la même section (demande du user, 2026-11-18). Avant, la veille était
+   * une journée à part, atteinte seulement avec la flèche de gauche.
+   */
+  const [yesterdayGames, setYesterdayGames] = useState<DisplayGame[]>([]);
   const displayCache = useRef(new Map<string, DisplayGame>());
   /** Génération du chargement : un remplissage ML d'un chargement abandonné (langue, réessai) ne touche plus rien. */
   const loadGen = useRef(0);
@@ -204,6 +210,7 @@ export function HockeyLanding() {
             list.some((x) => x.id === g.id) ? list.map((x) => (x.id === g.id ? dg : x)) : list;
           setLiveGames(swap);
           setUpcomingGames(swap);
+          setYesterdayGames(swap);
         })
         .catch(() => { /* la carte garde « … » ; le paquet est retenté à la prochaine visite */ });
     }
@@ -280,7 +287,7 @@ export function HockeyLanding() {
         // Toutes les journées de la semaine qui ont des matchs ; la première
         // est celle qu'on affiche d'abord (comme avant : ce soir, sinon la
         // prochaine soirée de hockey).
-        const week = days.map(({ offset, d, dateStr }) => ({
+        const allDays = days.map(({ offset, d, dateStr }) => ({
           offset,
           dateStr,
           label: offset === -1 ? t("home.yesterdayGames")
@@ -293,12 +300,16 @@ export function HockeyLanding() {
             String(g.gameDate ?? "").slice(0, 10) === dateStr &&
             (offset < 0 ? g.status === "final" : ["scheduled", "live", "preview"].includes(g.status))).sort(byFaceoff),
         })).filter((x) => x.games.length > 0);
+        // Hier n'est plus un pas des flèches : ses matchs s'affichent sous
+        // ceux de la première soirée (voir `yesterdayGames`).
+        const yesterday = allDays.find((w) => w.offset < 0)?.games ?? [];
+        const week = allDays.filter((w) => w.offset >= 0);
         // La journée que le lecteur regardait avant de quitter l'accueil, si
         // elle est toujours dans la semaine ; sinon la première, comme avant.
         const savedDay = readSavedDay();
         // Sans journée gardée, on ouvre sur ce soir (ou la prochaine soirée),
         // jamais sur hier : la veille ne se voit qu'en reculant d'un pas.
-        const firstUpcoming = Math.max(0, week.findIndex((w) => w.offset >= 0));
+        const firstUpcoming = 0;
         const savedIdx = week.findIndex((w) => w.dateStr === savedDay);
         const startIdx = savedIdx >= 0 ? savedIdx : firstUpcoming;
         const scheduled = week[startIdx]?.games ?? [];
@@ -310,7 +321,7 @@ export function HockeyLanding() {
         // 2026-09-16. On calcule chaque match UNE fois, puis on range le même
         // résultat dans chaque liste — l'affichage ne change pas.
         const unique = new Map<string, (typeof live)[number]>();
-        for (const g of [...live, ...scheduled]) if (!unique.has(g.id)) unique.set(g.id, g);
+        for (const g of [...live, ...scheduled, ...yesterday]) if (!unique.has(g.id)) unique.set(g.id, g);
         // Cartes SANS % ML d'abord (affichées tout de suite), puis `fillMl`.
         const displayed = new Map([...unique.values()].map((g) => [g.id, toDisplayGameBase(g)] as const));
         const gen = ++loadGen.current;
@@ -319,6 +330,7 @@ export function HockeyLanding() {
         setDayIdx(startIdx);
         setLiveGames(live.map((g) => displayed.get(g.id)!));
         setUpcomingGames(scheduled.map((g) => displayed.get(g.id)!));
+        setYesterdayGames(yesterday.map((g) => displayed.get(g.id)!));
         setUpcomingLabel(label);
         fillMl([...unique.values()], gen);
       } catch (err) {
@@ -326,6 +338,7 @@ export function HockeyLanding() {
         console.error("[HockeyLanding] Failed to load games:", err);
         setLiveGames([]);
         setUpcomingGames([]);
+        setYesterdayGames([]);
         setLoadError(err ?? new Error("landing load failed"));
       } finally {
         if (!cancelled) setLoading(false);
@@ -448,12 +461,13 @@ export function HockeyLanding() {
                 /* Le bouton relance TOUT le chargement de l'accueil, matchs en
                    direct compris — d'où l'absence d'un second bouton plus bas. */
                 <ErrorState error={loadError} onRetry={() => setReloadKey((k) => k + 1)} compact />
-              ) : upcomingGames.length > 0 ? (
+              ) : upcomingGames.length > 0 || (dayIdx === 0 && yesterdayGames.length > 0) ? (
                 /* Un titre par journée au-dessus de ses matchs : la section
                    peut porter aujourd'hui ET demain, et l'heure seule ne dit
-                   pas de quel soir on parle. */
+                   pas de quel soir on parle. Sur la première soirée, les
+                   matchs d'hier suivent, avec leur score final. */
                 <div className="flex flex-col gap-4">
-                  {groupByDay(upcomingGames, gameIsoDay).map(({ day, items }) => (
+                  {groupByDay(dayIdx === 0 ? [...upcomingGames, ...yesterdayGames] : upcomingGames, gameIsoDay).map(({ day, items }) => (
                     <div key={day || "unknown"} className="flex flex-col gap-2">
                       {day && (
                         <h3 className="text-[#bfc8cc] text-[11px] font-bold uppercase tracking-wider">
