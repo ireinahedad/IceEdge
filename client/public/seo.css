@@ -153,6 +153,11 @@ li { margin: 0 0 9px; }
   color: var(--color-text);
 }
 .cta-box p { color: var(--color-text-muted); margin-bottom: 22px; }
+/* Appel à l'action juste sous la probabilité (pages de match, 2026-11-18). */
+.cta-inline { text-align: center; margin: 8px 0 32px; }
+.cta-inline .btn { width: 100%; max-width: 420px; }
+.cta-note { color: var(--color-text-muted); font-size: 13px; margin: 10px 0 0; }
+.cta-box .cta-note { margin: 12px 0 0; }
 .btn {
   display: inline-block;
   font-family: 'Oswald', sans-serif;

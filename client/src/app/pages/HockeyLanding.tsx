@@ -37,6 +37,9 @@ import { dayHeading, groupByDay, homeWeek } from "../data/gameDay";
 import { useFoldState } from "../hooks/useFoldState";
 import { TeamCarousel } from "./landing/TeamCarousel";
 import { ProUpsell } from "./landing/ProUpsell";
+import { ProTopCard } from "./landing/ProTopCard";
+import { useVariant } from "../experiments";
+import { features } from "../platform";
 import { AddSheetState, DisplayGame, extractSpreadOdds, toDisplayGame, toDisplayGameBase } from "./landing/landingTypes";
 
 
@@ -116,6 +119,8 @@ export function HockeyLanding() {
   const { theme } = useSport();
   const { t, lang } = useI18n();
   const { isPro } = useSubscription();
+  // Test A/B `pro_position` (2026-11-18) : B montre une carte Pro tout en haut.
+  const proPosition = useVariant("pro_position");
   const accent = theme.accent;
   const [addSheet, setAddSheet] = useState<AddSheetState>({ open: false });
   // Matchs SANS cotes ; les cotes sont posées au rendu (voir `oddsEvents`).
@@ -411,6 +416,8 @@ export function HockeyLanding() {
           <div className="px-4 py-4 flex flex-col gap-6">
             {/* All 32 teams — square tiles, arrows + swipe + slow auto-scroll */}
             <TeamCarousel />
+
+            {!isPro && features.proUpgrade && proPosition === "B" && <ProTopCard accent={accent} />}
 
             {/* Upcoming Games */}
             <section>

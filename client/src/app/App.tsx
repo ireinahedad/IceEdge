@@ -12,6 +12,7 @@ import { LanguageProvider } from "./i18n";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { BetHandoffHost } from "./components/BetHandoffSheet";
 import { AnalyticsBridge } from "./components/AnalyticsBridge";
+import { ConsentBanner } from "./components/ConsentBanner";
 
 function AppShell() {
   const { theme } = useSport();
@@ -41,6 +42,8 @@ function AppShell() {
 
       {/* Balises Clarity : connecté, gratuit ou Pro (voir analytics.ts). */}
       <AnalyticsBridge />
+      {/* Europe seulement : accord avant les témoins de Clarity. */}
+      <ConsentBanner />
 
       {/* Global toast notifications — success/error feedback across the app */}
       <LazyToaster />

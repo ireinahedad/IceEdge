@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { trackEvent } from "../analytics";
 import { useLocation, useNavigate } from "react-router";
 import { useAuth } from "../context/AuthContext";
@@ -116,6 +116,7 @@ export function ProPage() {
   const { user } = useAuth();
   const { t, lang } = useI18n();
   const backTo = useProBackTarget();
+  useEffect(() => { trackEvent("pro_page_view"); }, []);
 
   const [sub,     setSub]     = useState<SubscriptionStatus | null>(null);
   const [loading, setLoading] = useState(false);
@@ -163,11 +164,13 @@ export function ProPage() {
   }
 
   async function handleTrial() {
-    if (!user) { navigate("/login?returnTo=/pro"); return; }
+    trackEvent("pro_trial_click");
+    // Pas connecté : connexion, puis retour ici avec `?trial=1`, et l'essai
+    // démarre tout seul (voir l'effet `autoTrial`).
+    if (!user) { navigate(`/login?returnTo=${encodeURIComponent("/pro?trial=1")}`); return; }
     setError(null);
     setLoading(true);
     try {
-      trackEvent("pro_trial_click");
       const status = await apiStartTrial();
       setSub(status);
       if (status.isPro) navigate("/pro/success");
@@ -208,7 +211,19 @@ export function ProPage() {
   const isYearly = yearlyAvailable && period === "yearly";
   const isPro = sub?.isPro ?? false;
   const isTrial = sub?.status === "trialing";
-  const trialAvailable = features.serverTrial && !!user && !sub?.trialUsed;
+  // 2026-11-18 : l'essai se montre AUSSI aux visiteurs non connectés (avant,
+  // seulement aux connectés : un nouveau visiteur ne le voyait jamais).
+  const trialAvailable = features.serverTrial && !sub?.trialUsed;
+
+  // Retour de connexion avec `?trial=1` : l'essai démarre sans second clic.
+  const autoTrial = useRef(false);
+  useEffect(() => {
+    if (autoTrial.current || !user || !sub || sub.trialUsed || sub.isPro) return;
+    if (new URLSearchParams(window.location.search).get("trial") !== "1") return;
+    autoTrial.current = true;
+    void handleTrial();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id, sub]);
 
   return (
     <div className="flex flex-col min-h-screen text-white max-w-[430px] mx-auto px-5 pt-14 pb-12"
@@ -389,7 +404,7 @@ export function ProPage() {
         <div className="flex flex-col gap-2">
           {/* Free trial is the primary CTA when still available */}
           <AppButton onClick={handleTrial} disabled={loading} loading={loading} fullWidth size="lg">
-            {user ? t("pro.startTrial") : t("pro.loginPrompt")}
+            {t("pro.startTrial")}
           </AppButton>
           {features.stripeCheckout && (
             <AppButton variant="ghost" onClick={handleUpgrade} disabled={loading} loading={loading} fullWidth>

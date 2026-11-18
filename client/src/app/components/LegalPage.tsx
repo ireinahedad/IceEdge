@@ -29,9 +29,11 @@ export function LegalPage({ title, children }: { title: string; children: ReactN
 export function LegalDocument({
   title,
   content,
+  footer,
 }: {
   title: string;
   content: { updated: string; sections: { h: string; b: string }[] };
+  footer?: React.ReactNode;
 }) {
   return (
     <LegalPage title={title}>
@@ -44,6 +46,7 @@ export function LegalDocument({
           </div>
         ))}
       </div>
+      {footer}
     </LegalPage>
   );
 }

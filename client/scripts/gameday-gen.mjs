@@ -63,7 +63,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { layout, slugify, esc, nhlLogo, getJSON, pMap, SITE, API, fit, TITLE_MAX, DESC_MAX } from "./seo-gen.mjs";
+import { appUrl, layout, slugify, esc, nhlLogo, getJSON, pMap, SITE, API, fit, TITLE_MAX, DESC_MAX } from "./seo-gen.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DRY = process.argv.includes("--dry");
@@ -161,6 +161,8 @@ const L = {
     hubCtaP: "ArakIce projects a win probability and a total for each of these games, and flags the ones where the number sits away from the book.",
     ctaBtn: "Open ArakIce",
     ctaPredH: "Edges and player props for this game",
+    ctaGameBtn: "See this game's value bets & props",
+    ctaTrial: "Free 7-day Pro trial, no credit card.",
     ctaPredP: "The win probability is free on this page. In the app, ArakIce compares it to the sportsbook line, flags where the value is, and projects props for every player in this game.",
     predH: (a, b) => `Who will win ${a} vs ${b}?`,
     predLead: (fav, dog, p, q) => `arakiceML gives the ${fav} a ${p}% chance to win this game, overtime and shootout included, against ${q}% for the ${dog}.`,
@@ -234,6 +236,8 @@ const L = {
     hubCtaP: "ArakIce projette une probabilité de victoire et un total pour chacun de ces matchs, et signale ceux où le chiffre s'éloigne du preneur aux livres.",
     ctaBtn: "Ouvrir ArakIce",
     ctaPredH: "Les écarts et les props de ce match",
+    ctaGameBtn: "Voir les value bets et props du match",
+    ctaTrial: "Essai Pro gratuit 7 jours, sans carte bancaire.",
     ctaPredP: "La probabilité de victoire est gratuite sur cette page. Dans l'application, ArakIce la compare à la cote du preneur aux livres, signale où se trouve la valeur et projette les props de chaque joueur du match.",
     predH: (a, b) => `Qui va gagner ${a} c. ${b} ?`,
     predLead: (fav, dog, p, q) => `Selon arakiceML, prolongation et tirs de barrage compris : ${fav}, ${p} % de chances de gagner ; ${dog}, ${q} %.`,
@@ -868,6 +872,15 @@ function gamePage({ lang, game, a, b, series, ra, rb, final, sameDay, pred }) {
     .map((g) => `          <li><a href="${SITE}${pagePath(lang, g.date, g.slug)}">${esc(g.awayName)} ${esc(T.vs)} ${esc(g.homeName)}</a></li>`)
     .join("\n");
 
+  // Appel à l'action (2026-11-18) : vers la page du match DANS l'appli (cotes,
+  // value bets, props), plus vers l'accueil. Un match joué renvoie au programme
+  // du soir. UTM : on mesure les visiteurs que chaque page envoie à l'appli.
+  const campaign = `${game.date}_${game.slug}`;
+  const gameAppUrl = isFinal ? appUrl("/", "match_page", campaign) : appUrl(`/stats/prediction/game/${game.id}`, "match_page", campaign);
+  const quickCta = isFinal ? "" : `    <div class="cta-inline">
+      <a class="btn" href="${gameAppUrl}">${esc(T.ctaGameBtn)}</a>
+      <p class="cta-note">${esc(T.ctaTrial)}</p>
+    </div>`;
   const body = `    <section class="hero">
       <p class="eyebrow">${esc(eyebrow)}</p>
       <h1>${esc(an)} ${esc(T.vs)} ${esc(bn)} — ${esc(dLong)}</h1>
@@ -878,13 +891,15 @@ function gamePage({ lang, game, a, b, series, ra, rb, final, sameDay, pred }) {
       </div>
     </section>
 ${isFinal ? "" : predictionBlock(lang, a, b, pred, null)}
+${quickCta}
 ${statsRow(lang, a, b)}
 ${isFinal ? resultBlock(lang, a, b, final) + "\n" + predictionBlock(lang, a, b, pred, final) : contextBlock(lang, a, b, ra, rb)}
 ${seriesBlock(lang, a, b, series)}
     <div class="cta-box">
       <p class="cta-title">${esc(isFinal ? T.ctaFinalH : pv ? T.ctaPredH : T.ctaH)}</p>
       <p>${esc(isFinal ? T.ctaFinalP : pv ? T.ctaPredP : T.ctaP(an, bn))}</p>
-      <a class="btn" href="${SITE}/">${esc(T.ctaBtn)}</a>
+      <a class="btn" href="${gameAppUrl}">${esc(isFinal ? T.ctaBtn : T.ctaGameBtn)}</a>
+      ${isFinal ? "" : `<p class="cta-note">${esc(T.ctaTrial)}</p>`}
     </div>
       <h2>${esc(T.modelH)}</h2>
       <p>${esc(T.modelP)}</p>
@@ -895,7 +910,7 @@ ${seriesBlock(lang, a, b, series)}
           <li><a href="${SITE}${T.hubPath}">${esc(T.relAll)}</a></li>
           <li><a href="${SITE}/matchup/${esc(evergreenSlug(a, b))}">${esc(T.relMatchup(shortName(a, lang), shortName(b, lang)))}</a></li>
           <li><a href="${SITE}${pagePath(lang === "fr" ? "en" : "fr", game.date, slug)}" hreflang="${lang === "fr" ? "en" : "fr-CA"}">${esc(T.relFr)}</a></li>
-          <li><a href="${SITE}/">${esc(T.relApp)}</a></li>
+          <li><a href="${appUrl("/", "related", lang + "_" + T.hubPath)}">${esc(T.relApp)}</a></li>
         </ul>
 ${others ? `        <h3>${esc(T.other)}</h3>\n        <ul>\n${others}\n        </ul>\n` : ""}      </section>`;
 
@@ -970,13 +985,13 @@ ${games.length ? `        <ul>\n${items}\n        </ul>` : `        <p>${esc(T.h
     <div class="cta-box">
       <p class="cta-title">${esc(T.hubCtaH)}</p>
       <p>${esc(T.hubCtaP)}</p>
-      <a class="btn" href="${SITE}/">${esc(T.ctaBtn)}</a>
+      <a class="btn" href="${appUrl("/", "match_hub", lang + "_" + date)}">${esc(T.ctaBtn)}</a>
     </div>
       <section class="related">
         <ul>
           <li><a href="${SITE}${(lang === "fr" ? L.en.hubPath : L.fr.hubPath) + sfx}" hreflang="${lang === "fr" ? "en" : "fr-CA"}">${esc(T.relFr)}</a></li>
           <li><a href="${SITE}/nhl-matchups">${esc(lang === "fr" ? "Toutes les confrontations" : "All NHL matchup pages")}</a></li>
-          <li><a href="${SITE}/">${esc(T.relApp)}</a></li>
+          <li><a href="${appUrl("/", "related", lang + "_" + T.hubPath)}">${esc(T.relApp)}</a></li>
         </ul>
       </section>`;
   return layout({

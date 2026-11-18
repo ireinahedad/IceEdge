@@ -15,6 +15,14 @@
  * « source », « campaign », « plan » (free/pro), « signed_in » dans Clarity.
  * Aucune donnée personnelle : l'identifiant envoyé à `identify` est l'id de
  * compte (Clarity le hache), jamais le courriel.
+ *
+ * Consentement (2026-11-18, demande du user) : pour un visiteur de l'Espace
+ * économique européen, du Royaume-Uni ou de Suisse, rien n'est déposé (ni
+ * cookie Clarity, ni provenance en localStorage) avant qu'il accepte dans le
+ * bandeau (`ConsentBanner`). Sans réponse ou s'il refuse, Clarity tourne en
+ * mode sans cookie (`consentv2` refusé). Le pays vient de `/api/geo`
+ * (Cloudflare) ; si l'API ne répond pas, un fuseau `Europe/…` compte comme
+ * européen — on se trompe du côté prudent. Ailleurs, pas de bandeau.
  */
 
 const CLARITY_ID = "zfj9sz095j";
@@ -67,14 +75,91 @@ export function firstTouch(): Touch | null {
   return readFirstTouch();
 }
 
+const CONSENT_KEY = "ae.consent";
+export type ConsentChoice = "granted" | "denied";
+
+/** EEE + Royaume-Uni + Suisse : là où le consentement aux cookies est exigé. */
+const CONSENT_COUNTRIES = new Set([
+  "AT","BE","BG","HR","CY","CZ","DK","EE","FI","FR","DE","GR","HU","IE","IT","LV","LT","LU","MT","NL",
+  "PL","PT","RO","SK","SI","ES","SE","IS","LI","NO","GB","CH",
+  // Territoires français d'outre-mer : même règle que la France.
+  "GP","MQ","GF","RE","YT","PM","BL","MF","NC","PF","WF",
+]);
+
+let active = false;
+/** Source de la visite en cours, gardée pour la noter une fois le consentement donné. */
+let pendingTouch: Touch | null = null;
+const consentListeners = new Set<() => void>();
+
+export function readConsent(): ConsentChoice | null {
+  try { const v = localStorage.getItem(CONSENT_KEY); return v === "granted" || v === "denied" ? v : null; }
+  catch { return null; }
+}
+
+/** Le visiteur doit-il donner son accord ? `country` : celui de `/api/geo`, ou null s'il n'est pas connu. */
+export function consentRequired(country: string | null): boolean {
+  if (country) return CONSENT_COUNTRIES.has(country.toUpperCase());
+  try { return Intl.DateTimeFormat().resolvedOptions().timeZone.startsWith("Europe/"); }
+  catch { return true; }
+}
+
+/** Clarity est-il chargé (web, production) ? Le bandeau ne s'affiche que dans ce cas. */
+export function analyticsActive() {
+  return active;
+}
+
+function rememberFirstTouch() {
+  if (!pendingTouch) return;
+  try { if (!localStorage.getItem(FIRST_TOUCH_KEY)) localStorage.setItem(FIRST_TOUCH_KEY, JSON.stringify(pendingTouch)); }
+  catch { /* navigation privée : tant pis */ }
+}
+
+function applyConsent(choice: ConsentChoice) {
+  clarity("consentv2", { ad_Storage: "denied", analytics_Storage: choice });
+  if (choice === "granted") rememberFirstTouch();
+  else { try { localStorage.removeItem(FIRST_TOUCH_KEY); } catch { /* rien */ } }
+}
+
+/** Réponse du visiteur au bandeau. Gardée, puis appliquée tout de suite. */
+export function setConsent(choice: ConsentChoice) {
+  try { localStorage.setItem(CONSENT_KEY, choice); } catch { /* rien */ }
+  applyConsent(choice);
+  consentListeners.forEach((l) => l());
+}
+
+/** « Gérer les cookies » : oublie la réponse et rouvre le bandeau. */
+export function resetConsent() {
+  try { localStorage.removeItem(CONSENT_KEY); } catch { /* rien */ }
+  applyConsent("denied");
+  consentListeners.forEach((l) => l());
+}
+
+export function onConsentChange(l: () => void) {
+  consentListeners.add(l);
+  return () => { consentListeners.delete(l); };
+}
+
+/**
+ * Une fois le pays connu, sans réponse gardée : hors Europe, l'accord est
+ * implicite (comme avant le bandeau) ; en Europe, on reste en mode sans cookie
+ * en attendant le bandeau.
+ */
+export function resolveRegion(country: string | null) {
+  if (!active || readConsent()) return;
+  applyConsent(consentRequired(country) ? "denied" : "granted");
+}
+
 /** Charge Clarity et pose les balises de provenance. Web, production seulement. */
 export function initAnalytics() {
+  active = true;
   const now = currentTouch();
-  let first = readFirstTouch();
-  if (!first) {
-    first = now;
-    try { localStorage.setItem(FIRST_TOUCH_KEY, JSON.stringify(now)); } catch { /* navigation privée : tant pis */ }
-  }
+  pendingTouch = now;
+  const first = readFirstTouch() ?? now;
+
+  // Avant tout chargement : sans réponse gardée, mode sans cookie par défaut ;
+  // `resolveRegion` lève la restriction hors d'Europe quand le pays arrive.
+  const stored = readConsent();
+  applyConsent(stored ?? "denied");
 
   clarity("set", "source", now.source);
   if (now.campaign) clarity("set", "campaign", now.campaign);
@@ -87,6 +172,7 @@ export function initAnalytics() {
   s.async = true;
   s.src = `https://www.clarity.ms/tag/${CLARITY_ID}`;
   document.head.appendChild(s);
+  consentListeners.forEach((l) => l());
 }
 
 /** Relie la session au compte (id haché par Clarity) et marque gratuit / Pro. */

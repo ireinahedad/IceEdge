@@ -31,6 +31,17 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // ── Config ──────────────────────────────────────────────────────────────────
 const SITE = "https://arakice.com";
+
+/**
+ * Lien vers l'application depuis une page SEO, avec UTM (2026-11-18) : dans
+ * Vercel Analytics (« UTM Parameters ») et dans Clarity (`source` = seo), on
+ * voit combien de visiteurs les pages statiques envoient vers l'appli, et
+ * depuis quelle page (`utm_campaign`).
+ */
+function appUrl(p, medium, campaign) {
+  const c = String(campaign || "").replace(/^\/+|\/+$/g, "").replace(/\//g, "_") || "home";
+  return `${SITE}${p}?utm_source=seo&utm_medium=${medium}&utm_campaign=${encodeURIComponent(c)}`;
+}
 const API = "https://api-web.nhle.com/v1";
 const SAMPLE = process.argv.includes("--sample");
 const OUT_DIR = SAMPLE
@@ -343,7 +354,7 @@ ${jsonld ? `  <script type="application/ld+json">\n${JSON.stringify(jsonld, null
         <img class="brand-logo" src="/arakice-logo-80.png" alt="ArakIce" width="40" height="40" />
         <span class="brand-word">ArakIce</span>
       </a>
-      <a class="nav-cta" href="${SITE}/">${esc(T.openApp)}</a>
+      <a class="nav-cta" href="${appUrl("/", "nav", canonicalPath)}">${esc(T.openApp)}</a>
     </div>
   </header>
   <main>
@@ -369,7 +380,7 @@ function ctaBox(heading, text, label) {
   return `    <div class="cta-box">
       <p class="cta-title">${esc(heading)}</p>
       <p>${esc(text)}</p>
-      <a class="btn" href="${SITE}/">${esc(label)}</a>
+      <a class="btn" href="${appUrl("/", "cta", heading)}">${esc(label)}</a>
     </div>`;
 }
 
@@ -1135,7 +1146,7 @@ if (RUN_DIRECTLY) {
   main().catch((e) => { console.error("Generator failed:", e); process.exit(1); });
 }
 
-export { layout, matchupPage, playerPage, propsHubPage, matchupHubPage, loadH2H, h2hStats, writeSitemap };
+export { appUrl, layout, matchupPage, playerPage, propsHubPage, matchupHubPage, loadH2H, h2hStats, writeSitemap };
 // Réexports pour gameday-gen.mjs : il écrit des pages dans le même habillage et
 // doit donc partager exactement ces fonctions, pas des copies qui dérivent.
 export { slugify, esc, nhlLogo, getJSON, pMap, SITE, API, H2H_MIN_PCT, COMMON_LINE, fit, TITLE_MAX, DESC_MAX };

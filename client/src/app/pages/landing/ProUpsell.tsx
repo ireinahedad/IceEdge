@@ -12,6 +12,8 @@
  * mention que c'est réservé aux abonnés. Même règle que `ProLock`.
  */
 
+import { useTrialCta } from "../../experiments";
+import { trackEvent } from "../../analytics";
 import type { ReactNode } from "react";
 import { useLocation, useNavigate } from "react-router";
 import { Crown, Star, Zap, Lock } from "lucide-react";
@@ -41,6 +43,7 @@ function Feature({ icon, title, desc, children }: {
 export function ProUpsell({ accent }: { accent: string }) {
   const { t } = useI18n();
   const navigate = useNavigate();
+  const trialCta = useTrialCta();
   const location = useLocation();
 
   const bestPreview = [
@@ -95,14 +98,15 @@ export function ProUpsell({ accent }: { accent: string }) {
       {features.proUpgrade ? (
         /* `state.from` : /pro ne peut pas revenir par l'historique, Stripe
            Checkout y est empilé. Voir `useProBackTarget` dans ProPage. */
-        <div className="flex justify-center mt-3">
+        <div className="flex flex-col items-center mt-3">
           <button
-            onClick={() => navigate("/pro", { state: { from: location.pathname + location.search } })}
+            onClick={() => { trackEvent(trialCta ? "pro_upsell_trial_click" : "pro_upsell_click"); navigate("/pro", { state: { from: location.pathname + location.search } }); }}
             className="tap-44 px-4 py-1.5 rounded-full text-xs font-bold active:scale-[0.97] transition-transform"
             style={{ background: accent, color: "#0A0E0C" }}
           >
-            {t("pro.cta")}
+            {trialCta ? t("home.trialCta") : t("pro.cta")}
           </button>
+          {trialCta && <p className="text-center text-[11px] text-[#8a9ea6] mt-1.5">{t("home.trialNoCard")}</p>}
         </div>
       ) : (
         <p className="text-center text-[11px] text-[#8a9ea6] mt-3">{t("home.proOnly")}</p>
