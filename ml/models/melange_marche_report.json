@@ -1,0 +1,295 @@
+{
+  "question": "le melange modele servi (+) cloture bat-il la cloture seule ? test apparie par match, walk-forward strict",
+  "protocol": {
+    "chaine": "modele de score (saisons < S) + couche de correction C (5 variables, ajustee sur les saisons < S, au moins 3)",
+    "melange": "logistique sur [logit p_servi, logit p_cloture], ajustee sur les matchs cotes des saisons dont p_servi est deja hors echantillon (au moins 3)",
+    "adopt_if": "ecart de log-loss z <= -2 (apparie, par match) ET gain sur >= 70 % des saisons",
+    "lecture": "le melange lit la cloture : ce n'est pas une strategie de pari, c'est un test d'information residuelle",
+    "signe": "ecart NEGATIF = le premier nomme fait mieux",
+    "xgboost": "3.2.0"
+  },
+  "by_season": [
+    {
+      "season": 2018,
+      "n": 1271,
+      "ll_marche": 0.67255,
+      "ll_servi": 0.671,
+      "ll_melange": 0.67155,
+      "poids_modele": 0.582,
+      "poids_marche": 0.527,
+      "n_train_melange": 3725
+    },
+    {
+      "season": 2019,
+      "n": 1080,
+      "ll_marche": 0.67963,
+      "ll_servi": 0.68061,
+      "ll_melange": 0.67992,
+      "poids_modele": 0.615,
+      "poids_marche": 0.448,
+      "n_train_melange": 4996
+    },
+    {
+      "season": 2020,
+      "n": 868,
+      "ll_marche": 0.65352,
+      "ll_servi": 0.65003,
+      "ll_melange": 0.65044,
+      "poids_modele": 0.574,
+      "poids_marche": 0.448,
+      "n_train_melange": 6076
+    },
+    {
+      "season": 2021,
+      "n": 1307,
+      "ll_marche": 0.64224,
+      "ll_servi": 0.63737,
+      "ll_melange": 0.63773,
+      "poids_modele": 0.626,
+      "poids_marche": 0.431,
+      "n_train_melange": 6944
+    },
+    {
+      "season": 2022,
+      "n": 342,
+      "ll_marche": 0.66856,
+      "ll_servi": 0.67761,
+      "ll_melange": 0.675,
+      "poids_modele": 0.706,
+      "poids_marche": 0.39,
+      "n_train_melange": 8251
+    },
+    {
+      "season": 2023,
+      "n": 1311,
+      "ll_marche": 0.65538,
+      "ll_servi": 0.65535,
+      "ll_melange": 0.65479,
+      "poids_modele": 0.644,
+      "poids_marche": 0.44,
+      "n_train_melange": 8593
+    },
+    {
+      "season": 2024,
+      "n": 1310,
+      "ll_marche": 0.65851,
+      "ll_servi": 0.65884,
+      "ll_melange": 0.65825,
+      "poids_modele": 0.615,
+      "poids_marche": 0.45,
+      "n_train_melange": 9904
+    },
+    {
+      "season": 2025,
+      "n": 1311,
+      "ll_marche": 0.68222,
+      "ll_servi": 0.68379,
+      "ll_melange": 0.68299,
+      "poids_modele": 0.598,
+      "poids_marche": 0.455,
+      "n_train_melange": 11214
+    },
+    {
+      "season": 2026,
+      "n": 86,
+      "ll_marche": 0.64428,
+      "ll_servi": 0.63456,
+      "ll_melange": 0.63681,
+      "poids_modele": 0.571,
+      "poids_marche": 0.455,
+      "n_train_melange": 12525
+    }
+  ],
+  "melange_dernier_fold": {
+    "n_train": 12525,
+    "intercept": -0.0039,
+    "poids_logit_modele": 0.5712,
+    "poids_logit_marche": 0.4547
+  },
+  "tests": {
+    "melange_vs_marche": {
+      "n": 8886,
+      "delta": -0.00091,
+      "se": 0.000591,
+      "z": -1.54,
+      "z_seasons": -0.71,
+      "n_seasons": 9,
+      "seasons_better": [
+        2018,
+        2020,
+        2021,
+        2023,
+        2024,
+        2026
+      ],
+      "share_seasons_better": 0.667,
+      "verdict": "NON TRANCHABLE"
+    },
+    "servi_vs_marche": {
+      "n": 8886,
+      "delta": -0.000631,
+      "se": 0.000879,
+      "z": -0.72,
+      "z_seasons": -0.37,
+      "n_seasons": 9,
+      "seasons_better": [
+        2018,
+        2020,
+        2021,
+        2023,
+        2026
+      ],
+      "share_seasons_better": 0.556,
+      "verdict": "NON TRANCHABLE"
+    },
+    "melange_vs_servi": {
+      "n": 8886,
+      "delta": -0.000279,
+      "se": 0.00036,
+      "z": -0.77,
+      "z_seasons": -0.63,
+      "n_seasons": 9,
+      "seasons_better": [
+        2019,
+        2022,
+        2023,
+        2024,
+        2025
+      ],
+      "share_seasons_better": 0.556,
+      "verdict": "NON TRANCHABLE"
+    },
+    "moitie_vs_marche": {
+      "n": 8886,
+      "delta": -0.001188,
+      "se": 0.00044,
+      "z": -2.7,
+      "z_seasons": -1.34,
+      "n_seasons": 9,
+      "seasons_better": [
+        2018,
+        2019,
+        2020,
+        2021,
+        2023,
+        2024,
+        2025,
+        2026
+      ],
+      "share_seasons_better": 0.889,
+      "verdict": "MIEUX"
+    },
+    "brut_vs_marche": {
+      "n": 8886,
+      "delta": 0.001927,
+      "se": 0.001046,
+      "z": 1.84,
+      "z_seasons": 1.77,
+      "n_seasons": 9,
+      "seasons_better": [
+        2018,
+        2026
+      ],
+      "share_seasons_better": 0.222,
+      "verdict": "NON TRANCHABLE"
+    }
+  },
+  "par_source": {
+    "oddsapi:draftkings": {
+      "melange_vs_marche": {
+        "n": 4016,
+        "delta": -0.000205,
+        "se": 0.000916,
+        "z": -0.22
+      },
+      "servi_vs_marche": {
+        "n": 4016,
+        "delta": 0.000375,
+        "se": 0.001327,
+        "z": 0.28
+      },
+      "melange_vs_servi": {
+        "n": 4016,
+        "delta": -0.00058,
+        "se": 0.000504,
+        "z": -1.15
+      },
+      "moitie_vs_marche": {
+        "n": 4016,
+        "delta": -0.000719,
+        "se": 0.000665,
+        "z": -1.08
+      },
+      "brut_vs_marche": {
+        "n": 4016,
+        "delta": 0.002136,
+        "se": 0.001499,
+        "z": 1.42
+      }
+    },
+    "oddsapi:live": {
+      "melange_vs_marche": {
+        "n": 2,
+        "delta": 0.032867,
+        "se": 0.029314,
+        "z": 1.12
+      },
+      "servi_vs_marche": {
+        "n": 2,
+        "delta": 0.055117,
+        "se": 0.052336,
+        "z": 1.05
+      },
+      "melange_vs_servi": {
+        "n": 2,
+        "delta": -0.02225,
+        "se": 0.023022,
+        "z": -0.97
+      },
+      "moitie_vs_marche": {
+        "n": 2,
+        "delta": 0.026907,
+        "se": 0.025517,
+        "z": 1.05
+      },
+      "brut_vs_marche": {
+        "n": 2,
+        "delta": 0.043517,
+        "se": 0.091933,
+        "z": 0.47
+      }
+    },
+    "sbro": {
+      "melange_vs_marche": {
+        "n": 4868,
+        "delta": -0.001505,
+        "se": 0.000769,
+        "z": -1.96
+      },
+      "servi_vs_marche": {
+        "n": 4868,
+        "delta": -0.001483,
+        "se": 0.001173,
+        "z": -1.26
+      },
+      "melange_vs_servi": {
+        "n": 4868,
+        "delta": -2.2e-05,
+        "se": 0.000509,
+        "z": -0.04
+      },
+      "moitie_vs_marche": {
+        "n": 4868,
+        "delta": -0.001586,
+        "se": 0.000588,
+        "z": -2.7
+      },
+      "brut_vs_marche": {
+        "n": 4868,
+        "delta": 0.001737,
+        "se": 0.001456,
+        "z": 1.19
+      }
+    }
+  }
+}

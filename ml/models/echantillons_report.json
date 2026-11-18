@@ -1,0 +1,230 @@
+{
+  "question": "un seul jeu d'echantillons et une seule generation pour la section 7",
+  "genere_le": "2026-11-16",
+  "xgboost": "3.2.0",
+  "tranche_de_test": {
+    "definition": "20 % finaux du jeu de donnees, tries par date ; modeles SERVIS (entraines sur la tranche d'entrainement), aucune coupure de date",
+    "n": 4331,
+    "n_cotes": 4018,
+    "periode": [
+      "2023-03-12",
+      "2026-10-17"
+    ],
+    "n_ecartes_faute_de_probabilite": 0,
+    "modeles": {
+      "modele de score (brut)": {
+        "n": 4331,
+        "log_loss": 0.66236,
+        "brier": 0.23516,
+        "bons_choix_pct": 59.3
+      },
+      "classifieur (cotes masquees)": {
+        "n": 4331,
+        "log_loss": 0.66557,
+        "brier": 0.23665,
+        "bons_choix_pct": 59.1
+      },
+      "ELO seul": {
+        "n": 4331,
+        "log_loss": 0.67031,
+        "brier": 0.23895,
+        "bons_choix_pct": 57.6
+      },
+      "probabilite constante": {
+        "n": 4331,
+        "log_loss": 0.68966,
+        "brier": 0.24826,
+        "bons_choix_pct": 54.2
+      },
+      "toujours le domicile": {
+        "n": 4331,
+        "log_loss": null,
+        "brier": null,
+        "bons_choix_pct": 54.2
+      }
+    },
+    "apparies_contre_score": {
+      "classifieur (cotes masquees)": {
+        "n": 4331,
+        "delta": -0.003209,
+        "se": 0.001926,
+        "z": -1.67,
+        "n_seasons": 5,
+        "seasons_better": 3,
+        "z_seasons": -1.16
+      },
+      "ELO seul": {
+        "n": 4331,
+        "delta": -0.007947,
+        "se": 0.001725,
+        "z": -4.61,
+        "n_seasons": 5,
+        "seasons_better": 4,
+        "z_seasons": -1.64
+      },
+      "probabilite constante": {
+        "n": 4331,
+        "delta": -0.027291,
+        "se": 0.00304,
+        "z": -8.98,
+        "n_seasons": 5,
+        "seasons_better": 5,
+        "z_seasons": -3.12
+      }
+    },
+    "marche": {
+      "n": 4018,
+      "log_loss_marche": 0.66492,
+      "log_loss_score_memes_matchs": 0.66483,
+      "log_loss_elo_memes_matchs": 0.67399,
+      "score_moins_marche": {
+        "n": 4018,
+        "delta": -9.1e-05,
+        "se": 0.001543,
+        "z": -0.06,
+        "n_seasons": 4,
+        "seasons_better": 2,
+        "z_seasons": -0.04
+      },
+      "elo_moins_marche": {
+        "n": 4018,
+        "delta": 0.009071,
+        "se": 0.001967,
+        "z": 4.61,
+        "n_seasons": 4,
+        "seasons_better": 0,
+        "z_seasons": 3.18
+      },
+      "par_source": {
+        "oddsapi:draftkings": 4016,
+        "oddsapi:live": 2
+      }
+    }
+  },
+  "walk_forward_cotes": {
+    "definition": "matchs cotes des saisons predites en walk-forward strict, couche de correction et poids du melange ajustes sur les seules saisons anterieures",
+    "n": 8886,
+    "saisons": [
+      2018,
+      2019,
+      2020,
+      2021,
+      2022,
+      2023,
+      2024,
+      2025,
+      2026
+    ],
+    "par_saison": [
+      {
+        "saison": 2018,
+        "n": 1271
+      },
+      {
+        "saison": 2019,
+        "n": 1080
+      },
+      {
+        "saison": 2020,
+        "n": 868
+      },
+      {
+        "saison": 2021,
+        "n": 1307
+      },
+      {
+        "saison": 2022,
+        "n": 342
+      },
+      {
+        "saison": 2023,
+        "n": 1311
+      },
+      {
+        "saison": 2024,
+        "n": 1310
+      },
+      {
+        "saison": 2025,
+        "n": 1311
+      },
+      {
+        "saison": 2026,
+        "n": 86
+      }
+    ],
+    "modeles": {
+      "modele brut": {
+        "n": 8886,
+        "log_loss": 0.66542,
+        "brier": 0.23653,
+        "bons_choix_pct": 59.4
+      },
+      "chaine servie": {
+        "n": 8886,
+        "log_loss": 0.66286,
+        "brier": 0.23537,
+        "bons_choix_pct": 59.5
+      },
+      "marche (cloture devigee)": {
+        "n": 8886,
+        "log_loss": 0.66349,
+        "brier": 0.23559,
+        "bons_choix_pct": 58.8
+      },
+      "melange servi + marche": {
+        "n": 8886,
+        "log_loss": 0.66258,
+        "brier": 0.23521,
+        "bons_choix_pct": 59.9
+      }
+    },
+    "apparies_contre_marche": {
+      "modele brut": {
+        "n": 8886,
+        "delta": 0.001927,
+        "se": 0.001046,
+        "z": 1.84,
+        "n_seasons": 9,
+        "seasons_better": 2,
+        "z_seasons": 1.77
+      },
+      "chaine servie": {
+        "n": 8886,
+        "delta": -0.000631,
+        "se": 0.000879,
+        "z": -0.72,
+        "n_seasons": 9,
+        "seasons_better": 5,
+        "z_seasons": -0.37
+      },
+      "melange servi + marche": {
+        "n": 8886,
+        "delta": -0.00091,
+        "se": 0.000591,
+        "z": -1.54,
+        "n_seasons": 9,
+        "seasons_better": 6,
+        "z_seasons": -0.71
+      }
+    },
+    "par_source": {
+      "oddsapi:draftkings": {
+        "n": 4016,
+        "modele brut": 0.66704,
+        "chaine servie": 0.66528,
+        "marche (cloture devigee)": 0.66491,
+        "melange servi + marche": 0.6647,
+        "servi_moins_marche_z": 0.28
+      },
+      "sbro": {
+        "n": 4868,
+        "modele brut": 0.66405,
+        "chaine servie": 0.66083,
+        "marche (cloture devigee)": 0.66231,
+        "melange servi + marche": 0.66081,
+        "servi_moins_marche_z": -1.26
+      }
+    }
+  }
+}

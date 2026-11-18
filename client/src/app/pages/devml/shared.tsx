@@ -149,6 +149,21 @@ export interface DataHealthResponse {
     rows_full?: number; rows_spreads?: number; with_puckline?: number;
     error?: string;
   };
+  // Props joueur (migration 054, 2026-11-16) — même défaut silencieux que
+  // `odds_snapshots`, et une donnée que personne ne vend : ce bloc est le seul
+  // endroit où une collecte morte se voit.
+  props_snapshots?: {
+    rows?: number; rows_today?: number; passes?: number; passes_today?: number;
+    players?: number; games?: number;
+    first_date?: string; last_date?: string; last_observed?: string;
+    rows_by_market?: Record<string, number>;
+    rows_by_book?: Record<string, number>;
+    error?: string;
+  };
+  props_budget?: {
+    day?: string | null; spent?: number; budget?: number;
+    markets?: string[]; slots?: number;
+  };
   slips: {
     total?: number; pending?: number; settled?: number;
     last_placed?: string; last_resolved?: string; stale_pending?: number;

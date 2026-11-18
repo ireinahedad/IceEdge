@@ -1,0 +1,235 @@
+{
+  "question": "le modele bat-il le marche sur les totaux ?",
+  "protocol": {
+    "modele": "modele de score brut, walk-forward (cache de m2), P(plus) lue sur la matrice de scores a la ligne du marche",
+    "resultat": "total final, prolongation et fusillade comprises, comme le reglement des paris",
+    "poussees": "ecartees du test et comptees a part",
+    "signe": "ecart de log-loss negatif = le modele fait mieux"
+  },
+  "precision": {
+    "n_lignes": 9822,
+    "n_poussees": 750,
+    "ensemble": {
+      "n": 9072,
+      "ll_modele": 0.70167,
+      "ll_marche": 0.69085,
+      "delta": 0.010827,
+      "se": 0.001705,
+      "z": 6.35,
+      "z_seasons": 4.6,
+      "saisons_gagnees": 1,
+      "n_saisons": 9,
+      "taux_plus_observe": 0.5018
+    },
+    "par_source": {
+      "sbro": {
+        "n": 9072,
+        "ll_modele": 0.70167,
+        "ll_marche": 0.69085,
+        "delta": 0.010827,
+        "se": 0.001705,
+        "z": 6.35
+      }
+    }
+  },
+  "calibration": {
+    "classes": [
+      {
+        "classe": "20%-30%",
+        "n": 36,
+        "predit": 0.2598,
+        "observe": 0.4444,
+        "ecart_points": 18.47
+      },
+      {
+        "classe": "30%-40%",
+        "n": 1804,
+        "predit": 0.3731,
+        "observe": 0.4889,
+        "ecart_points": 11.59
+      },
+      {
+        "classe": "40%-50%",
+        "n": 5631,
+        "predit": 0.4484,
+        "observe": 0.4944,
+        "ecart_points": 4.6
+      },
+      {
+        "classe": "50%-60%",
+        "n": 1516,
+        "predit": 0.5309,
+        "observe": 0.5435,
+        "ecart_points": 1.26
+      },
+      {
+        "classe": "60%-70%",
+        "n": 85,
+        "predit": 0.6287,
+        "observe": 0.5412,
+        "ecart_points": -8.75
+      }
+    ],
+    "ece_points": 5.53
+  },
+  "niveau": {
+    "n": 14866,
+    "total_predit_moyen": 6.006,
+    "total_observe_moyen": 5.971,
+    "p_plus_de_5_5_predit": 0.5202,
+    "p_plus_de_5_5_observe": 0.5235,
+    "note": "lambdas brutes, sans le recalage de niveau de la section 4.6"
+  },
+  "bandes": [
+    {
+      "bande": "0%-2%",
+      "n": 1868,
+      "p_model": 0.5109,
+      "p_marche": 0.5009,
+      "observe": 0.4957,
+      "roi_pct": -5.35,
+      "roi_se_pct": 2.22,
+      "roi_z": -2.41,
+      "part_plus": 0.426
+    },
+    {
+      "bande": "2%-5%",
+      "n": 2332,
+      "p_model": 0.5347,
+      "p_marche": 0.5004,
+      "observe": 0.5069,
+      "roi_pct": -3.05,
+      "roi_se_pct": 1.99,
+      "roi_z": -1.53,
+      "part_plus": 0.301
+    },
+    {
+      "bande": "5%-10%",
+      "n": 2827,
+      "p_model": 0.5692,
+      "p_marche": 0.4961,
+      "observe": 0.508,
+      "roi_pct": -1.81,
+      "roi_se_pct": 1.83,
+      "roi_z": -0.99,
+      "part_plus": 0.149
+    },
+    {
+      "bande": "10%+",
+      "n": 2045,
+      "p_model": 0.6163,
+      "p_marche": 0.4821,
+      "observe": 0.4841,
+      "roi_pct": -3.78,
+      "roi_se_pct": 2.21,
+      "roi_z": -1.71,
+      "part_plus": 0.036
+    }
+  ],
+  "clv_existante": {
+    "complet": [
+      {
+        "edge": 0.01,
+        "n_bets": 8950,
+        "roi_open_pct": -1.16,
+        "clv_mean": 0.005284,
+        "clv_t": 18.122375,
+        "placebo_mean": 0.002752,
+        "clv_net": 0.002532,
+        "clv_net_z": 6.66
+      },
+      {
+        "edge": 0.02,
+        "n_bets": 8127,
+        "roi_open_pct": -0.56,
+        "clv_mean": 0.005603,
+        "clv_t": 18.22893,
+        "placebo_mean": 0.003026,
+        "clv_net": 0.002577,
+        "clv_net_z": 6.69
+      },
+      {
+        "edge": 0.03,
+        "n_bets": 7335,
+        "roi_open_pct": -0.58,
+        "clv_mean": 0.006047,
+        "clv_t": 18.604884,
+        "placebo_mean": 0.003228,
+        "clv_net": 0.00282,
+        "clv_net_z": 7.12
+      },
+      {
+        "edge": 0.04,
+        "n_bets": 6505,
+        "roi_open_pct": -0.17,
+        "clv_mean": 0.006408,
+        "clv_t": 18.792956,
+        "placebo_mean": 0.003436,
+        "clv_net": 0.002972,
+        "clv_net_z": 6.89
+      },
+      {
+        "edge": 0.05,
+        "n_bets": 5734,
+        "roi_open_pct": -0.97,
+        "clv_mean": 0.006776,
+        "clv_t": 18.45042,
+        "placebo_mean": 0.003613,
+        "clv_net": 0.003163,
+        "clv_net_z": 6.68
+      }
+    ],
+    "matin": [
+      {
+        "edge": 0.01,
+        "n_bets": 8853,
+        "roi_open_pct": -3.16,
+        "clv_mean": 0.004457,
+        "clv_t": 15.094757,
+        "placebo_mean": 0.002842,
+        "clv_net": 0.001615,
+        "clv_net_z": 4.42
+      },
+      {
+        "edge": 0.02,
+        "n_bets": 7849,
+        "roi_open_pct": -3.17,
+        "clv_mean": 0.004484,
+        "clv_t": 14.233854,
+        "placebo_mean": 0.003167,
+        "clv_net": 0.001317,
+        "clv_net_z": 3.45
+      },
+      {
+        "edge": 0.03,
+        "n_bets": 6941,
+        "roi_open_pct": -2.64,
+        "clv_mean": 0.004614,
+        "clv_t": 13.667273,
+        "placebo_mean": 0.003381,
+        "clv_net": 0.001233,
+        "clv_net_z": 2.83
+      },
+      {
+        "edge": 0.04,
+        "n_bets": 6069,
+        "roi_open_pct": -3.13,
+        "clv_mean": 0.004728,
+        "clv_t": 13.015615,
+        "placebo_mean": 0.003602,
+        "clv_net": 0.001126,
+        "clv_net_z": 2.46
+      },
+      {
+        "edge": 0.05,
+        "n_bets": 5293,
+        "roi_open_pct": -3.31,
+        "clv_mean": 0.004717,
+        "clv_t": 12.247229,
+        "placebo_mean": 0.003739,
+        "clv_net": 0.000978,
+        "clv_net_z": 2.05
+      }
+    ]
+  }
+}

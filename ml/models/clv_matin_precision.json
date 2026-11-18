@@ -1,0 +1,75 @@
+{
+  "question": "ce que les 7 variables d'alignement valent en precision pure",
+  "n_games": 14866,
+  "seasons": [
+    2014,
+    2015,
+    2016,
+    2017,
+    2018,
+    2019,
+    2020,
+    2021,
+    2022,
+    2023,
+    2024,
+    2025,
+    2026
+  ],
+  "ensembles": {
+    "tous les matchs": {
+      "n": 14866,
+      "ll_complet": 0.66699,
+      "ll_matin": 0.67003,
+      "ll_marche_cloture": 0.66553,
+      "matin_moins_complet": {
+        "n": 14866,
+        "delta": 0.003044,
+        "se": 0.000604,
+        "z": 5.04
+      }
+    },
+    "matchs cotes (cloture)": {
+      "n": 13841,
+      "ll_complet": 0.66798,
+      "ll_matin": 0.671,
+      "ll_marche_cloture": 0.66553,
+      "matin_moins_complet": {
+        "n": 13841,
+        "delta": 0.003021,
+        "se": 0.000605,
+        "z": 4.99
+      }
+    },
+    "DraftKings": {
+      "n": 4016,
+      "ll_complet": 0.66752,
+      "ll_matin": 0.67055,
+      "ll_marche_cloture": 0.66491,
+      "matin_moins_complet": {
+        "n": 4016,
+        "delta": 0.00303,
+        "se": 0.001122,
+        "z": 2.7
+      }
+    },
+    "SBRO": {
+      "n": 10848,
+      "ll_complet": 0.66678,
+      "ll_matin": 0.66983,
+      "ll_marche_cloture": 0.66578,
+      "matin_moins_complet": {
+        "n": 10848,
+        "delta": 0.003051,
+        "se": 0.000716,
+        "z": 4.26
+      }
+    }
+  },
+  "desaccord_ouverture": {
+    "n": 9824,
+    "ecart_moyen_absolu_complet": 0.04036,
+    "ecart_moyen_absolu_matin": 0.03798,
+    "correlation_des_deux_p": 0.8948
+  }
+}

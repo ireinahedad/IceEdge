@@ -14,6 +14,8 @@ export function DataTab({
   const q  = health.odds_quota ?? {};
   const s  = health.slips ?? {};
   const sn = health.odds_snapshots ?? {};
+  const pr = health.props_snapshots ?? {};
+  const pb = health.props_budget ?? {};
 
   const lastWrite = timeAgo(ol.last_write);
   const quotaAge  = timeAgo(q.observed_at);
@@ -31,6 +33,18 @@ export function DataTab({
   const snapObserved = timeAgo(sn.last_observed);
   const snapStale    = snapObserved.days != null && snapObserved.days > 2;
   const passesShort  = (sn.passes_today ?? 0) > 0 && (sn.passes_today ?? 0) < 6;
+
+  // Props : 2 passes/jour au calendrier (ouverture 15 h 25 UTC, clôture 23 h 15
+  // UTC). Le budget épuisé n'est pas une panne — c'est le plafond qui a joué, et
+  // des matchs ont été sautés : ODDS_PROPS_DAILY_BUDGET.
+  const propsObserved = timeAgo(pr.last_observed);
+  const propsStale    = propsObserved.days != null && propsObserved.days > 2;
+  const propsMarkets  = Object.keys(pr.rows_by_market ?? {});
+  const askedMarkets  = pb.markets ?? [];
+  const missing       = askedMarkets.filter((m) => !propsMarkets.includes(m));
+  const budgetSpent   = pb.spent ?? 0;
+  const budgetCap     = pb.budget ?? 0;
+  const budgetTight   = budgetCap > 0 && budgetSpent >= budgetCap;
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
@@ -126,6 +140,50 @@ export function DataTab({
                 line » à 0 alors que des lignes existent veut dire que les quatre
                 passes <em>spreads</em> ramènent du vide — 4 crédits/jour perdus
                 sur le seul marché encore vivant.
+              </p>
+            </>
+          )}
+        </Card>
+
+        <Card title="Props joueur (props_snapshots)"
+              hint="La référence de marché qui manquait au modèle joueur. Échec silencieux comme odds_snapshots, et donnée irrattrapable : The Odds API ne vend pas d'historique de props pour la LNH.">
+          {pr.error ? (
+            <p className="text-red-400 text-xs">{pr.error}</p>
+          ) : (
+            <>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-2 mb-3">
+                <Metric label="Observations" value={String(pr.rows ?? 0)} />
+                <Metric label="Passes (24 h)" value={`${pr.passes_today ?? 0} / 2`}
+                  color={(pr.passes_today ?? 0) === 2 ? "#4ade80"
+                    : (pr.passes_today ?? 0) > 0 ? "#facc15" : undefined}
+                  warn={(pr.passes_today ?? 0) === 1} />
+                <Metric label="Dernière passe" value={propsObserved.label}
+                  color={propsStale ? "#facc15" : undefined} warn={propsStale} />
+                <Metric label="Joueurs" value={String(pr.players ?? 0)} />
+                <Metric label="Matchs couverts" value={String(pr.games ?? 0)} />
+                <Metric label="Budget du jour" value={`${budgetSpent} / ${budgetCap}`}
+                  color={budgetTight ? "#facc15" : undefined} warn={budgetTight} />
+              </div>
+              {propsMarkets.length > 0 && (
+                <p className="text-[10px] text-[#bfc8cc]/80 leading-relaxed mb-1">
+                  {propsMarkets.map((m) => `${m} : ${pr.rows_by_market?.[m] ?? 0}`).join(" · ")}
+                </p>
+              )}
+              {missing.length > 0 && (
+                <p className="text-[10px] text-amber-300/90 leading-relaxed mb-1">
+                  Demandés mais jamais renvoyés : {missing.join(", ")}. Ces marchés
+                  ne coûtent rien (le fournisseur facture les marchés renvoyés),
+                  mais le livre ne les cote pas — à retirer de
+                  <code> ODDS_PROPS_MARKETS</code> ou à remplacer.
+                </p>
+              )}
+              <p className="text-[10px] text-[#bfc8cc]/60 leading-relaxed">
+                Hors saison, 0 partout est normal. Ce qui ne l'est pas : « table
+                indisponible » (migration 054 absente), ou 0 passe alors que des
+                matchs sont au calendrier — <code>ODDS_PROPS_ENABLED</code>, la
+                clé, ou le budget. « Budget du jour » au plafond veut dire que des
+                matchs ont été sautés : l'ordre de passage tourne avec la date,
+                donc la couverture reste uniforme, mais elle est partielle.
               </p>
             </>
           )}

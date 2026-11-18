@@ -1,0 +1,246 @@
+{
+  "question": "les desaccords de 5 a 10 points de la section 7.3 sont-ils rentables, et pourquoi 7.4 ne le voit pas ?",
+  "protocol": {
+    "chaine": "modele de score + couche de correction, walk-forward strict (cache de m1_melange.py)",
+    "diagnostic": "desaccord avec la CLOTURE, rendement au prix de CLOTURE : non executable (il faut connaitre la cloture pour selectionner)",
+    "executable": "desaccord avec l'OUVERTURE, rendement au prix d'OUVERTURE : c'est la mesure de la section 7.4",
+    "mise": "a plat, 1 unite par pari ; cote decimale reelle du jeu de donnees",
+    "signe": "paired_ll negatif = le modele fait mieux que le marche"
+  },
+  "tables": [
+    {
+      "label": "desaccord avec la cloture, mise a la cloture (diagnostic)",
+      "n": 12611,
+      "buckets": [
+        {
+          "bucket": "0%-2%",
+          "n": 4706,
+          "p_model": 0.5147,
+          "p_market": 0.5049,
+          "observe": 0.5057,
+          "observe_se": 0.0073,
+          "cote_moyenne": 2.026,
+          "roi_pct": -2.97,
+          "roi_se_pct": 1.48,
+          "roi_z": -2.01,
+          "paired_ll_modele_moins_marche": {
+            "n": 4706,
+            "delta": 0.000339,
+            "se": 0.00034,
+            "z": 1.0
+          }
+        },
+        {
+          "bucket": "2%-5%",
+          "n": 5056,
+          "p_model": 0.5499,
+          "p_market": 0.5167,
+          "observe": 0.5293,
+          "observe_se": 0.007,
+          "cote_moyenne": 1.97,
+          "roi_pct": -0.84,
+          "roi_se_pct": 1.39,
+          "roi_z": -0.61,
+          "paired_ll_modele_moins_marche": {
+            "n": 5056,
+            "delta": 0.000736,
+            "se": 0.000994,
+            "z": 0.74
+          }
+        },
+        {
+          "bucket": "5%-10%",
+          "n": 2651,
+          "p_model": 0.5929,
+          "p_market": 0.5264,
+          "observe": 0.567,
+          "observe_se": 0.0096,
+          "cote_moyenne": 1.919,
+          "roi_pct": 4.18,
+          "roi_se_pct": 1.86,
+          "roi_z": 2.25,
+          "paired_ll_modele_moins_marche": {
+            "n": 2651,
+            "delta": -0.001708,
+            "se": 0.002706,
+            "z": -0.63
+          }
+        },
+        {
+          "bucket": "10%+",
+          "n": 198,
+          "p_model": 0.6195,
+          "p_market": 0.5031,
+          "observe": 0.6515,
+          "observe_se": 0.0339,
+          "cote_moyenne": 2.015,
+          "roi_pct": 25.61,
+          "roi_se_pct": 7.09,
+          "roi_z": 3.61,
+          "paired_ll_modele_moins_marche": {
+            "n": 198,
+            "delta": -0.045405,
+            "se": 0.016394,
+            "z": -2.77
+          }
+        }
+      ]
+    },
+    {
+      "label": "desaccord avec l'ouverture, mise a l'ouverture (executable)",
+      "n": 8594,
+      "buckets": [
+        {
+          "bucket": "0%-2%",
+          "n": 2877,
+          "p_model": 0.5154,
+          "p_market": 0.5055,
+          "observe": 0.52,
+          "observe_se": 0.0093,
+          "cote_moyenne": 1.996,
+          "roi_pct": -0.38,
+          "roi_se_pct": 1.88,
+          "roi_z": -0.2,
+          "paired_ll_modele_moins_marche": {
+            "n": 2877,
+            "delta": -0.000286,
+            "se": 0.00044,
+            "z": -0.65
+          }
+        },
+        {
+          "bucket": "2%-5%",
+          "n": 3218,
+          "p_model": 0.5439,
+          "p_market": 0.5104,
+          "observe": 0.536,
+          "observe_se": 0.0088,
+          "cote_moyenne": 1.974,
+          "roi_pct": 0.39,
+          "roi_se_pct": 1.73,
+          "roi_z": 0.22,
+          "paired_ll_modele_moins_marche": {
+            "n": 3218,
+            "delta": -0.000937,
+            "se": 0.001237,
+            "z": -0.76
+          }
+        },
+        {
+          "bucket": "5%-10%",
+          "n": 2169,
+          "p_model": 0.5823,
+          "p_market": 0.5137,
+          "observe": 0.5662,
+          "observe_se": 0.0106,
+          "cote_moyenne": 1.953,
+          "roi_pct": 6.16,
+          "roi_se_pct": 2.09,
+          "roi_z": 2.95,
+          "paired_ll_modele_moins_marche": {
+            "n": 2169,
+            "delta": -0.005464,
+            "se": 0.003074,
+            "z": -1.78
+          }
+        },
+        {
+          "bucket": "10%+",
+          "n": 330,
+          "p_model": 0.6239,
+          "p_market": 0.4944,
+          "observe": 0.6333,
+          "observe_se": 0.0265,
+          "cote_moyenne": 2.186,
+          "roi_pct": 36.88,
+          "roi_se_pct": 7.99,
+          "roi_z": 4.61,
+          "paired_ll_modele_moins_marche": {
+            "n": 330,
+            "delta": -0.057677,
+            "se": 0.017913,
+            "z": -3.22
+          }
+        }
+      ]
+    },
+    {
+      "label": "desaccord avec la cloture, mise a l'ouverture (ni l'un ni l'autre)",
+      "n": 8594,
+      "buckets": [
+        {
+          "bucket": "0%-2%",
+          "n": 3231,
+          "p_model": 0.5123,
+          "p_market": 0.5025,
+          "observe": 0.5076,
+          "observe_se": 0.0088,
+          "cote_moyenne": 2.008,
+          "roi_pct": -3.11,
+          "roi_se_pct": 1.77,
+          "roi_z": -1.75,
+          "paired_ll_modele_moins_marche": {
+            "n": 3231,
+            "delta": 0.000338,
+            "se": 0.00041,
+            "z": 0.82
+          }
+        },
+        {
+          "bucket": "2%-5%",
+          "n": 3449,
+          "p_model": 0.542,
+          "p_market": 0.5087,
+          "observe": 0.5245,
+          "observe_se": 0.0085,
+          "cote_moyenne": 1.983,
+          "roi_pct": -0.56,
+          "roi_se_pct": 1.74,
+          "roi_z": -0.32,
+          "paired_ll_modele_moins_marche": {
+            "n": 3449,
+            "delta": 0.000644,
+            "se": 0.001202,
+            "z": 0.54
+          }
+        },
+        {
+          "bucket": "5%-10%",
+          "n": 1766,
+          "p_model": 0.5771,
+          "p_market": 0.5104,
+          "observe": 0.5617,
+          "observe_se": 0.0118,
+          "cote_moyenne": 1.95,
+          "roi_pct": 5.26,
+          "roi_se_pct": 2.31,
+          "roi_z": 2.27,
+          "paired_ll_modele_moins_marche": {
+            "n": 1766,
+            "delta": -0.004175,
+            "se": 0.00332,
+            "z": -1.26
+          }
+        },
+        {
+          "bucket": "10%+",
+          "n": 148,
+          "p_model": 0.612,
+          "p_market": 0.4946,
+          "observe": 0.6284,
+          "observe_se": 0.0397,
+          "cote_moyenne": 1.926,
+          "roi_pct": 18.97,
+          "roi_se_pct": 8.0,
+          "roi_z": 2.37,
+          "paired_ll_modele_moins_marche": {
+            "n": 148,
+            "delta": -0.037926,
+            "se": 0.019511,
+            "z": -1.94
+          }
+        }
+      ]
+    }
+  ]
+}
