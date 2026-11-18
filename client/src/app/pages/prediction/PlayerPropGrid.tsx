@@ -35,6 +35,13 @@ import type { BetOpt, MLProps } from "./gameMarkets";
 import { Check, ChevronDown } from "lucide-react";
 import { useSectionFold } from "./foldAll";
 import { useRegisterTopBets } from "./topBetsRegistry";
+
+/** « Connor McDavid » → « C. McDavid » (affichage mobile de la grille). */
+function shortName(full: string): string {
+  const parts = full.trim().split(/\s+/);
+  if (parts.length < 2) return full;
+  return `${parts[0][0]}. ${parts.slice(1).join(" ")}`;
+}
 /** Les statistiques qu'on peut miser en grille. */
 export type PropMetric = "goals" | "assists" | "points" | "shots" | "hits" | "blocks" | "saves";
 
@@ -803,7 +810,7 @@ export function PlayerPropGrid({ metric, sides, gameId, accent }: {
             <table className="w-full border-collapse text-xs">
               <thead>
                 <tr className="text-[#8a9ea6]">
-                  <th className="text-left font-semibold px-3 py-2 sticky left-0 z-10" style={{ background: "#131A12" }}>
+                  <th className="text-left font-semibold px-2 sm:px-3 py-2 sticky left-0 z-10" style={{ background: "#131A12" }}>
                     {t("chart.player")}
                   </th>
                   {/* Colonne « ce soir » — uniquement pendant le match. Elle
@@ -811,12 +818,12 @@ export function PlayerPropGrid({ metric, sides, gameId, accent }: {
                       la lecture de toutes les cases qui suivent : « 2+ buts »
                       ne veut pas dire la même chose selon qu'il en a déjà un. */}
                   {inGame && (
-                    <th className="font-semibold px-2 py-2 text-center whitespace-nowrap text-red-400">
+                    <th className="font-semibold px-1 sm:px-2 py-2 text-center whitespace-nowrap text-red-400">
                       {t("prop.tonight")}
                     </th>
                   )}
                   {headers.map((h, i) => (
-                    <th key={i} className="font-semibold px-1.5 py-2 text-center whitespace-nowrap">
+                    <th key={i} className="font-semibold px-0.5 sm:px-1.5 py-2 text-center whitespace-nowrap">
                       {perRowHeaders ? "" : h}
                     </th>
                   ))}
@@ -825,16 +832,21 @@ export function PlayerPropGrid({ metric, sides, gameId, accent }: {
               <tbody>
                 {shown.map((r) => (
                   <tr key={r.id} className="border-t border-white/[0.06]">
-                    <td className="px-3 py-1.5 sticky left-0 z-10 whitespace-nowrap" style={{ background: "#131A12" }}>
-                      <span className="text-white font-medium">{r.name}</span>
-                      <span className="text-[#5c6f63] ml-1.5">{r.position}</span>
+                    <td className="px-2 sm:px-3 py-1.5 sticky left-0 z-10 whitespace-nowrap" style={{ background: "#131A12" }}>
+                      {/* Mobile (Clarity, 2026-11-19) : le nom complet + la
+                          position prenaient presque tout l'écran et cachaient
+                          les chiffres. Sous 640 px : « C. McDavid », sans la
+                          position. */}
+                      <span className="text-white font-medium sm:hidden">{shortName(r.name)}</span>
+                      <span className="text-white font-medium hidden sm:inline">{r.name}</span>
+                      <span className="text-[#5c6f63] ml-1.5 hidden sm:inline">{r.position}</span>
                       {/* Le total de saison situe le joueur : sans lui, deux
                           cases à 18 % se ressemblent alors que l'une repose sur
                           40 matchs et l'autre sur 3. */}
-                      <span className="text-[#5c6f63] ml-1.5 tabular-nums">({r.total})</span>
+                      <span className="text-[#5c6f63] ml-1 sm:ml-1.5 tabular-nums text-[10px] sm:text-xs">({r.total})</span>
                     </td>
                     {inGame && (
-                      <td className="px-2 py-1.5 text-center tabular-nums font-bold"
+                      <td className="px-1 sm:px-2 py-1.5 text-center tabular-nums font-bold"
                           style={{ color: (r.liveCount ?? 0) > 0 ? "#f87171" : "#5c6f63" }}>
                         {r.liveCount ?? "—"}
                       </td>
@@ -850,7 +862,7 @@ export function PlayerPropGrid({ metric, sides, gameId, accent }: {
                       const seuil = r.thresholds[i];
                       const reached = seuil != null && r.liveCount != null && r.liveCount >= seuil;
                       return (
-                        <td key={o.id} className="px-1 py-1.5 align-middle relative" style={{ minWidth: 56 }}>
+                        <td key={o.id} className="px-0.5 sm:px-1 py-1.5 align-middle relative">
                           {perRowHeaders && (
                             <div className="text-[#5c6f63] text-[9px] text-center leading-none mb-0.5 tabular-nums">
                               {r.headers[i]}
@@ -862,7 +874,7 @@ export function PlayerPropGrid({ metric, sides, gameId, accent }: {
                               <Check size={9} strokeWidth={3.5} className="mx-auto" />
                             </div>
                           )}
-                          <BetOption opt={o} accent={accent} compact />
+                          <div className="min-w-[42px] sm:min-w-[52px]"><BetOption opt={o} accent={accent} compact /></div>
                         </td>
                       );
                     })}

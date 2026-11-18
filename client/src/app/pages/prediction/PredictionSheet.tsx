@@ -678,7 +678,7 @@ export function isDecidedLive(opt: BetOpt): boolean {
  * EST un pari, et qu'un second composant qui se contenterait d'y ressembler
  * finirait par diverger sur l'un de ces quatre points.
  */
-export function BetOption({ opt, accent, compact = false }: { opt: BetOpt; accent: string; compact?: boolean }) {
+export function BetOption({ opt, accent, compact = false, dense = false }: { opt: BetOpt; accent: string; compact?: boolean; /** Tuile réduite avec étiquette (Top 90 %+, 3 par rangée sur mobile). */ dense?: boolean }) {
   const { t, lang } = useI18n();
   const shownLabel = marketText(opt.label, lang);
   const mode = useContext(RevealModeCtx);
@@ -800,13 +800,13 @@ export function BetOption({ opt, accent, compact = false }: { opt: BetOpt; accen
         aria-pressed={inSlip}
         aria-label={compact ? shownLabel : undefined}
         title={compact ? shownLabel : undefined}
-        className={`relative flex flex-col items-center justify-between rounded-xl border transition-all active:scale-[0.97] w-full ${compact ? "p-1.5" : "p-3"}`}
+        className={`relative flex flex-col items-center justify-between border transition-all active:scale-[0.97] w-full ${compact ? "rounded-lg px-0.5 py-1 sm:p-1.5" : dense ? "rounded-lg px-1 py-1.5" : "rounded-xl p-3"}`}
         style={inSlip
           // Vert franc et fond teinté : à côté d'une tuile ordinaire bordée de
           // la couleur du pourcentage, un vert pâle ne se lirait pas comme un
           // état mais comme une nuance de plus.
-          ? { minHeight: compact ? 0 : 64, background: "#132116", borderColor: "#4ade80", borderWidth: 2 }
-          : { minHeight: compact ? 0 : 64, background: "#131A12", borderColor: liveStyle ? "rgba(255,255,255,0.30)" : shownColor + "55" }}
+          ? { minHeight: compact || dense ? 0 : 64, background: "#132116", borderColor: "#4ade80", borderWidth: 2 }
+          : { minHeight: compact || dense ? 0 : 64, background: "#131A12", borderColor: liveStyle ? "rgba(255,255,255,0.30)" : shownColor + "55" }}
       >
         {/* La coche dit CE QUE le vert veut dire. Un liseré seul se devine ;
             une couleur seule ne se voit pas non plus en vision daltonienne. */}
@@ -822,10 +822,10 @@ export function BetOption({ opt, accent, compact = false }: { opt: BetOpt; accen
             répéter dans chaque case rendrait le tableau illisible. Elle reste
             accessible par `aria-label` et l'infobulle. */}
         {!compact && (
-          <span className="text-white text-[11px] font-medium text-center leading-tight">{shownLabel}</span>
+          <span className={`text-white font-medium text-center leading-tight ${dense ? "text-[9.5px] line-clamp-2" : "text-[11px]"}`}>{shownLabel}</span>
         )}
         <span
-          className={`${compact ? "" : "mt-2 px-3"} py-0.5 rounded-full text-xs font-bold ${paleStyle ? "opacity-40" : ""}`}
+          className={`${compact ? "px-1 text-[11px] sm:text-xs" : dense ? "mt-1 px-1.5 text-[11px]" : "mt-2 px-3 text-xs"} py-0.5 rounded-full font-bold tabular-nums whitespace-nowrap ${paleStyle ? "opacity-40" : ""}`}
           data-compact={compact || undefined}
           style={pillStyle}
           title={mlMissing ? t("ml.unavailable") : paleStyle ? t("pred.prematchValue") : undefined}

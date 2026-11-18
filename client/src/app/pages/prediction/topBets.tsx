@@ -71,7 +71,7 @@ export function TopBetsSection({ accent }: { accent: string }) {
         type="button"
         onClick={toggle}
         aria-expanded={!collapsed}
-        className="w-full flex items-center gap-2 px-4 py-3"
+        className="w-full flex items-center gap-2 px-3 py-2 sm:px-4 sm:py-3"
         style={{ borderBottom: collapsed ? "none" : "1px solid rgba(255,255,255,0.06)" }}
       >
         <span className="text-xs font-bold uppercase tracking-wider" style={{ color: accent }}>
@@ -90,15 +90,15 @@ export function TopBetsSection({ accent }: { accent: string }) {
         />
       </button>
       {!collapsed && (
-        <div className="p-3 flex flex-col gap-2">
+        <div className="p-2 sm:p-3 flex flex-col gap-1.5">
           <p className="text-[#8a9ea6] text-[11px] px-0.5">{t("pred.top90Hint")}</p>
           {top.length === 0 ? (
             <p className="text-[#8a9ea6] text-xs text-center py-4">
               {pending ? t("pred.top90Loading") : t("pred.top90Empty")}
             </p>
           ) : (
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-              {top.map(({ opt }) => <BetOption key={opt.id} opt={opt} accent={accent} />)}
+            <div className="grid grid-cols-3 md:grid-cols-4 gap-1.5">
+              {top.map(({ opt }) => <BetOption key={opt.id} opt={opt} accent={accent} dense />)}
             </div>
           )}
         </div>
