@@ -307,3 +307,149 @@ export function mlExplanation(text: string, lang: Lang): string {
   // L'étiquette d'état du match (direct) suit les règles des notes.
   return ruleNote(out, lang);
 }
+
+/* ─── Titres de sections et libellés de paris ────────────────────────────────
+ *
+ * L'inverse des notes : le serveur écrit les TITRES de groupes de marchés
+ * (« Total Goals », « Shots on Goal »…), les en-têtes de tableaux (« Over »,
+ * « Yes ») et les libellés des tuiles (« TOR wins », « Over 5.5 ») en ANGLAIS
+ * (`nhlPredictions.ts`). Jusqu'au 2026-11-18, la version française les
+ * affichait tels quels. Même méthode : tables de remplacement côté client.
+ *
+ * ⚠️ Garder aligné avec les gabarits du serveur (et les tuiles locales de
+ * `TeamPrediction.tsx` / `PlayerPrediction.tsx`). En anglais : intact.
+ */
+const MKT_EXACT: Record<string, string> = {
+  // Titres de groupes (serveur)
+  "Moneyline": "Vainqueur du match",
+  "Match Betting": "Issue du match",
+  "Double Chance": "Double chance",
+  "Puck Line": "Écart (puck line)",
+  "Total Goals": "Total de buts",
+  "Team Total Goals": "Buts par équipe",
+  "Both Teams to Score": "Les deux équipes marquent",
+  "Correct Score": "Score exact",
+  "1st Period": "1re période",
+  "2nd Period": "2e période",
+  "3rd Period": "3e période",
+  "Lead after 1st": "En avance après la 1re",
+  "Lead after 2nd": "En avance après la 2e",
+  "Lead after 3rd (regulation)": "En avance après la 3e (60 min)",
+  "1st Period Goals": "Buts en 1re période",
+  "2nd Period Goals": "Buts en 2e période",
+  "3rd Period Goals": "Buts en 3e période",
+  "Extra Time": "Prolongation",
+  "Winning Margin": "Écart à la victoire",
+  "Team Specials": "Spéciaux d'équipe",
+  "Goal Scoring": "Buts",
+  "Assists": "Passes",
+  "Points": "Points",
+  "Shots on Goal": "Tirs au but",
+  "Hits": "Mises en échec",
+  "Blocked Shots": "Tirs bloqués",
+  "Power Play": "Avantage numérique",
+  "Penalty Minutes": "Minutes de pénalité",
+  "Saves": "Arrêts",
+  "Goals Against": "Buts alloués",
+  "Game Result": "Résultat du match",
+  // Titres des tuiles locales (TeamPrediction.tsx)
+  "Overtime": "Prolongation",
+  "Team Goals": "Buts de l'équipe",
+  "Clean Sheet / Both Score": "Blanchissage / les deux marquent",
+  "Clean Sheet": "Blanchissage",
+  "Period Results": "Résultats par période",
+  "Special Teams": "Unités spéciales",
+  // En-têtes de tableaux
+  "Over": "Plus",
+  "Under": "Moins",
+  "Yes": "Oui",
+  "No": "Non",
+  "Tie": "Nul",
+  "Line": "Ligne",
+  "Goals": "Buts",
+  "Home": "Domicile",
+  "Away": "Visiteur",
+  // Libellés fixes
+  "Both Teams Score": "Les deux équipes marquent",
+  "Both Teams Score — No": "Les deux équipes marquent — non",
+  "Winner 5+": "Vainqueur 5+",
+  "Tied after P3 (OT)": "Égalité après P3 (prol.)",
+  "Goes to OT": "Va en prolongation",
+  "Match Goes to OT": "Le match va en prolongation",
+  "Decided in Regulation": "Décidé en 60 min",
+  "Clean Sheet (Shutout)": "Blanchissage",
+  "Scores a PP Goal": "Marque en avantage numérique",
+  "Kills All Penalties": "Écoule toutes ses pénalités",
+  "Anytime Goal": "Marque un but",
+  "Anytime Goal Scorer": "Marque un but",
+  "First Goal Scorer": "Premier buteur",
+  "2+ Goals": "2+ buts",
+  "1+ Assist": "1+ passe",
+  "2+ Assists": "2+ passes",
+  "3+ Assists": "3+ passes",
+  "1+ Point": "1+ point",
+  "2+ Points": "2+ points",
+  "3+ Points": "3+ points",
+  "PP Point": "Point en avantage numérique",
+  "PP Goal": "But en avantage numérique",
+  "Team Win": "Victoire de l'équipe",
+  "Goalie Win": "Victoire du gardien",
+  "Shutout": "Blanchissage",
+};
+
+const STAT_FR: Record<string, string> = {
+  Goals: "buts", Assists: "passes", Points: "points", Shots: "tirs",
+  Hits: "mises en échec", Blocks: "tirs bloqués", PIM: "minutes de pénalité",
+};
+
+// Premier gabarit qui correspond l'emporte : du plus précis au plus général.
+const MKT_RULES: Array<[RegExp, string | ((...m: string[]) => string)]> = [
+  [/^(.+) wins, other score$/, "$1 gagne, autre score"],
+  [/^(.+) wins$/, "$1 gagne"],
+  [/^(.+) loses$/, "$1 perd"],
+  [/^(.+) in Reg$/, "$1 en 60 min"],
+  [/^(.+) in OT\/SO$/, "$1 en prol./TB"],
+  [/^(.+) or Draw$/, "$1 ou nul"],
+  [/^Both Teams Score (\d)\+ — No$/, "Les deux marquent $1+ — non"],
+  [/^Both Teams Score (\d)\+$/, "Les deux marquent $1+"],
+  [/^(.+) [Ll]eads (?:after )?P(\d)$/, "$1 mène après P$2"],
+  [/^Tied after P(\d)$/, "Égalité après P$1"],
+  [/^P(\d) Over (\S+)$/, "P$1 : plus de $2"],
+  [/^(Over|Under) (\S+) GA$/, (_m, s, l) => `${s === "Over" ? "Plus" : "Moins"} de ${l} buts alloués`],
+  [/^(Over|Under) (\S+) Saves$/, (_m, s, l) => `${s === "Over" ? "Plus" : "Moins"} de ${l} arrêts`],
+  [/^(Goals|Assists|Points|Shots|Hits|Blocks|PIM) (Over|Under) (\S+)$/,
+    (_m, st, s, l) => `${s === "Over" ? "Plus" : "Moins"} de ${l} ${STAT_FR[st]}`],
+  [/^Over (\S+)$/, "Plus de $1"],
+  [/^Under (\S+)$/, "Moins de $1"],
+  [/^(.+) Over (\S+)$/, "$1 plus de $2"],
+  [/^(.+) Under (\S+)$/, "$1 moins de $2"],
+  [/^(.+) Over$/, "$1 plus"],
+  [/^(.+) Under$/, "$1 moins"],
+  [/^(.+) by (\d\+?)$/, "$1 par $2"],
+  [/^(.+) Shutout$/, "Blanchissage de $1"],
+  [/^(.+) PP Goal$/, "$1 marque en avantage numérique"],
+  [/^(.+) Kills All PKs$/, "$1 écoule toutes ses pénalités"],
+  [/^(.+) or (.+)$/, "$1 ou $2"],
+];
+
+/**
+ * Titre de section, en-tête de tableau ou libellé de pari dans la langue de
+ * l'app. Inconnu → tel quel (un nom d'équipe ou de joueur, un score « 3-1 »).
+ */
+export function marketText(text: string, lang: Lang): string {
+  if (lang !== "fr" || !text) return text;
+  // « Joueur · Libellé » : chaque morceau à part, le nom reste intact.
+  if (text.includes(" · ")) return text.split(" · ").map((p) => marketText(p, lang)).join(" · ");
+  let out = MKT_EXACT[text];
+  if (out === undefined) {
+    out = text;
+    for (const [re, rep] of MKT_RULES) {
+      if (re.test(text)) {
+        out = typeof rep === "string" ? text.replace(re, rep) : text.replace(re, rep as (...m: string[]) => string);
+        break;
+      }
+    }
+  }
+  // Virgule décimale française : « Plus de 5,5 », « TOR −1,5 ».
+  return out.replace(/(\d)\.(\d)/g, "$1,$2");
+}

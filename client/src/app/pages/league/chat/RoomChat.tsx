@@ -146,7 +146,7 @@ export function RoomChat({ room, currentUserId, me, onBack, onUpdate, onLeft, on
       // Toujours fusionner, jamais remplacer — même au montage : le socket peut
       // avoir livré un message pendant que cette requête était en vol.
       .then(mergeMessages)
-      .catch((e) => { if (!isResync) setErrorMsg(e.message ?? "Could not load messages"); })
+      .catch((e) => { if (!isResync) setErrorMsg(e.message ?? t("chat.loadFailed")); })
       .finally(() => { if (!isResync) setLoadingMessages(false); });
   }, [room.id, resyncKey]);
 
@@ -297,7 +297,7 @@ export function RoomChat({ room, currentUserId, me, onBack, onUpdate, onLeft, on
         try {
           await profileApiService.deleteMessage(room.id, msgId);
         } catch (e: any) {
-          setErrorMsg(e.message ?? "Could not delete message");
+          setErrorMsg(e.message ?? t("chat.deleteFailed"));
         }
       },
     });
@@ -376,7 +376,7 @@ export function RoomChat({ room, currentUserId, me, onBack, onUpdate, onLeft, on
           await profileApiService.leaveRoom(room.id);
           onLeft(room.id);
         } catch (e: any) {
-          setErrorMsg(e.message ?? "Could not leave room");
+          setErrorMsg(e.message ?? t("chat.leaveFailed"));
         }
       },
     });
@@ -393,7 +393,7 @@ export function RoomChat({ room, currentUserId, me, onBack, onUpdate, onLeft, on
           await profileApiService.deleteRoom(room.id);
           onDeleted(room.id);
         } catch (e: any) {
-          setErrorMsg(e.message ?? "Could not delete room");
+          setErrorMsg(e.message ?? t("chat.deleteRoomFailed"));
         }
       },
     });
@@ -581,7 +581,7 @@ export function RoomChat({ room, currentUserId, me, onBack, onUpdate, onLeft, on
               {TAG_LABEL[t]}
             </button>
           ))}
-          {tag && <span className="text-white/40 text-[11px] self-center">tagged</span>}
+          {tag && <span className="text-white/40 text-[11px] self-center">{t("chat.tagged")}</span>}
         </div>
         <div className="flex items-center gap-2 chat-tile rounded-2xl px-3 py-2">
           <input

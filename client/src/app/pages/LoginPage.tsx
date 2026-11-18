@@ -229,7 +229,7 @@ export function LoginPage() {
     >
       {/* Brand hero */}
       <div className="flex flex-col items-center mb-12">
-        <button onClick={() => navigate("/")} aria-label="Accueil ArakIce">
+        <button onClick={() => navigate("/")} aria-label={t("common.homeAria")}>
           <IceedgeLogo size={72} wordmark={false} className="mb-5" />
         </button>
         <h1
@@ -332,7 +332,7 @@ export function LoginPage() {
             autoComplete={mode === "login" ? "current-password" : "new-password"}
             {...focusHandlers} />
           <button type="button" onClick={() => setShowPwd(v => !v)}
-            aria-label={showPwd ? "Hide password" : "Show password"}
+            aria-label={showPwd ? t("login.hidePwd") : t("login.showPwd")}
             className="absolute right-3 top-1/2 -translate-y-1/2" style={{ color: "#92A08A" }}>
             {showPwd ? <EyeOff size={18} /> : <Eye size={18} />}
           </button>
@@ -490,25 +490,25 @@ export function LoginPage() {
           Web only: those pages are not shipped in the iOS bundle (R9), and one of
           them is the betting-software page (APPLE_PLAN §4). */}
       {features.seoLinks && <nav
-        aria-label="NHL prediction guides"
+        aria-label={t("login.guidesAria")}
         className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 mt-3 text-[11px]"
         style={{ color: "#92A08A", opacity: 0.55 }}
       >
-        <a href="/match" className="underline underline-offset-2">Tonight's Games</a>
+        <a href="/match" className="underline underline-offset-2">{t("login.guide.games")}</a>
         <span>·</span>
-        <a href="/nhl-predictions-today" className="underline underline-offset-2">NHL Predictions Today</a>
+        <a href="/nhl-predictions-today" className="underline underline-offset-2">{t("login.guide.today")}</a>
         <span>·</span>
-        <a href="/best-nhl-picks-today" className="underline underline-offset-2">Best NHL Picks</a>
+        <a href="/best-nhl-picks-today" className="underline underline-offset-2">{t("login.guide.picks")}</a>
         <span>·</span>
-        <a href="/nhl-ai-predictions" className="underline underline-offset-2">AI Predictions</a>
+        <a href="/nhl-ai-predictions" className="underline underline-offset-2">{t("login.guide.ai")}</a>
         <span>·</span>
-        <a href="/nhl-player-props" className="underline underline-offset-2">Player Props</a>
+        <a href="/nhl-player-props" className="underline underline-offset-2">{t("login.guide.props")}</a>
         <span>·</span>
-        <a href="/nhl-matchups" className="underline underline-offset-2">Matchups</a>
+        <a href="/nhl-matchups" className="underline underline-offset-2">{t("login.guide.matchups")}</a>
         <span>·</span>
-        <a href="/best-nhl-betting-software" className="underline underline-offset-2">Betting Software</a>
+        <a href="/best-nhl-betting-software" className="underline underline-offset-2">{t("login.guide.software")}</a>
         <span>·</span>
-        <a href="/about" className="underline underline-offset-2">About</a>
+        <a href="/about" className="underline underline-offset-2">{t("login.guide.about")}</a>
       </nav>}
 
       {/* Keep the app nav visible so visitors can leave the login screen and

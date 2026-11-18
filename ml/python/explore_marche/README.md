@@ -209,6 +209,30 @@ moins à égalité avec la clôture.
 Limite : les totaux ne sont cotés que par SBRO, qui s'arrête en novembre 2022.
 Rien n'est mesuré sur les lignes récentes.
 
+## m8_prolongation.py — le modèle de prolongation vaut-il la constante ?
+
+La section 4.4 décrit un modèle ajusté sur 3 429 prolongations et la 7.5,
+intitulée « Fin de match et prolongation », n'en donnait aucun résultat — alors
+que 23 % des matchs s'y rendent et que le moneyline s'écrit
+`p_reg + p_nul × p_prolongation`.
+
+Échantillon 1 (tranche de test, modèles servis), constante de repli 0,4996 :
+
+| Mesure | Modèle | Constante | Écart | z |
+| --- | --- | --- | --- | --- |
+| Les 953 prolongations seules | 0,69113 | 0,69319 | −0,00207 | −0,70 (3/5 saisons) |
+| Moneyline, les 4 331 matchs | 0,66236 | 0,66312 | −0,00076 | **−2,55** |
+
+Le gain ne se lit pas sur les prolongations — 953 matchs sont trop peu — mais
+sur l'ensemble, parce que la probabilité de prolongation entre dans le prix de
+chaque match, pas seulement de ceux qui y vont. C'est le second chiffre qui
+tranche pour le produit.
+
+Calibration : le modèle sous-estime le domicile dans sa classe basse (43,5 %
+prédits pour 52,0 % observés sur 100 matchs, 1,7 erreur-type) et tombe juste
+dans les trois autres. Nuls après 60 min : 21,45 % prédits pour 22,00 %
+observés — ce qui reproduit la mesure de τ donnée en 7.5.
+
 ## Reprendre les calculs
 
 `out/` garde les folds (`fold_*.pkl`), les probabilités (`pml_*.npz`) et les
@@ -229,9 +253,10 @@ python explore_marche/m5_bandes_matin.py
 python explore_marche/m6_echantillons.py
 python explore_marche/m7_totaux.py pov
 python explore_marche/m7_totaux.py compare
+python explore_marche/m8_prolongation.py
 ```
 
 Rapports : `ml/models/melange_marche_report.json`, `clv_matin_report.json`,
 `clv_matin_precision.json`, `desaccord_roi_report.json`,
-`bandes_matin_report.json`, `echantillons_report.json`, `totaux_report.json`, et les
-rapports CLV complets dans `out/`.
+`bandes_matin_report.json`, `echantillons_report.json`, `totaux_report.json`, `prolongation_report.json`,
+et les rapports CLV complets dans `out/`.

@@ -20,7 +20,7 @@
 
 import { predictionApiService, isPredictionUnavailable } from "./predictionApiService";
 import { mlLegProbability } from "./mlLegProbability";
-import type { MarketDefinition } from "../data/betMarkets";
+import { localizeMarket, type MarketDefinition } from "../data/betMarkets";
 import type { UIGame, UIPlayer, UITeam } from "../hooks/useNHLData";
 import type { UpcomingGame } from "../pages/prediction/predictionShared";
 import type { BetLeg, BetMarketType } from "../types/bet";
@@ -86,6 +86,8 @@ export interface BuildLegDeps {
   players: readonly UIPlayer[];
   getTeamById: (id: string) => UITeam | undefined;
   hasLeg: (legId: string) => boolean;
+  /** Langue des libellés de la jambe (coupon). Anglais par défaut. */
+  lang?: "en" | "fr";
 }
 
 export type BuildLegResult =
@@ -102,10 +104,12 @@ function buildSelectionLabel(
   subject: LegSubject,
   selection: string,
   line: number | undefined,
-  getTeamById: BuildLegDeps["getTeamById"]
+  getTeamById: BuildLegDeps["getTeamById"],
+  lang: "en" | "fr" = "en",
 ) {
-  const lineStr = line ? ` ${line}` : "";
-  const selStr = selection === "over" ? "Over" : selection === "under" ? "Under" : selection;
+  const fr = lang === "fr";
+  const lineStr = line ? ` ${fr ? String(line).replace(".", ",") : line}` : "";
+  const selStr = selection === "over" ? (fr ? "Plus de" : "Over") : selection === "under" ? (fr ? "Moins de" : "Under") : selection;
 
   if (market.requiresLine && market.requiresSelection) {
     return {
@@ -117,8 +121,8 @@ function buildSelectionLabel(
     // « EDM or draw » / « No draw » : la sélection seule ne dit pas l'issue.
     const teamData = selection === "no_draw" ? undefined : getTeamById(selection);
     return teamData
-      ? { full: `${teamData.name} or draw — ${market.label}`, short: `${teamData.abbr}/X ${market.shortLabel}` }
-      : { full: `No draw — ${market.label}`, short: `No draw ${market.shortLabel}` };
+      ? { full: `${teamData.name} ${fr ? "ou nul" : "or draw"} — ${market.label}`, short: `${teamData.abbr}/X ${market.shortLabel}` }
+      : { full: `${fr ? "Pas de nul" : "No draw"} — ${market.label}`, short: `${fr ? "Pas de nul" : "No draw"} ${market.shortLabel}` };
   }
   if (market.requiresSelection) {
     const teamData = getTeamById(selection);
@@ -208,7 +212,9 @@ export async function buildLeg(input: BuildLegInput, deps: BuildLegDeps): Promis
     return { ok: false, reason: "unavailable" };
   }
 
-  const selectionLabel = buildSelectionLabel(market, subject, selectionValue, lineValue, deps.getTeamById);
+  // Libellés dans la langue de l'app (le `type` du marché, lui, ne change pas).
+  const shownMarket = localizeMarket(market, deps.lang ?? "en");
+  const selectionLabel = buildSelectionLabel(shownMarket, subject, selectionValue, lineValue, deps.getTeamById, deps.lang ?? "en");
 
   // Pari joueur : le coupon porte l'ÉQUIPE du joueur comme sujet, et ce qui
   // a été parié — nom du joueur compris — comme sélection (même règle que
@@ -223,7 +229,7 @@ export async function buildLeg(input: BuildLegInput, deps: BuildLegDeps): Promis
   const leg = {
     id: legId,
     marketType: market.type as BetMarketType,
-    marketLabel: market.label,
+    marketLabel: shownMarket.label,
     subjectType: subject.type,
     subjectId: subject.id,
     subjectName: isPlayer ? playerTeamAbbr : subject.name,

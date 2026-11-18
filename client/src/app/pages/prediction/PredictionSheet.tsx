@@ -10,7 +10,7 @@ import { useEffect, useMemo, useState, useContext } from "react";
 import { predictionApiService } from "../../services/predictionApiService";
 import { requestFromMLProps } from "../../services/predictionRequest";
 import { useI18n } from "../../i18n";
-import { ruleNote as localizeRuleNote } from "../../i18n/serverText";
+import { ruleNote as localizeRuleNote, marketText } from "../../i18n/serverText";
 import { nhlLogoUrl } from "../../data/teamEmoji";
 import { useBet } from "../../context/BetContext";
 import type { BetLeg, PredictionCaveat } from "../../types/bet";
@@ -132,6 +132,9 @@ function PredictionSheet({ label, rulePct, serverPct, ruleNote, accent, mlProps,
   const { table: oddsTable, bookTitle, nameByAbbr } = useContext(BetOddsCtx);
   const bookPrice = priceForBet(oddsTable, mlProps, nameByAbbr, optId);
   const llmId = llmCacheId(label, mlProps, lang);
+  // Libellé AFFICHÉ (traduit). `label` reste la clé : identifiant de jambe,
+  // cache IA et pondérations en dépendent, ils ne doivent pas changer avec la langue.
+  const shown = marketText(label, lang);
   // Réponse en cache si déjà générée : JSON v2 (texte + analyse structurée + faits)
   // ou, pour une entrée écrite avant le 2026-10-04, texte brut.
   const cached = useMemo(() => decodeLlmCache(loadLlmCache(llmId)), [llmId]);
@@ -205,9 +208,9 @@ function PredictionSheet({ label, rulePct, serverPct, ruleNote, accent, mlProps,
     const opp = mlProps?.opponentId?.toUpperCase();
     const isPlayer = mlProps?.type === "player";
     openBetFor({
-      match: team && opp ? (mlProps?.isHome === false ? `${team} @ ${opp}` : `${opp} @ ${team}`) : label,
+      match: team && opp ? (mlProps?.isHome === false ? `${team} @ ${opp}` : `${opp} @ ${team}`) : shown,
       selection: isPlayer && mlProps?.playerName && !label.startsWith(mlProps.playerName)
-        ? `${mlProps.playerName} · ${label}` : label,
+        ? `${mlProps.playerName} · ${shown}` : shown,
       minOdds: minOddsFromPct(pct),
       shownPrice: bookPrice ?? null,
       shownBook: bookTitle ?? null,
@@ -250,12 +253,12 @@ function PredictionSheet({ label, rulePct, serverPct, ruleNote, accent, mlProps,
     const isPlayer = mlProps?.type === "player";
     const playerTeam = isPlayer ? (mlProps?.teamAbbr ?? "").toUpperCase() : "";
     const betText = isPlayer && mlProps?.playerName && !label.startsWith(mlProps.playerName)
-      ? `${mlProps.playerName} · ${label}`
-      : label;
+      ? `${mlProps.playerName} · ${shown}`
+      : shown;
     const leg: BetLeg = {
       id: legId,
       marketType: (marketType ?? mlProps?.propType ?? "moneyline") as BetLeg["marketType"],
-      marketLabel: label,
+      marketLabel: shown,
       subjectType: mlProps?.type === "player" ? "player" : mlProps?.type === "team" ? "team" : "game",
       subjectId: mlProps?.subjectId ?? legId,
       subjectName: isPlayer ? playerTeam : (mlProps?.subjectId ?? label),
@@ -294,7 +297,7 @@ function PredictionSheet({ label, rulePct, serverPct, ruleNote, accent, mlProps,
       const mlPct = await resolveMlPct();
       const build = (history: Followup[], data: string) =>
         (isFr
-          ? `Pari : "${label}"\n` +
+          ? `Pari : "${shown}"\n` +
             `Probabilité du modèle ML : ${mlPctText(mlPct, true)}\n` +
             (mlProps ? `Marché : ${mlProps.propType ?? "vainqueur"} · Sujet : ${subject}\n` : "")
           : `Bet: "${label}"\n` +
@@ -359,7 +362,7 @@ function PredictionSheet({ label, rulePct, serverPct, ruleNote, accent, mlProps,
         )}
 
         {/* Title */}
-        <p className="text-white font-bold text-base leading-snug text-center flex-shrink-0">{label}</p>
+        <p className="text-white font-bold text-base leading-snug text-center flex-shrink-0">{shown}</p>
 
         {/* ── 💰 Le PRIX du livre, quand il en propose un ──────────────────
             Séparé de tout ce qui suit, et étiqueté du nom du livre : ce n'est
@@ -407,7 +410,7 @@ function PredictionSheet({ label, rulePct, serverPct, ruleNote, accent, mlProps,
             isHome={mlProps.isHome}
             gameId={mlProps.type === "player" ? mlProps.gameId : undefined}
             ruleBasedPct={rulePct}
-            label={label}
+            label={shown}
             simple
             // Match en cours : SEUL le chiffre du paquet (recalculé sur le
             // score) est valable. Sans lui, « indisponible » — jamais l'appel
@@ -539,7 +542,7 @@ function PredictionSheet({ label, rulePct, serverPct, ruleNote, accent, mlProps,
                 const userPrompt = isFr
                   ? `L'application a déjà calculé une probabilité statistique pour ce pari. ` +
                     `Donne le contexte que les chiffres ne captent pas.\n\n` +
-                    `Pari : "${label}"\n` +
+                    `Pari : "${shown}"\n` +
                     `Probabilité du modèle ML : ${mlPctText(mlPct, true)}\n` +
                     (mlProps ? `Marché : ${mlProps.propType ?? "vainqueur"} · Sujet : ${subject}\n` : "") +
                     dataBlock +
@@ -676,7 +679,8 @@ export function isDecidedLive(opt: BetOpt): boolean {
  * finirait par diverger sur l'un de ces quatre points.
  */
 export function BetOption({ opt, accent, compact = false }: { opt: BetOpt; accent: string; compact?: boolean }) {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
+  const shownLabel = marketText(opt.label, lang);
   const mode = useContext(RevealModeCtx);
   const { odds } = useOddsFormat();
   const { table: oddsTable, nameByAbbr } = useContext(BetOddsCtx);
@@ -794,8 +798,8 @@ export function BetOption({ opt, accent, compact = false }: { opt: BetOpt; accen
       <button
         onClick={() => setSheet(true)}
         aria-pressed={inSlip}
-        aria-label={compact ? opt.label : undefined}
-        title={compact ? opt.label : undefined}
+        aria-label={compact ? shownLabel : undefined}
+        title={compact ? shownLabel : undefined}
         className={`relative flex flex-col items-center justify-between rounded-xl border transition-all active:scale-[0.97] w-full ${compact ? "p-1.5" : "p-3"}`}
         style={inSlip
           // Vert franc et fond teinté : à côté d'une tuile ordinaire bordée de
@@ -818,7 +822,7 @@ export function BetOption({ opt, accent, compact = false }: { opt: BetOpt; accen
             répéter dans chaque case rendrait le tableau illisible. Elle reste
             accessible par `aria-label` et l'infobulle. */}
         {!compact && (
-          <span className="text-white text-[11px] font-medium text-center leading-tight">{opt.label}</span>
+          <span className="text-white text-[11px] font-medium text-center leading-tight">{shownLabel}</span>
         )}
         <span
           className={`${compact ? "" : "mt-2 px-3"} py-0.5 rounded-full text-xs font-bold ${paleStyle ? "opacity-40" : ""}`}
@@ -864,6 +868,7 @@ export function BetOption({ opt, accent, compact = false }: { opt: BetOpt; accen
 
 /* ─── MarketGroup ───────────────────────────── */
 export function MarketGroup({ group, accent }: { group: MktGroup; accent: string }) {
+  const { lang } = useI18n();
   // Pliage mémorisé et soumis au « tout plier » de la page (2026-10-13).
   const [collapsed, toggle] = useSectionFold(`grp.${group.id}`);
   const open = !collapsed;
@@ -885,7 +890,7 @@ export function MarketGroup({ group, accent }: { group: MktGroup; accent: string
         className="w-full flex items-center justify-between px-4 py-3"
         style={{ borderBottom: open ? "1px solid rgba(255,255,255,0.06)" : "none" }}
       >
-        <span className="text-[#c0cdd4] text-xs font-semibold uppercase tracking-wider">{group.title}</span>
+        <span className="text-[#c0cdd4] text-xs font-semibold uppercase tracking-wider">{marketText(group.title, lang)}</span>
         <span className="text-[#3a5060] text-xs">{open ? "▲" : "▼"}</span>
       </button>
       {open && (tables?.length ? (
@@ -920,6 +925,7 @@ export function MarketGroup({ group, accent }: { group: MktGroup; accent: string
  * grille.
  */
 function MarketTableView({ table, options, accent }: { table: MktTable; options: BetOpt[]; accent: string }) {
+  const { lang } = useI18n();
   const byId = useMemo(() => new Map(options.map(o => [o.id, o] as const)), [options]);
   const gameLive = useContext(GameLiveCtx);
   // Pendant le match : une case tranchée reste vide (la grille garde ses
@@ -931,7 +937,7 @@ function MarketTableView({ table, options, accent }: { table: MktTable; options:
   return (
     <div>
       {table.title && (
-        <p className="text-[#8a9ea6] text-[10px] font-semibold uppercase tracking-wider mb-1.5 px-0.5">{table.title}</p>
+        <p className="text-[#8a9ea6] text-[10px] font-semibold uppercase tracking-wider mb-1.5 px-0.5">{marketText(table.title, lang)}</p>
       )}
       <table className="w-full border-collapse text-xs table-fixed">
         <thead>
@@ -940,17 +946,17 @@ function MarketTableView({ table, options, accent }: { table: MktTable; options:
               {hasRowLabels && <th />}
               {table.columnGroups.map((g, i) => (
                 <th key={i} colSpan={g.span} className="font-bold px-1 pt-0.5 text-center border-b border-white/[0.06]">
-                  {g.label}
+                  {marketText(g.label, lang)}
                 </th>
               ))}
             </tr>
           )}
           <tr className="text-[#8a9ea6]">
             {hasRowLabels && (
-              <th className="text-left font-semibold px-1 py-1.5 w-14">{table.rowHeader ?? ""}</th>
+              <th className="text-left font-semibold px-1 py-1.5 w-14">{marketText(table.rowHeader ?? "", lang)}</th>
             )}
             {table.columns.map((c, i) => (
-              <th key={i} className="font-semibold px-1 py-1.5 text-center whitespace-nowrap overflow-hidden text-ellipsis">{c}</th>
+              <th key={i} className="font-semibold px-1 py-1.5 text-center whitespace-nowrap overflow-hidden text-ellipsis">{marketText(c, lang)}</th>
             ))}
           </tr>
         </thead>
@@ -958,7 +964,7 @@ function MarketTableView({ table, options, accent }: { table: MktTable; options:
           {rows.map((r, ri) => (
             <tr key={ri} className={ri > 0 ? "border-t border-white/[0.04]" : undefined}>
               {hasRowLabels && (
-                <td className="px-1 py-1 text-white font-semibold tabular-nums whitespace-nowrap">{r.label}</td>
+                <td className="px-1 py-1 text-white font-semibold tabular-nums whitespace-nowrap">{marketText(r.label, lang)}</td>
               )}
               {r.cells.map((id, ci) => {
                 const opt = id ? byId.get(id) : undefined;

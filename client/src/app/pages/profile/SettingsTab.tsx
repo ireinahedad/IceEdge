@@ -714,7 +714,7 @@ export function SettingsTab({
         >
           <FileText size={20} className="text-white/70" aria-hidden />
           <span className="flex-1 min-w-0">
-            <span className="block text-white text-xs font-medium">Saisie d'avant-match</span>
+            <span className="block text-white text-xs font-medium">{lang === "fr" ? "Saisie d'avant-match" : "Pre-game entry"}</span>
             <span className="block text-[#86d1ea] text-[11px] font-bold uppercase tracking-wider mt-0.5">admin</span>
           </span>
           <span className="text-[#bfc8cc] text-lg" aria-hidden>→</span>
@@ -730,7 +730,7 @@ export function SettingsTab({
         >
           <ScanText size={20} className="text-white/70" aria-hidden />
           <span className="flex-1 min-w-0">
-            <span className="block text-white text-xs font-medium">Labo OCR</span>
+            <span className="block text-white text-xs font-medium">{lang === "fr" ? "Labo OCR" : "OCR lab"}</span>
             <span className="block text-[#86d1ea] text-[11px] font-bold uppercase tracking-wider mt-0.5">admin</span>
           </span>
           <span className="text-[#bfc8cc] text-lg" aria-hidden>→</span>

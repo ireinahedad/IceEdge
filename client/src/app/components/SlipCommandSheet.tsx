@@ -196,7 +196,7 @@ export function SlipCommandSheet({ onClose }: { onClose: () => void }) {
   async function addAll(intents: Parameters<typeof addIntents>[0]) {
     setBusy(true);
     try {
-      const results: CommandLegResult[] = await addIntents(intents, data, { hasLeg, addLeg });
+      const results: CommandLegResult[] = await addIntents(intents, data, { hasLeg, addLeg }, lang);
       const stamp = Date.now();
       setRows(results.map((r, i): Row => r.status === "added"
         ? { key: `${stamp}-${i}`, kind: "added", legId: r.leg.id, label: `${r.leg.selection} · ${r.leg.gameInfo ?? ""}`, removed: false }

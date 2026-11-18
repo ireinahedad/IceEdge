@@ -33,7 +33,7 @@ export function NotFoundPage() {
   return (
     <div className="flex flex-col items-center justify-center min-h-screen text-white max-w-[430px] mx-auto px-6 text-center"
       style={{ background: "#0A0E0C" }}>
-      <button onClick={() => navigate("/")} aria-label="Accueil ArakIce" className="mb-6">
+      <button onClick={() => navigate("/")} aria-label={t("common.homeAria")} className="mb-6">
         <IceedgeLogo size={56} wordmark={false} />
       </button>
       <p className="text-5xl font-bold mb-2" style={{ color: "#86d1ea" }}>404</p>

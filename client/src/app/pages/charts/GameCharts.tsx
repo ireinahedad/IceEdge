@@ -148,15 +148,15 @@ export function GameCharts({ gameId }: { gameId?: string }) {
               <th className="text-left font-semibold px-3 py-2 sticky left-0 z-10" style={{ background: BG_CARD }}>
                 {t("chart.player")}
               </th>
-              <th className="font-semibold px-2 py-2 text-center">G</th>
+              <th className="font-semibold px-2 py-2 text-center">{lang === "fr" ? "B" : "G"}</th>
               <th className="font-semibold px-2 py-2 text-center">A</th>
               <th className="font-semibold px-2 py-2 text-center">P</th>
               <th className="font-semibold px-2 py-2 text-center">+/-</th>
-              <th className="font-semibold px-2 py-2 text-center">SOG</th>
-              <th className="font-semibold px-2 py-2 text-center">HIT</th>
-              <th className="font-semibold px-2 py-2 text-center">BLK</th>
-              <th className="font-semibold px-2 py-2 text-center">PIM</th>
-              <th className="font-semibold px-2 py-2 text-center">TOI</th>
+              <th className="font-semibold px-2 py-2 text-center">{lang === "fr" ? "TB" : "SOG"}</th>
+              <th className="font-semibold px-2 py-2 text-center">{lang === "fr" ? "MÉ" : "HIT"}</th>
+              <th className="font-semibold px-2 py-2 text-center">{lang === "fr" ? "TBL" : "BLK"}</th>
+              <th className="font-semibold px-2 py-2 text-center">{lang === "fr" ? "PUN" : "PIM"}</th>
+              <th className="font-semibold px-2 py-2 text-center">{lang === "fr" ? "TG" : "TOI"}</th>
             </tr>
           </thead>
           <tbody>
@@ -198,11 +198,11 @@ export function GameCharts({ gameId }: { gameId?: string }) {
           <thead>
             <tr className="text-[#8a9ea6]">
               <th className="text-left font-semibold px-3 py-2">{t("chart.gm.goalies")}</th>
-              <th className="font-semibold px-2 py-2 text-center">SV</th>
-              <th className="font-semibold px-2 py-2 text-center">SA</th>
-              <th className="font-semibold px-2 py-2 text-center">GA</th>
-              <th className="font-semibold px-2 py-2 text-center">SV%</th>
-              <th className="font-semibold px-2 py-2 text-center">TOI</th>
+              <th className="font-semibold px-2 py-2 text-center">{lang === "fr" ? "ARR" : "SV"}</th>
+              <th className="font-semibold px-2 py-2 text-center">{lang === "fr" ? "TC" : "SA"}</th>
+              <th className="font-semibold px-2 py-2 text-center">{lang === "fr" ? "BC" : "GA"}</th>
+              <th className="font-semibold px-2 py-2 text-center">{lang === "fr" ? "% ARR" : "SV%"}</th>
+              <th className="font-semibold px-2 py-2 text-center">{lang === "fr" ? "TG" : "TOI"}</th>
             </tr>
           </thead>
           <tbody>

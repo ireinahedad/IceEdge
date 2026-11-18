@@ -135,7 +135,7 @@ export function SchedulePage() {
         <div className="px-4 pt-3 pb-3 flex items-center gap-3">
           <button
             onClick={() => navigate(-1)}
-            aria-label="Back"
+            aria-label={t("common.back")}
             className="min-w-[44px] min-h-[44px] w-9 h-9 rounded-xl bg-[#131A12] border border-white/20 flex items-center justify-center flex-shrink-0"
             style={{ color: ACCENT }}
           >
@@ -354,7 +354,7 @@ export function ScheduleContent({ accent = ACCENT }: { accent?: string }) {
         <button
           onClick={() => stepMonth(-1)}
           disabled={curIdx <= minIdx}
-          aria-label="Previous month"
+          aria-label={t("common.prevMonth")}
           className="min-w-[44px] min-h-[44px] w-9 h-8 rounded-lg flex items-center justify-center transition-all disabled:opacity-25"
           style={{ color: accent }}
         >
@@ -369,7 +369,7 @@ export function ScheduleContent({ accent = ACCENT }: { accent?: string }) {
         <button
           onClick={() => stepMonth(1)}
           disabled={curIdx >= maxIdx}
-          aria-label="Next month"
+          aria-label={t("common.nextMonth")}
           className="min-w-[44px] min-h-[44px] w-9 h-8 rounded-lg flex items-center justify-center transition-all disabled:opacity-25"
           style={{ color: accent }}
         >
@@ -577,7 +577,7 @@ function GameRow({
               )}
             </>
           ) : isFinal ? (
-            <div className="text-[#4a6068] text-[11px] font-bold uppercase">Final</div>
+            <div className="text-[#4a6068] text-[11px] font-bold uppercase">{fr ? "Terminé" : "Final"}</div>
           ) : (
             <>
               <div className="text-sm font-bold tabular-nums" style={{ color: ACCENT }}>{game.startTime}</div>

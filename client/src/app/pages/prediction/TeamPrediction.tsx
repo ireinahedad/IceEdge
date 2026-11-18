@@ -24,7 +24,8 @@ import { BetOddsCtx, GameSelector, LoadingSkeleton, NotFound, RevealMode, Reveal
 /* ─── Team Prediction ─────────────────────────── */
 export function TeamPrediction({ teamId }: { teamId: string }) {
   const { theme } = useSport();
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
+  const fr = lang === "fr";
   const navigate = useNavigate();
   const accent = theme.accent;
   const [data, setData] = useState<{
@@ -148,10 +149,10 @@ export function TeamPrediction({ teamId }: { teamId: string }) {
       id: "moneyline", title: "Moneyline", cols: 2,
       options: [
         { id: "t-win",  label: `${data.abbr} wins`,            rulePct: 0,
-          ruleNote: `Season win rate of ${hp}% based on ${data.pts} pts, record ${data.homeRecord} home / ${data.awayRecord} away.`,
+          ruleNote: fr ? `Taux de victoire de la saison : ${hp} % d'après ${data.pts} pts, fiche ${data.homeRecord} à domicile / ${data.awayRecord} à l'étranger.` : `Season win rate of ${hp}% based on ${data.pts} pts, record ${data.homeRecord} home / ${data.awayRecord} away.`,
           mlProps: tml("moneyline") },
         { id: "t-lose", label: oppAbbr ? `${oppAbbr} wins` : `${data.abbr} loses`, rulePct: 0,
-          ruleNote: `${data.abbr} current streak: ${data.streak || "—"}.`,
+          ruleNote: fr ? `Séquence actuelle de ${data.abbr} : ${data.streak || "—"}.` : `${data.abbr} current streak: ${data.streak || "—"}.`,
           mlProps: oppMl },
       ],
     },
@@ -159,7 +160,7 @@ export function TeamPrediction({ teamId }: { teamId: string }) {
       id: "match", title: "Overtime", cols: 2,
       options: [
         { id: "t-ml-ot",label: "Match Goes to OT",             rulePct: 0,
-          ruleNote: "~22-24% of NHL games go to OT/SO regardless of team strength.",
+          ruleNote: fr ? "Environ 22 à 24 % des matchs de la LNH vont en prolongation ou en tirs de barrage, peu importe la force des équipes." : "~22-24% of NHL games go to OT/SO regardless of team strength.",
           mlProps: tml("game_to_ot") },
       ],
     },
@@ -167,10 +168,10 @@ export function TeamPrediction({ teamId }: { teamId: string }) {
       id: "puckline", title: "Puck Line", cols: 2,
       options: [
         { id: "t-pl-fav", label: `${data.abbr} -1.5`,          rulePct: 0,
-          ruleNote: "Win by 2+ goals.",
+          ruleNote: fr ? "Gagne par 2 buts ou plus." : "Win by 2+ goals.",
           mlProps: tml("puck_line") },
         { id: "t-pl-dog", label: `${data.abbr} +1.5`,          rulePct: 0,
-          ruleNote: "Win, or lose by exactly 1 goal.",
+          ruleNote: fr ? "Gagne, ou perd par exactement 1 but." : "Win, or lose by exactly 1 goal.",
           mlProps: tml("alt_puck_line") },
       ],
     },
@@ -178,10 +179,10 @@ export function TeamPrediction({ teamId }: { teamId: string }) {
       id: "totals", title: "Team Goals", cols: 2,
       options: [
         { id: "t-team-over", label: `${data.abbr} Over 2.5`,   rulePct: 0,
-          ruleNote: `${data.abbr} averages ${data.goalsFor.toFixed(2)} goals/game. Scoring 3+ requires above-average output.`,
+          ruleNote: fr ? `${data.abbr} marque en moyenne ${data.goalsFor.toFixed(2)} buts par match. En marquer 3 ou plus demande une production au-dessus de la moyenne.` : `${data.abbr} averages ${data.goalsFor.toFixed(2)} goals/game. Scoring 3+ requires above-average output.`,
           mlProps: tml("total_goals_over", 2.5) },
         { id: "t-team-under",label: `${data.abbr} Under 2.5`,  rulePct: 0,
-          ruleNote: `${data.abbr} held under 3 goals in a significant portion of games.`,
+          ruleNote: fr ? `${data.abbr} est resté sous les 3 buts dans une bonne partie de ses matchs.` : `${data.abbr} held under 3 goals in a significant portion of games.`,
           mlProps: tml("total_goals_under", 2.5) },
       ],
     },
@@ -189,10 +190,10 @@ export function TeamPrediction({ teamId }: { teamId: string }) {
       id: "clean", title: "Clean Sheet / Both Score", cols: 2,
       options: [
         { id: "t-cs",   label: `${data.abbr} Shutout`,          rulePct: 0,
-          ruleNote: `Shutouts happen in ~15-22% of games. ${data.abbr}'s PK at ${data.pkPct.toFixed(1)}% is a factor.`,
+          ruleNote: fr ? `Les blanchissages arrivent dans environ 15 à 22 % des matchs. L'infériorité numérique de ${data.abbr} (${data.pkPct.toFixed(1)} %) compte.` : `Shutouts happen in ~15-22% of games. ${data.abbr}'s PK at ${data.pkPct.toFixed(1)}% is a factor.`,
           mlProps: tml("clean_sheet") },
         { id: "t-btts", label: "Both Teams Score",               rulePct: 0,
-          ruleNote: "Both offenses producing. Very common in NHL (~75-80% of games).",
+          ruleNote: fr ? "Les deux attaques produisent. Très fréquent dans la LNH (environ 75 à 80 % des matchs)." : "Both offenses producing. Very common in NHL (~75-80% of games).",
           mlProps: tml("both_teams_score") },
       ],
     },
@@ -200,13 +201,13 @@ export function TeamPrediction({ teamId }: { teamId: string }) {
       id: "period", title: "Period Results", cols: 3,
       options: [
         { id: "t-p1", label: `${data.abbr} Leads P1`,           rulePct: 0,
-          ruleNote: `${data.abbr} leads after the 1st period.`,
+          ruleNote: fr ? `${data.abbr} mène après la 1re période.` : `${data.abbr} leads after the 1st period.`,
           mlProps: tml("period1_winner") },
         { id: "t-p2", label: `${data.abbr} Leads P2`,           rulePct: 0,
-          ruleNote: `${data.abbr} leads after P2. More predictive than P1.`,
+          ruleNote: fr ? `${data.abbr} mène après la 2e période. Plus révélateur que la 1re.` : `${data.abbr} leads after P2. More predictive than P1.`,
           mlProps: tml("period2_winner") },
         { id: "t-p3", label: `${data.abbr} Leads P3`,           rulePct: 0,
-          ruleNote: `Leading after P3 strongly correlates with winning the game.`,
+          ruleNote: fr ? `Mener après la 3e période va presque toujours avec la victoire.` : `Leading after P3 strongly correlates with winning the game.`,
           mlProps: tml("period3_winner") },
       ],
     },
@@ -214,10 +215,10 @@ export function TeamPrediction({ teamId }: { teamId: string }) {
       id: "pp", title: "Special Teams", cols: 2,
       options: [
         { id: "t-pp-goal", label: `${data.abbr} PP Goal`,       rulePct: 0,
-          ruleNote: `${data.abbr}'s power play is at ${data.ppPct.toFixed(1)}%. League avg is ~20%.`,
+          ruleNote: fr ? `L'avantage numérique de ${data.abbr} est à ${data.ppPct.toFixed(1)} %. La moyenne de la ligue est d'environ 20 %.` : `${data.abbr}'s power play is at ${data.ppPct.toFixed(1)}%. League avg is ~20%.`,
           mlProps: tml("pp_goal") },
         { id: "t-pk",      label: `${data.abbr} Kills All PKs`, rulePct: 0,
-          ruleNote: `${data.abbr} penalty kill at ${data.pkPct.toFixed(1)}%.`,
+          ruleNote: fr ? `Infériorité numérique de ${data.abbr} : ${data.pkPct.toFixed(1)} %.` : `${data.abbr} penalty kill at ${data.pkPct.toFixed(1)}%.`,
           mlProps: tml("penalty_kill") },
       ],
     },
@@ -225,13 +226,13 @@ export function TeamPrediction({ teamId }: { teamId: string }) {
       id: "margin", title: "Winning Margin", cols: 3,
       options: [
         { id: "t-w1", label: `${data.abbr} by 1`, rulePct: 0,
-          ruleNote: "One-goal wins are the most common margin in the NHL.",
+          ruleNote: fr ? "Gagner par un but est l'écart le plus fréquent dans la LNH." : "One-goal wins are the most common margin in the NHL.",
           mlProps: tml("winning_margin") },
         { id: "t-w2", label: `${data.abbr} by 2`, rulePct: 0,
-          ruleNote: "Two-goal victory — comfortable but not a blowout.",
+          ruleNote: fr ? "Victoire par deux buts — confortable, sans être une raclée." : "Two-goal victory — comfortable but not a blowout.",
           mlProps: tml("winning_margin") },
         { id: "t-w3", label: `${data.abbr} by 3+`, rulePct: 0,
-          ruleNote: "Blowout wins are less frequent, even for dominant teams.",
+          ruleNote: fr ? "Les victoires écrasantes sont plus rares, même pour les équipes dominantes." : "Blowout wins are less frequent, even for dominant teams.",
           mlProps: tml("winning_margin") },
       ],
     },
@@ -433,15 +434,15 @@ export function TeamPrediction({ teamId }: { teamId: string }) {
           <img src={data.logo} alt={data.name} className="w-12 h-12 object-contain" />
           <div className="flex-1">
             <p className="text-white font-bold text-base">{data.name}</p>
-            <p className="text-[#8a9ea6] text-xs">{data.conf}ern · {data.pts} pts · {data.streak || "—"}</p>
+            <p className="text-[#8a9ea6] text-xs">{fr ? (data.conf === "East" ? "Association de l'Est" : "Association de l'Ouest") : `${data.conf}ern`} · {data.pts} pts · {data.streak || "—"}</p>
           </div>
         </div>
         <div className="grid grid-cols-4 gap-2">
           {[
-            { label: "Home",   value: data.homeRecord || "—" },
-            { label: "Away",   value: data.awayRecord  || "—" },
-            { label: "PP%",    value: data.ppPct ? data.ppPct.toFixed(1)+"%" : "—" },
-            { label: "PK%",    value: data.pkPct ? data.pkPct.toFixed(1)+"%" : "—" },
+            { label: fr ? "Domicile" : "Home",   value: data.homeRecord || "—" },
+            { label: fr ? "Étranger" : "Away",   value: data.awayRecord  || "—" },
+            { label: fr ? "AN %" : "PP%",    value: data.ppPct ? data.ppPct.toFixed(1)+"%" : "—" },
+            { label: fr ? "IN %" : "PK%",    value: data.pkPct ? data.pkPct.toFixed(1)+"%" : "—" },
           ].map(s => (
             <div key={s.label} className="bg-[#0A0E0C] rounded-xl p-2 text-center">
               <p className="text-white text-xs font-bold">{s.value}</p>

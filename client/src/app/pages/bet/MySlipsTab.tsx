@@ -325,11 +325,11 @@ function SlipCard({ slip, onCancel }: { slip: BetSlip; onCancel?: () => void }) 
           </div>
           {slip.isParlay && (
             <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-[#90C9F0]/10 text-[#90C9F0] border border-[#90C9F0]/20">
-              {slip.legCount}-leg parlay
+              {t("player.parlayLegs", { n: String(slip.legCount) })}
             </span>
           )}
           {!slip.isParlay && (
-            <span className="text-[11px] text-[#4a6068]">Single</span>
+            <span className="text-[11px] text-[#4a6068]">{t("player.single")}</span>
           )}
         </div>
         <div className="text-right">
@@ -510,7 +510,7 @@ export function MySlipsTab({
       setSlips(data);
       onPendingCount?.(data.filter((s) => s.outcome === "pending").length);
     } catch (err: any) {
-      setLoadError(err ?? new Error("Could not load slips"));
+      setLoadError(err ?? new Error(t("slip.loadFailed")));
     } finally {
       setLoading(false);
     }
@@ -526,10 +526,10 @@ export function MySlipsTab({
     try {
       const summary = await settleMySlips();
       if (summary.settled > 0) {
-        setError(`TIER_UP:${summary.settled} slip${summary.settled > 1 ? "s" : ""} settled — ${summary.wins} won, ${summary.losses} lost`);
+        setError(`TIER_UP:${t("slip.settledSummary", { n: String(summary.settled), w: String(summary.wins), l: String(summary.losses) })}`);
         setTimeout(() => setError(null), 4000);
       } else {
-        setError("TIER_UP:No finished games yet — check back later");
+        setError(`TIER_UP:${t("slip.noFinished")}`);
         setTimeout(() => setError(null), 3000);
       }
       // Rechargement INCONDITIONNEL : même sans ticket réglé, la passe vient
@@ -538,7 +538,7 @@ export function MySlipsTab({
       // que le serveur avait du neuf à montrer.
       await load();
     } catch (err: any) {
-      setError(err.message ?? "Failed to check results");
+      setError(err.message ?? t("slip.checkFailed"));
       setTimeout(() => setError(null), 3000);
     } finally {
       setResolving(null);

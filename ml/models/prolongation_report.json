@@ -1,0 +1,72 @@
+{
+  "question": "le modele de prolongation (4.4) bat-il la constante servie en repli ?",
+  "echantillon": {
+    "nom": "tranche de test (echantillon 1, section 6)",
+    "n": 4331,
+    "n_prolongations": 953,
+    "periode": [
+      "2023-03-12",
+      "2026-10-17"
+    ]
+  },
+  "constante": 0.4996,
+  "modele_utilise": true,
+  "prolongations_seules": {
+    "n": 953,
+    "ll_modele": 0.69113,
+    "ll_constante": 0.69319,
+    "domicile_gagne_pct": 52.5,
+    "delta": -0.002066,
+    "se": 0.002936,
+    "z": -0.7,
+    "n_saisons": 5,
+    "saisons_gagnees": 3,
+    "z_saisons": -0.65
+  },
+  "moneyline_tous_matchs": {
+    "n": 4331,
+    "ll_chaine_servie": 0.66236,
+    "ll_avec_constante": 0.66312,
+    "delta": -0.000758,
+    "se": 0.000297,
+    "z": -2.55,
+    "n_saisons": 5,
+    "saisons_gagnees": 4,
+    "z_saisons": -1.18
+  },
+  "calibration": [
+    {
+      "classe": "40%-45%",
+      "n": 100,
+      "predit": 0.4355,
+      "observe": 0.52,
+      "observe_se": 0.05
+    },
+    {
+      "classe": "45%-50%",
+      "n": 357,
+      "predit": 0.4755,
+      "observe": 0.5014,
+      "observe_se": 0.0265
+    },
+    {
+      "classe": "50%-55%",
+      "n": 322,
+      "predit": 0.5249,
+      "observe": 0.528,
+      "observe_se": 0.0278
+    },
+    {
+      "classe": "55%-60%",
+      "n": 158,
+      "predit": 0.5693,
+      "observe": 0.5633,
+      "observe_se": 0.0395
+    }
+  ],
+  "nuls_apres_60_min": {
+    "predit_pct": 21.45,
+    "observe_pct": 22.0,
+    "n": 4331
+  }
+}

@@ -214,7 +214,7 @@ export function MessageBubble({
             <button
               onClick={() => onDelete(msg.id)}
               className="tap-44 text-white/30 hover:text-red-400 text-[11px] opacity-40 hover:opacity-100 transition-opacity self-center flex-shrink-0"
-              title="Delete"
+              title={t("common.delete")}
             >
               <Trash2 size={13} />
             </button>

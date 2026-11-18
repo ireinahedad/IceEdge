@@ -104,7 +104,7 @@ export function CreateRoomModal({ onClose, onCreate }: {
         <input
           value={name}
           onChange={(e) => { setName(e.target.value); if (error) setError(null); }}
-          placeholder="e.g. Western Conference"
+          placeholder={t("chat.namePlaceholder")}
           maxLength={32}
           required
           aria-required="true"
@@ -117,7 +117,7 @@ export function CreateRoomModal({ onClose, onCreate }: {
         <input
           value={desc}
           onChange={(e) => setDesc(e.target.value)}
-          placeholder="What's this room about?"
+          placeholder={t("chat.descPlaceholder")}
           maxLength={64}
           className="w-full icy-tile rounded-xl px-3 py-2.5 text-white text-sm outline-none placeholder-white/30 mb-4 focus:border-[#90C9F0]/50 transition-colors"
         />

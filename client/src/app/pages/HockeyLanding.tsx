@@ -18,7 +18,7 @@
 
 import { useState, useEffect, useMemo, useRef, lazy, Suspense } from "react";
 import { useNavigate, useNavigationType } from "react-router";
-import { ChevronLeft, ChevronRight, CalendarDays, Gamepad2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, CalendarDays, Gamepad2, Brain } from "lucide-react";
 import { BottomNav } from "../components/BottomNav";
 import { ErrorState } from "../components/ErrorState";
 import { nhlApiService } from "../services/nhlApiService";
@@ -519,7 +519,30 @@ export function HockeyLanding() {
           {/* Sans la section « en direct » au-dessus, le calendrier reprend
               l'espace sous la ligne bleue. */}
           <div className={`px-4 pb-8 ${liveGames.length > 0 ? "" : "pt-8"}`}>
-            <LazySection minHeight={72}>
+            <LazySection minHeight={156}>
+              <div className="flex flex-col gap-3">
+              {/* Prédictions (2026-11-18, demande du user) : même panneau que le
+                  calendrier, juste au-dessus, dans un bleu plus foncé. */}
+              <button
+                onClick={() => navigate("/nhl-predictions")}
+                className="rink-signboard rink-signboard--dark rounded-2xl w-full"
+              >
+                <span className="rink-signboard-icon">
+                  <Brain size={18} />
+                </span>
+                <span className="rink-signboard-text">
+                  <span className="rink-signboard-kicker">{t("home.predKicker")}</span>
+                  {/* Mobile : « ML » ; écran large : « Machine Learning » en entier. */}
+                  <span className="rink-signboard-label">
+                    <span className="sm:hidden">{t("home.predLabelShort")}</span>
+                    <span className="hidden sm:inline">{t("home.predLabel")}</span>
+                  </span>
+                </span>
+                <span className="rink-signboard-cta">
+                  {t("home.scheduleCta")}
+                  <ChevronRight size={13} />
+                </span>
+              </button>
               <button
                 onClick={() => navigate("/schedule")}
                 className="rink-signboard rounded-2xl w-full"
@@ -536,6 +559,7 @@ export function HockeyLanding() {
                   <ChevronRight size={13} />
                 </span>
               </button>
+              </div>
             </LazySection>
           </div>
 

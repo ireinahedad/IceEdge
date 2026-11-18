@@ -494,3 +494,78 @@ export const CATEGORY_ICONS: Record<MarketDefinition["category"], LucideIcon> = 
   period:  Timer,
   special: Zap,
 };
+
+/* ─── Version française (2026-11-18) ─────────────────────────────────────────
+ * Les définitions ci-dessus sont la source (anglais) ; la feuille de marchés et
+ * `buildLeg` passent par `localizeMarket` pour l'affichage. Le `type` ne change
+ * jamais : c'est lui que lisent le règlement et le modèle.
+ */
+const MARKET_FR: Partial<Record<BetMarketType, { label: string; short: string; desc: string; unit?: string }>> = {
+  moneyline:               { label: "Vainqueur du match", short: "Vainqueur", desc: "L'équipe qui gagne (prolongation et tirs de barrage compris)" },
+  puck_line:               { label: "Écart (puck line, −1,5 but)", short: "Écart", desc: "L'équipe favorite gagne par 2 buts ou plus" },
+  total_goals:             { label: "Total de buts (plus/moins)", short: "Total de buts", desc: "Buts des deux équipes au-dessus ou au-dessous de la ligne", unit: "buts" },
+  regulation_result:       { label: "Résultat à 60 minutes", short: "60 min", desc: "Le gagnant après 60 minutes de temps réglementaire (sans prolongation)" },
+  double_chance:           { label: "Double chance (60 min)", short: "Double chance", desc: "Deux des trois issues à 60 minutes : une équipe ou le nul, ou pas de nul" },
+  game_to_ot:              { label: "Le match va en prolongation", short: "Prolongation", desc: "Le match ne se décide pas en temps réglementaire" },
+  both_teams_score:        { label: "Les deux équipes marquent", short: "Les deux marquent", desc: "Chaque équipe marque au moins un but" },
+  winning_margin:          { label: "Écart à la victoire", short: "Écart", desc: "L'écart exact de buts du gagnant", unit: "buts" },
+  alt_puck_line:           { label: "Écart alternatif", short: "Écart alt.", desc: "Autres écarts de buts (−2,5, +2,5, etc.)", unit: "buts" },
+  ot_winner:               { label: "Vainqueur en prolongation", short: "Vainqueur prol.", desc: "Qui gagne si le match va en prolongation ou en tirs de barrage" },
+  period1_winner:          { label: "Vainqueur de la 1re période", short: "Vainqueur P1", desc: "L'équipe qui mène à la fin de la 1re période" },
+  period2_winner:          { label: "Vainqueur de la 2e période", short: "Vainqueur P2", desc: "L'équipe qui mène à la fin de la 2e période" },
+  period3_winner:          { label: "Vainqueur de la 3e période", short: "Vainqueur P3", desc: "L'équipe qui mène à la fin de la 3e période" },
+  highest_scoring_period:  { label: "Période la plus prolifique", short: "Meilleure période", desc: "La période où il y aura le plus de buts" },
+  period1_total_goals:     { label: "Buts en 1re période (plus/moins)", short: "Total P1", desc: "Buts marqués en 1re période au-dessus ou au-dessous de la ligne", unit: "buts" },
+  period2_total_goals:     { label: "Buts en 2e période (plus/moins)", short: "Total P2", desc: "Buts marqués en 2e période au-dessus ou au-dessous de la ligne", unit: "buts" },
+  period3_total_goals:     { label: "Buts en 3e période (plus/moins)", short: "Total P3", desc: "Buts marqués en 3e période au-dessus ou au-dessous de la ligne", unit: "buts" },
+  first_team_score:        { label: "Première équipe à marquer", short: "1er but", desc: "L'équipe qui marque le premier but du match" },
+  last_team_score:         { label: "Dernière équipe à marquer", short: "Dernier but", desc: "L'équipe qui marque le dernier but du match" },
+  team_total_goals:        { label: "Buts de l'équipe (plus/moins)", short: "Buts de l'équipe", desc: "Les buts d'une équipe au-dessus ou au-dessous de la ligne", unit: "buts" },
+  team_pp_goals:           { label: "Buts en avantage numérique (plus/moins)", short: "Buts en AN", desc: "Buts en avantage numérique au-dessus ou au-dessous de la ligne", unit: "buts en AN" },
+  clean_sheet:             { label: "Blanchissage", short: "Blanchissage", desc: "L'équipe n'accorde aucun but" },
+  team_score_every_period: { label: "Marque à chaque période", short: "Chaque période", desc: "L'équipe marque au moins un but dans chacune des trois périodes" },
+  total_penalties:         { label: "Minutes de pénalité du match (plus/moins)", short: "Pénalités", desc: "Minutes de pénalité des deux équipes au-dessus ou au-dessous de la ligne", unit: "min de pénalité" },
+  anytime_goal:            { label: "Marque un but", short: "Marque", desc: "Le joueur marque au moins un but" },
+  first_goal_scorer:       { label: "Premier buteur", short: "1er buteur", desc: "Le joueur marque le premier but du match" },
+  last_goal_scorer:        { label: "Dernier buteur", short: "Dernier buteur", desc: "Le joueur marque le dernier but du match" },
+  shots_ou:                { label: "Tirs au but (plus/moins)", short: "Tirs", desc: "Tirs au but du joueur au-dessus ou au-dessous de la ligne", unit: "tirs" },
+  assists_ou:              { label: "Passes (plus/moins)", short: "Passes", desc: "Passes du joueur au-dessus ou au-dessous de la ligne", unit: "passes" },
+  points_ou:               { label: "Points (buts + passes, plus/moins)", short: "Points", desc: "Points du joueur (B+A) au-dessus ou au-dessous de la ligne", unit: "points" },
+  pp_point:                { label: "Point en avantage numérique", short: "Point en AN", desc: "Le joueur obtient un point en avantage numérique" },
+  goalie_saves_ou:         { label: "Arrêts du gardien (plus/moins)", short: "Arrêts", desc: "Arrêts du gardien au-dessus ou au-dessous de la ligne", unit: "arrêts" },
+  blocked_shots_ou:        { label: "Tirs bloqués (plus/moins)", short: "Tirs bloqués", desc: "Tirs bloqués par le joueur au-dessus ou au-dessous de la ligne", unit: "tirs bloqués" },
+  hits_ou:                 { label: "Mises en échec (plus/moins)", short: "Mises en échec", desc: "Mises en échec du joueur au-dessus ou au-dessous de la ligne", unit: "mises en échec" },
+  time_on_ice_ou:          { label: "Temps de glace (plus/moins)", short: "Temps de glace", desc: "Minutes de jeu du joueur au-dessus ou au-dessous de la ligne", unit: "min" },
+  faceoff_wins_ou:         { label: "Mises au jeu gagnées (plus/moins)", short: "Mises au jeu", desc: "Mises au jeu gagnées par le centre au-dessus ou au-dessous de la ligne", unit: "mises au jeu" },
+  penalty_minutes_ou:      { label: "Minutes de pénalité (plus/moins)", short: "Pénalités", desc: "Minutes de pénalité du joueur au-dessus ou au-dessous de la ligne", unit: "min de pénalité" },
+};
+
+const SELECTION_FR: Record<string, string> = {
+  over: "Plus", under: "Moins", home: "Domicile", away: "Visiteur",
+  home_1: "Domicile gagne par exactement 1", home_2plus: "Domicile gagne par 2+",
+  away_1: "Visiteur gagne par exactement 1", away_2plus: "Visiteur gagne par 2+",
+  P1: "1re période", P2: "2e période", P3: "3e période",
+};
+
+const CATEGORY_FR: Record<MarketDefinition["category"], string> = {
+  match: "Match", team: "Équipe", player: "Joueur", period: "Périodes", special: "Spéciaux",
+};
+
+/** Une définition dans la langue de l'app (copie ; la source reste intacte). */
+export function localizeMarket(m: MarketDefinition, lang: "en" | "fr"): MarketDefinition {
+  if (lang !== "fr") return m;
+  const fr = MARKET_FR[m.type];
+  return {
+    ...m,
+    label: fr?.label ?? m.label,
+    shortLabel: fr?.short ?? m.shortLabel,
+    description: fr?.desc ?? m.description,
+    lineUnit: m.lineUnit ? (fr?.unit ?? m.lineUnit) : m.lineUnit,
+    selectionOptions: m.selectionOptions?.map((o) => ({ ...o, label: SELECTION_FR[o.value] ?? o.label })),
+  };
+}
+
+/** Nom d'une catégorie de marchés dans la langue de l'app. */
+export function categoryLabel(cat: MarketDefinition["category"], lang: "en" | "fr"): string {
+  return lang === "fr" ? CATEGORY_FR[cat] : CATEGORY_LABELS[cat];
+}

@@ -33,6 +33,7 @@ import { formatRecord, useTeamRecords } from "../charts/teamSpace";
  */
 export function SportSelector({ compact = false }: { compact?: boolean }) {
   const navigate = useNavigate();
+  const { t } = useI18n();
   // `compact` (2026-09-27) : l'en-tête se réduit quand on fait défiler
   // l'accueil. La hauteur du bouton suit (44 → 28 px), et le contenu est mis à
   // l'échelle plutôt que redessiné à une autre taille : la transition reste
@@ -42,7 +43,7 @@ export function SportSelector({ compact = false }: { compact?: boolean }) {
       onClick={() => navigate("/")}
       className="w-full flex items-center justify-center select-none"
       style={{ height: compact ? 28 : 44, transition: "height 0.25s ease" }}
-      aria-label="Accueil ArakIce"
+      aria-label={t("common.homeAria")}
     >
       <span
         className="flex items-center gap-3"
@@ -236,18 +237,18 @@ export function LiveGameCard({ game }: { game: DisplayGame }) {
             match: `${game.team2.abbr} @ ${game.team1.abbr}`, when: game.period ?? null,
             market: t("handoff.mktWinner"), selection: t("home.evWinnerShort", { team: game.team1.abbr }),
           }} />
-          <span className="text-[11px] text-[#bfc8cc]">Moneyline</span>
+          <span className="text-[11px] text-[#bfc8cc]">{t("common.moneyline")}</span>
           <BookPricePill price={game.bookAway} ticket={{
             match: `${game.team2.abbr} @ ${game.team1.abbr}`, when: game.period ?? null,
             market: t("handoff.mktWinner"), selection: t("home.evWinnerShort", { team: game.team2.abbr }),
           }} />
-          {/* Moneyline is a universal betting term, kept as-is */}
+          
         </div>
       ) : showPct && homePct != null && awayPct != null ? (
         /* Pas de prix du livre : la cote juste du modèle, en gris (2026-10-02). */
         <div className="flex items-center justify-between mt-2 pt-2 border-t border-white/5">
           <FairOddsPill pct={homePct} title={t("home.oddsFairHint")} />
-          <span className="text-[11px] text-[#bfc8cc]">Moneyline</span>
+          <span className="text-[11px] text-[#bfc8cc]">{t("common.moneyline")}</span>
           <FairOddsPill pct={awayPct} title={t("home.oddsFairHint")} />
         </div>
       ) : null}
@@ -515,7 +516,7 @@ function PickCell({ game, pick, probability, team, label, short, children }: {
     const leg: BetLeg = {
       id: `home-${game.id}-${pick.marketType}-${pick.subject}${pick.selectionValue === "no" ? "-no" : ""}`,
       marketType: pick.marketType,
-      marketLabel: pick.marketType === "moneyline" ? "Moneyline" : "Puck Line",
+      marketLabel: pick.marketType === "moneyline" ? t("common.moneyline") : t("common.puckLine"),
       // « game » comme la page du match : le sujet est une équipe DU match.
       subjectType: "game",
       subjectId: pick.subject,
@@ -677,7 +678,7 @@ export function UpcomingGameRow({ game, onOpenSheet, showOdds = true }: {
           ) : (
             <>
               <span className="text-xs font-medium" style={{ color: accent }}>{game.time}</span>
-              <span className="text-[#bfc8cc] text-[11px]">ET</span>
+              <span className="text-[#bfc8cc] text-[11px]">{t("common.et")}</span>
             </>
           )}
         </div>

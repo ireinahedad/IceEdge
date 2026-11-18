@@ -142,7 +142,7 @@ export function RoomList({ rooms, onSelect, onCreateNew, onPinToggle, onJoined }
                 <span className="text-[11px] text-[#90C9F0] border border-[#90C9F0]/40 rounded-full px-1.5 py-0.5 flex-shrink-0">admin</span>
               )}
               {room.isLive && (
-                <span className="text-[11px] text-red-400 border border-red-400/30 rounded-full px-1.5 py-0.5 flex-shrink-0">LIVE</span>
+                <span className="text-[11px] text-red-400 border border-red-400/30 rounded-full px-1.5 py-0.5 flex-shrink-0">{t("common.live")}</span>
               )}
             </div>
             {/* Le panneau publicitaire est plus lumineux qu'une carte givrée :

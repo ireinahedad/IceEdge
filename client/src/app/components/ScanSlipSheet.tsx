@@ -342,7 +342,7 @@ export function ScanSlipSheet({ onClose }: { onClose: () => void }) {
       for (const v of ready) {
         const input = intentToLegInput(v.intent!, data);
         if (!input) { failed.set(v.key, "missing"); continue; }
-        const r = await buildLeg(input, { players: data.players, getTeamById: data.getTeamById, hasLeg: () => false });
+        const r = await buildLeg(input, { players: data.players, getTeamById: data.getTeamById, hasLeg: () => false, lang });
         if (r.ok) built.set(v.key, r.leg); else failed.set(v.key, "unavailable");
       }
       if (!built.size) { void refundScan(); setNote({ kind: "unavailable" }); return; }

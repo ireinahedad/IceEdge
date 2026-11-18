@@ -170,6 +170,7 @@ export function ProfileHeader({
   avatarUploading?: boolean;
   onBetsClick?: () => void;
 }) {
+  const { t } = useI18n();
   return (
     <div className="icy-card rounded-2xl p-5">
       {/* Identity row — the logo/avatar always stays in the same column as the name */}
@@ -199,10 +200,10 @@ export function ProfileHeader({
 
       {/* Stats — always laid out horizontally, whatever the viewport */}
       <div className="flex items-stretch gap-2">
-        <MiniStat className="flex-1" label="Hit Rate" value={`${stats.hitRate}%`} />
-        <MiniStat className="flex-1" label="Bets ›" value={`${stats.totalBets}`} onClick={onBetsClick} />
-        <MiniStat className="flex-1" label="W - L" value={`${stats.wins}-${stats.losses}`} color={stats.wins > stats.losses ? "#86d1ea" : undefined} />
-        <MiniStat className="flex-1" label="Best" value={`${stats.longestWinStreak}W`} />
+        <MiniStat className="flex-1" label={t("profile.st.hitRate")} value={`${stats.hitRate}%`} />
+        <MiniStat className="flex-1" label={t("profile.st.bets")} value={`${stats.totalBets}`} onClick={onBetsClick} />
+        <MiniStat className="flex-1" label={t("profile.st.wl")} value={`${stats.wins}-${stats.losses}`} color={stats.wins > stats.losses ? "#86d1ea" : undefined} />
+        <MiniStat className="flex-1" label={t("profile.st.best")} value={t("profile.st.streak", { n: String(stats.longestWinStreak) })} />
       </div>
 
       {profile.bio && (

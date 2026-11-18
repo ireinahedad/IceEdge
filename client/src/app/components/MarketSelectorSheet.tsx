@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
-import { MARKET_DEFINITIONS, CATEGORY_LABELS, CATEGORY_ICONS } from "../data/betMarkets";
+import { MARKET_DEFINITIONS as MARKET_DEFINITIONS_SRC, CATEGORY_ICONS, categoryLabel, localizeMarket } from "../data/betMarkets";
 import {
   buildLeg, matchupLabel, teamSubject, playerSubject, gameSubject, type LegSubject as Subject,
 } from "../services/buildLeg";
@@ -24,7 +24,9 @@ interface Props {
 }
 
 export function MarketSelectorSheet({ onClose, preselectedSubject }: Props) {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
+  // Définitions dans la langue de l'app : libellés, descriptions, unités.
+  const MARKET_DEFINITIONS = useMemo(() => MARKET_DEFINITIONS_SRC.map((m) => localizeMarket(m, lang)), [lang]);
   const { addLeg, hasLeg } = useBet();
   const { teams, players, games, getTeamById, getGameById } = useNHLData();
 
@@ -106,7 +108,7 @@ export function MarketSelectorSheet({ onClose, preselectedSubject }: Props) {
     if (selectedSubject.type === "player")
       return MARKET_DEFINITIONS.filter((m) => m.category === "player");
     return MARKET_DEFINITIONS;
-  }, [selectedSubject]);
+  }, [selectedSubject, MARKET_DEFINITIONS]);
 
   const marketsByCategory = useMemo(() => {
     return availableMarkets.filter((m) => m.category === activeCategory);
@@ -172,7 +174,7 @@ export function MarketSelectorSheet({ onClose, preselectedSubject }: Props) {
           ? (() => { const g = getGameById(selectedSubject.id); return g ? { home: g.team1Id, away: g.team2Id } : null; })()
           : null,
       },
-      { players, getTeamById, hasLeg }
+      { players, getTeamById, hasLeg, lang }
     );
 
     if (!result.ok) {
@@ -328,7 +330,7 @@ export function MarketSelectorSheet({ onClose, preselectedSubject }: Props) {
                   }`}
                 >
                   <CategoryIcon cat={cat} size={13} />
-                  <span>{CATEGORY_LABELS[cat]}</span>
+                  <span>{categoryLabel(cat, lang)}</span>
                 </button>
               ))}
             </div>

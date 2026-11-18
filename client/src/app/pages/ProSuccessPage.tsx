@@ -23,7 +23,7 @@ export function ProSuccessPage() {
   return (
     <div className="flex flex-col items-center justify-center min-h-screen text-white max-w-[430px] mx-auto px-6 text-center"
       style={{ background: "#0A0E0C" }}>
-      <button onClick={() => navigate("/", { replace: true })} aria-label="Accueil ArakIce">
+      <button onClick={() => navigate("/", { replace: true })} aria-label={t("common.homeAria")}>
         <IceedgeLogo size={64} wordmark={false} className="mb-5" />
       </button>
 

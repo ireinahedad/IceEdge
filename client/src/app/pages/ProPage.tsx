@@ -242,7 +242,7 @@ export function ProPage() {
 
       {/* Hero */}
       <div className="flex flex-col items-center text-center mb-8">
-        <button onClick={() => navigate("/")} aria-label="Accueil ArakIce">
+        <button onClick={() => navigate("/")} aria-label={t("common.homeAria")}>
           <IceedgeLogo size={56} wordmark={false} className="mb-4" />
         </button>
         <div className="px-3 py-1 rounded-full text-[11px] font-bold uppercase tracking-widest mb-3"

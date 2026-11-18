@@ -70,12 +70,13 @@ export async function addIntents(
   intents: readonly SlipIntent[],
   data: SlipCommandData,
   slip: { hasLeg: (id: string) => boolean; addLeg: (leg: BetLeg) => void },
+  lang: "en" | "fr" = "en",
 ): Promise<CommandLegResult[]> {
   const out: CommandLegResult[] = [];
   for (const intent of intents) {
     const input = intentToLegInput(intent, data);
     if (!input) { out.push({ status: "missing", label: intent.subjectId }); continue; }
-    const r = await buildLeg(input, { players: data.players, getTeamById: data.getTeamById, hasLeg: slip.hasLeg });
+    const r = await buildLeg(input, { players: data.players, getTeamById: data.getTeamById, hasLeg: slip.hasLeg, lang });
     if (r.ok) {
       slip.addLeg(r.leg);
       out.push({ status: "added", leg: r.leg });

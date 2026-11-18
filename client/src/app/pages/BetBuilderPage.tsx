@@ -248,8 +248,8 @@ export function BetBuilderPage() {
             </h1>
             <p className="text-[#8a9ea6] text-xs mt-0.5">
               {tab === "build"
-                ? (legs.length === 0 ? "Build your prediction" : `${legs.length} leg${legs.length > 1 ? "s" : ""} · Combined probability`)
-                : "Your locked predictions"}
+                ? (legs.length === 0 ? t("slip.buildHint") : legs.length === 1 ? t("slip.oneLegCombined") : t("slip.legsCombined", { n: String(legs.length) }))
+                : t("slip.lockedList")}
             </p>
           </div>
           {tab === "build" && legs.length > 0 && (
@@ -301,7 +301,7 @@ export function BetBuilderPage() {
                 ? t("slip.individualProb")
                 : combinedProbability == null
                 ? t("pred.unavailableParlay")
-                : `Combined probability all ${legs.length} predictions hit`}
+                : t("slip.allHit", { n: String(legs.length) })}
             </p>
             {/* Cote = VRAI prix du livre (décision du user, 2026-09-30) :
                 le prix de la jambe seule, ou le produit des prix pour un
@@ -409,7 +409,7 @@ export function BetBuilderPage() {
               <X size={14} />
             </button>
             <div className="mb-4 flex justify-center text-[#4ade80]"><CheckCircle2 size={48} /></div>
-            <p className="text-white font-bold text-lg mb-2">Slip Locked!</p>
+            <p className="text-white font-bold text-lg mb-2">{t("slip.locked")}</p>
             {submitResult.message && (
               <p className="text-[#92A08A] text-sm mb-6">{submitResult.message}</p>
             )}

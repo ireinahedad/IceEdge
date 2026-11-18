@@ -230,6 +230,11 @@
 
 .rink-signboard:active { filter: brightness(0.94); }
 
+/* Variante plus foncée (bouton Prédictions, 2026-11-18) : même panneau, bleu nuit. */
+.rink-signboard--dark {
+  background: linear-gradient(100deg, #041824 0%, #0a3a54 38%, #11577c 68%, #041824 100%);
+}
+
 .rink-signboard-icon {
   display: flex;
   align-items: center;

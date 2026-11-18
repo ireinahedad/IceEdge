@@ -11,6 +11,7 @@ import { useSearchParams } from "react-router";
 import { nhlApiService, type PlayerRatesResponse, type RateStat } from "../../services/nhlApiService";
 import { fetchGameMlBundle, type GameMlBundle, type MLPredictionResult } from "../../components/MLPredictionCard";
 import { useI18n } from "../../i18n";
+import { marketText } from "../../i18n/serverText";
 import { BELOW_FLOOR, dispersionFor, presetResult, rateLabels, ratePct } from "./rateMath";
 import { useSport } from "../../context/SportContext";
 import { nhlLogoUrl } from "../../data/teamEmoji";
@@ -96,7 +97,8 @@ export function PlayerPrediction({ playerId }: { playerId: string }) {
   //   · les cadences de CE joueur (`/predictions/player-rates/player/:id`),
   //     ajustées à l'adversaire du match choisi — tous les seuils en découlent ;
   //   · pour un gardien, le paquet ML du match (victoire, blanchissage).
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
+  const fr = lang === "fr";
   const [rates, setRates] = useState<PlayerRatesResponse | null | undefined>(undefined);
   const [bundle, setBundle] = useState<GameMlBundle | null | undefined>(undefined);
   useEffect(() => {
@@ -188,7 +190,9 @@ export function PlayerPrediction({ playerId }: { playerId: string }) {
         const under = 100 - o.rulePct;
         options.push({
           id: `${o.id}-u`, label: tile.label.replace("Over", "Under"), rulePct: under,
-          ruleNote: `Complement of "${tile.label}": 100 − ${o.rulePct}% = ${under}%. ${o.ruleNote}`,
+          ruleNote: fr
+            ? `Complément de « ${marketText(tile.label, "fr")} » : 100 − ${o.rulePct} % = ${under} %. ${o.ruleNote}`
+            : `Complement of "${tile.label}": 100 − ${o.rulePct}% = ${under}%. ${o.ruleNote}`,
           factors: o.factors?.map(invert), factorGroup: o.factorGroup,
           mlProps: { ...base, settleSelection: "under" },
         });
@@ -280,13 +284,13 @@ export function PlayerPrediction({ playerId }: { playerId: string }) {
           {(data.position === "G"
             // Gardien : ses stats à lui, pas celles d'un patineur (2026-10-05).
             ? [
-                { label: "GP",  value: String(data.gamesPlayed) },
-                { label: "W",   value: data.wins == null ? "—" : String(data.wins) },
-                { label: "GAA", value: data.gaa == null ? "—" : data.gaa.toFixed(2) },
-                { label: "SV%", value: data.savePct == null ? "—" : data.savePct.toFixed(3).replace(/^0/, "") },
+                { label: fr ? "MJ" : "GP",  value: String(data.gamesPlayed) },
+                { label: fr ? "V" : "W",   value: data.wins == null ? "—" : String(data.wins) },
+                { label: fr ? "MOY" : "GAA", value: data.gaa == null ? "—" : data.gaa.toFixed(2) },
+                { label: fr ? "% ARR" : "SV%", value: data.savePct == null ? "—" : data.savePct.toFixed(3).replace(/^0/, "") },
               ]
             : [
-                { label: "G",    value: String(data.goals)   },
+                { label: fr ? "B" : "G",    value: String(data.goals)   },
                 { label: "A",    value: String(data.assists)  },
                 { label: "PTS",  value: String(data.points)   },
                 { label: "+/-",  value: (data.plusMinus >= 0 ? "+" : "") + data.plusMinus },
