@@ -1,4 +1,4 @@
-import { Search, HelpCircle } from "lucide-react";
+import { Search, HelpCircle, CalendarDays, ChevronRight } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router";
 import { useNHLData, gamesLabelText, UITeam, UIGame } from "../hooks/useNHLData";
@@ -7,7 +7,6 @@ import { MarketSelectorSheet } from "../components/MarketSelectorSheet";
 import { HowItWorksSheet } from "../components/HowItWorksSheet";
 import { useSport } from "../context/SportContext";
 import { PlayersTab } from "../components/PlayersTab";
-import { ScheduleContent } from "./SchedulePage";
 import { useI18n } from "../i18n";
 import { ErrorState } from "../components/ErrorState";
 import { teamColors } from "../data/teamEmoji";
@@ -426,10 +425,25 @@ export function StatsPage() {
               </div>
             )}
 
-            <div>
-              <p className="text-[#bfc8cc] text-xs mb-2 uppercase tracking-wider font-medium">{t("schedule.title")}</p>
-              <ScheduleContent accent={accent} />
-            </div>
+            {/* Calendrier (2026-11-19, demande du user) : le même panneau que
+                sur l'accueil, qui mène à /schedule, au lieu du calendrier
+                complet affiché en bas de l'onglet. */}
+            <button
+              onClick={() => navigate("/schedule")}
+              className="rink-signboard rounded-2xl w-full"
+            >
+              <span className="rink-signboard-icon">
+                <CalendarDays size={18} />
+              </span>
+              <span className="rink-signboard-text">
+                <span className="rink-signboard-kicker">{t("schedule.subtitle")}</span>
+                <span className="rink-signboard-label">{t("home.schedule")}</span>
+              </span>
+              <span className="rink-signboard-cta">
+                {t("home.scheduleCta")}
+                <ChevronRight size={13} />
+              </span>
+            </button>
           </div>
         )}
 
