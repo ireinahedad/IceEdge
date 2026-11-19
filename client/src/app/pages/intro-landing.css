@@ -133,13 +133,14 @@
   min-height: 100dvh;
   max-width: 1180px;
   margin: 0 auto;
-  padding: 40px 20px 24px;
+  padding: 24px 20px 12px;
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  justify-content: center;
+  gap: 12px;
   box-sizing: border-box;
 }
-.il-grid { display: grid; gap: 20px; }
+.il-grid { display: grid; gap: 12px; }
 .il-grid-3 { grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
 .il-grid-4 { grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
 .il-grid-2 { grid-template-columns: repeat(auto-fit, minmax(min(340px, 100%), 1fr)); }
@@ -153,10 +154,10 @@
   background: rgba(255, 255, 255, 0.075);
   border-color: rgba(255, 255, 255, 0.2);
   box-shadow: 0 8px 22px rgba(0, 0, 0, 0.25);
-  padding: 28px;
+  padding: 16px 20px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 6px;
 }
 .il-feat-title, .il-card-title {
   margin: 0;
@@ -165,22 +166,22 @@
   text-transform: uppercase;
   color: #fff;
 }
-.il-feat-title { font-size: 26px; letter-spacing: 0.02em; }
-.il-feat-body { margin: 0; font-size: 16px; line-height: 1.6; color: #d9edf6; }
+.il-feat-title { font-size: 19px; letter-spacing: 0.02em; }
+.il-feat-body { margin: 0; font-size: 14px; line-height: 1.5; color: #d9edf6; }
 
-.il-stat { padding: 24px; display: flex; flex-direction: column; gap: 6px; }
-.il-stat-value { font: 600 38px "Oswald", "Oswald Fallback", sans-serif; color: #eaf6fb; }
-.il-stat-label { font-size: 14px; line-height: 1.4; color: #a9c3d1; }
+.il-stat { padding: 14px 18px; display: flex; flex-direction: column; gap: 2px; }
+.il-stat-value { font: 600 28px "Oswald", "Oswald Fallback", sans-serif; color: #eaf6fb; }
+.il-stat-label { font-size: 12.5px; line-height: 1.35; color: #a9c3d1; }
 
-.il-pad { padding: 28px; display: flex; flex-direction: column; gap: 18px; }
-.il-card-title { font-size: 23px; letter-spacing: 0.04em; line-height: 1.25; }
-.il-note { margin: 0; font-size: 14px; line-height: 1.5; color: #a9c3d1; }
-.il-page .il-link { font-size: 15px; font-weight: 500; text-decoration: none; }
+.il-pad { padding: 18px 20px; display: flex; flex-direction: column; gap: 10px; }
+.il-card-title { font-size: 17px; letter-spacing: 0.04em; line-height: 1.25; }
+.il-note { margin: 0; font-size: 12.5px; line-height: 1.45; color: #a9c3d1; }
+.il-page .il-link { font-size: 13.5px; font-weight: 500; text-decoration: none; }
 .il-link-btn {
   align-self: flex-start;
   margin-top: auto;
   padding: 0;
-  min-height: 44px;
+  min-height: 32px;
   border: 0;
   background: none;
   color: #86d1ea;
@@ -190,61 +191,61 @@
 .il-link-btn:hover { color: #b9e6f5; }
 .il-link-btn::after { content: " →"; }
 
-.il-bands { display: flex; flex-direction: column; gap: 12px; }
+.il-bands { display: flex; flex-direction: column; gap: 7px; }
 .il-band {
   display: grid;
-  grid-template-columns: 96px minmax(0, 1fr) 96px;
+  grid-template-columns: 84px minmax(0, 1fr) 84px;
   align-items: center;
-  gap: 12px;
-  font-size: 14px;
+  gap: 10px;
+  font-size: 12.5px;
   color: #a9c3d1;
 }
 .il-band-hl { color: #fff; }
 .il-band-won { font-family: "Oswald", "Oswald Fallback", sans-serif; font-weight: 600; text-align: right; }
-.il-band-track { position: relative; height: 14px; border-radius: 7px; background: rgba(255, 255, 255, 0.08); }
-.il-band-bar { height: 14px; border-radius: 7px; background: rgba(134, 209, 234, 0.55); }
+.il-band-track { position: relative; height: 10px; border-radius: 5px; background: rgba(255, 255, 255, 0.08); }
+.il-band-bar { height: 10px; border-radius: 5px; background: rgba(134, 209, 234, 0.55); }
 .il-band-hl .il-band-bar { background: #86d1ea; }
 .il-band-tick {
   position: absolute;
-  top: -5px;
+  top: -4px;
   width: 3px;
-  height: 24px;
+  height: 18px;
   margin-left: -1.5px;
   border-radius: 2px;
   background: #fff;
 }
 
-.il-teams { display: flex; flex-direction: column; gap: 12px; }
-.il-team-row { display: flex; justify-content: space-between; gap: 12px; font-size: 15px; }
+.il-teams { display: flex; flex-direction: column; gap: 6px; }
+.il-team-row { display: flex; justify-content: space-between; gap: 12px; font-size: 13px; }
 .il-team-pct { font-family: "Oswald", "Oswald Fallback", sans-serif; font-weight: 600; }
-.il-team-track { height: 12px; border-radius: 6px; background: rgba(255, 255, 255, 0.08); margin-top: 6px; }
-.il-team-bar { height: 12px; border-radius: 6px; }
+.il-team-track { height: 8px; border-radius: 4px; background: rgba(255, 255, 255, 0.08); margin-top: 4px; }
+.il-team-bar { height: 8px; border-radius: 4px; }
 
-.il-top { display: flex; flex-direction: column; gap: 10px; }
+.il-top { display: flex; flex-direction: column; gap: 6px; }
 .il-top-head {
-  font: 500 13px "Oswald", "Oswald Fallback", sans-serif;
+  font: 500 11.5px "Oswald", "Oswald Fallback", sans-serif;
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: #a9c3d1;
 }
 .il-top-row {
   display: grid;
-  grid-template-columns: 28px minmax(0, 1fr) auto;
+  grid-template-columns: 22px minmax(0, 1fr) auto;
   align-items: center;
-  gap: 12px;
-  padding: 12px 14px;
-  border-radius: 10px;
+  gap: 10px;
+  padding: 7px 12px;
+  border-radius: 8px;
   background: rgba(255, 255, 255, 0.04);
   border: 1px solid rgba(255, 255, 255, 0.1);
 }
-.il-top-rank { font: 600 18px "Oswald", "Oswald Fallback", sans-serif; color: #86d1ea; }
+.il-top-rank { font: 600 15px "Oswald", "Oswald Fallback", sans-serif; color: #86d1ea; }
 .il-top-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.il-top-pick { font-size: 15px; font-weight: 500; color: #eaf6fb; }
-.il-top-mkt { font-size: 12px; color: #8fa9b8; }
-.il-top-pct { font: 600 20px "Oswald", "Oswald Fallback", sans-serif; color: #eaf6fb; }
+.il-top-pick { font-size: 13.5px; font-weight: 500; color: #eaf6fb; }
+.il-top-mkt { font-size: 11px; color: #8fa9b8; }
+.il-top-pct { font: 600 17px "Oswald", "Oswald Fallback", sans-serif; color: #eaf6fb; }
 
 .il-skeleton {
-  height: 220px;
+  height: 160px;
   border-radius: 12px;
   background: rgba(255, 255, 255, 0.05);
   animation: il-pulse 1.4s ease-in-out infinite;
@@ -253,9 +254,9 @@
 @media (prefers-reduced-motion: reduce) { .il-skeleton { animation: none; } }
 
 .il-disclaimer {
-  margin: 16px 0 32px;
+  margin: 4px 0 0;
   text-align: center;
-  font-size: 13px;
+  font-size: 11.5px;
   line-height: 1.6;
   color: #8fa9b8;
 }
