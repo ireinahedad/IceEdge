@@ -1571,7 +1571,7 @@ const DICT: Record<string, { en: string; fr: string }> = {
   "intro.f2.b":         { en: "Win odds, totals, period markets and player props, each with a probability.", fr: "Vainqueur, totaux, marchés par période et paris sur les joueurs, chacun avec sa probabilité." },
   "intro.f3.t":         { en: "Explains the pick", fr: "Explique le choix" },
   "intro.f3.b":         { en: "An AI write-up for each bet, the fair price next to the sportsbook line, and a bet slip scanner.", fr: "Une analyse IA pour chaque pari, le juste prix à côté de la cote du site de paris, et un lecteur de coupons." },
-  "intro.st.games":     { en: "games tested out-of-sample", fr: "matchs testés hors échantillon" },
+  "intro.st.closing":   { en: "games tested: arakiceML is as accurate as the sportsbooks' closing odds", fr: "matchs testés : arakiceML est aussi juste que les cotes de fermeture des sites de paris" },
   "intro.st.winners":   { en: "winners picked correctly", fr: "vainqueurs bien choisis" },
   "intro.st.favs":      { en: "of its strongest favourites ({lo}–⁠{hi} %) won", fr: "de ses plus gros favoris ({lo}–⁠{hi} %) ont gagné" },
   "intro.st.marketsValue": { en: "20+", fr: "20+" },

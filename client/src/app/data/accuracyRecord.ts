@@ -29,6 +29,15 @@ export const accuracyRecord = {
     { range: "60–70", games: 1140, saidPct: 64.6, wonPct: 61.6 },
     { range: "70–80", games: 333,  saidPct: 73.0, wonPct: 80.2 },
   ],
+  /**
+   * Comparaison au marché — `docs/ML.md` (« Against the market »), source
+   * `ml/models/correction_report.json` : modèle corrigé contre la cote de
+   * fermeture dé-margée, walk-forward, Δ log-loss −0,0008, z = −1,0 → à égalité
+   * (pas significativement meilleur). Ajoutée à l'accueil le 2026-11-19 à la
+   * demande du user (première sortie de la règle « précision et calibration
+   * seulement » d'octobre 2026).
+   */
+  closingLineGames: 11297,
   /** Tranche mise en avant dans le titre (la plus fournie). */
   headlineBin: "50–60",
 } as const;

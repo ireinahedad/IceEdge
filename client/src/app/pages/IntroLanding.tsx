@@ -30,8 +30,58 @@ import "./intro-landing.css";
 
 type TFn = (k: string, p?: Record<string, string | number>) => string;
 
+/**
+ * Défilement « aimanté » (demande du user, 2026-11-19) : depuis la patinoire,
+ * le moindre geste vers le bas (molette, glissé du doigt) emmène directement
+ * à la section « Comment ça marche » ; depuis le haut de cette section, un
+ * geste vers le haut ramène à la patinoire. Plus bas dans la section, le
+ * défilement redevient normal. Le clavier (flèches, Page suivante) reste natif.
+ */
+function useSnapToHow(pageRef: React.RefObject<HTMLElement | null>, howRef: React.RefObject<HTMLElement | null>) {
+  useEffect(() => {
+    const page = pageRef.current, how = howRef.current;
+    if (!page || !how) return;
+    let lockUntil = 0;
+    let touchY: number | null = null;
+    const go = (top: number) => {
+      lockUntil = Date.now() + 800;
+      page.scrollTo({ top, behavior: "smooth" });
+    };
+    // Renvoie true si le geste a été pris en charge.
+    const handle = (dy: number): boolean => {
+      const y = page.scrollTop, howTop = how.offsetTop;
+      if (Date.now() < lockUntil) return true;
+      if (dy > 0 && y < howTop - 4) { go(howTop); return true; }
+      if (dy < 0 && y > 0 && y <= howTop + 4) { go(0); return true; }
+      return false;
+    };
+    const onWheel = (e: WheelEvent) => {
+      if (Math.abs(e.deltaY) < 2) return;
+      if (handle(e.deltaY)) e.preventDefault();
+    };
+    const onTouchStart = (e: TouchEvent) => { touchY = e.touches[0]?.clientY ?? null; };
+    const onTouchMove = (e: TouchEvent) => {
+      if (touchY == null) return;
+      const dy = touchY - (e.touches[0]?.clientY ?? touchY);
+      if (Math.abs(dy) < 12) return;
+      if (handle(dy)) { e.preventDefault(); touchY = null; }
+    };
+    page.addEventListener("wheel", onWheel, { passive: false });
+    page.addEventListener("touchstart", onTouchStart, { passive: true });
+    page.addEventListener("touchmove", onTouchMove, { passive: false });
+    return () => {
+      page.removeEventListener("wheel", onWheel);
+      page.removeEventListener("touchstart", onTouchStart);
+      page.removeEventListener("touchmove", onTouchMove);
+    };
+  }, [pageRef, howRef]);
+}
+
 export function IntroLanding({ onEnter }: { onEnter: () => void }) {
   const { t, lang, setLang } = useI18n();
+  const pageRef = useRef<HTMLElement>(null);
+  const howRef = useRef<HTMLElement>(null);
+  useSnapToHow(pageRef, howRef);
   const navigate = useNavigate();
   const fmt = (n: number, digits = 1) =>
     n.toLocaleString(lang === "fr" ? "fr-CA" : "en-US", { minimumFractionDigits: digits, maximumFractionDigits: digits });
@@ -39,7 +89,7 @@ export function IntroLanding({ onEnter }: { onEnter: () => void }) {
   const head = r.bins.find((b) => b.range === r.headlineBin) ?? r.bins[2];
 
   return (
-    <main className="il-page">
+    <main className="il-page" ref={pageRef}>
       <section className="il-hero">
         <div className="il-lang" role="group" aria-label={t("intro.langAria")}>
           {(["en", "fr"] as const).map((l) => (
@@ -62,7 +112,7 @@ export function IntroLanding({ onEnter }: { onEnter: () => void }) {
         </a>
       </section>
 
-      <section id="how" className="il-how">
+      <section id="how" className="il-how" ref={howRef}>
         <div className="il-grid il-grid-3">
           {(["1", "2", "3"] as const).map((n) => (
             <div key={n} className="il-card il-card-feat">
@@ -73,7 +123,7 @@ export function IntroLanding({ onEnter }: { onEnter: () => void }) {
         </div>
 
         <div className="il-grid il-grid-4">
-          <Stat value={r.games.toLocaleString(lang === "fr" ? "fr-CA" : "en-US")} label={t("intro.st.games")} />
+          <Stat value={r.closingLineGames.toLocaleString(lang === "fr" ? "fr-CA" : "en-US")} label={t("intro.st.closing")} />
           <Stat value={`${fmt(r.winnerPct)}\u00a0%`} label={t("intro.st.winners")} />
           <Stat value={`${fmt(r.bins[r.bins.length - 1].wonPct)}\u00a0%`} label={t("intro.st.favs", { lo: 70, hi: 80 })} />
           <Stat value={t("intro.st.marketsValue")} label={t("intro.st.markets")} />
@@ -135,7 +185,7 @@ function mlPct(o: ApiOption, bundle: GameMlBundle | null): number | null {
 
 /**
  * Le top 3 (demandes du user, 2026-11-19) : les paris du match entre 70 et
- * 90 % — assez sûrs pour impressionner, sans les évidences à 95 % (« moins de
+ * 80 % — assez sûrs pour impressionner, sans les évidences à 95 % (« moins de
  * 8,5 buts »). Classés du plus probable au moins probable, tous marchés du
  * match confondus.
  *
@@ -147,7 +197,7 @@ function mlPct(o: ApiOption, bundle: GameMlBundle | null): number | null {
  * Les libellés restent ceux du serveur (anglais) ; ils sont traduits au rendu
  * par `marketText`, comme sur la page du match.
  */
-const TOP_MIN = 70, TOP_MAX = 90;
+const TOP_MIN = 70, TOP_MAX = 80;
 function topPicks(groups: ApiGroup[], bundle: GameMlBundle | null): { homePct: number | null; picks: Pick[]; source: "ml" | "rules" } {
   const collect = (src: "ml" | "rules") => {
     const out: Pick[] = [];
