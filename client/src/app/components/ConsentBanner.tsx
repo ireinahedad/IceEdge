@@ -1,5 +1,4 @@
 import { useEffect, useSyncExternalStore } from "react";
-import { Link } from "react-router";
 import { useGeo } from "../services/geo";
 import { useI18n } from "../i18n";
 import {
@@ -42,7 +41,10 @@ export function ConsentBanner() {
       <p className="text-white text-sm font-semibold mb-1">{t("consent.title")}</p>
       <p className="text-[#bfc8cc] text-xs leading-relaxed mb-3">
         {t("consent.body")}{" "}
-        <Link to="/privacy" className="underline text-white">{t("consent.more")}</Link>
+        {/* <a>, pas <Link> : ce bandeau est rendu HORS du RouterProvider (App.tsx).
+            Un <Link> hors routeur lève une erreur → écran « Something went wrong »
+            pour TOUS les visiteurs européens (corrigé 2026-11-19). */}
+        <a href="/privacy" className="underline text-white">{t("consent.more")}</a>
       </p>
       <div className="flex gap-2">
         <button
