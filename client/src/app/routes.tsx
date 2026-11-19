@@ -60,6 +60,9 @@ const BetBuilderPage        = lazy(() => import("./pages/BetBuilderPage").then(m
 // Folding the binding to null on iOS is what actually deletes it (verified:
 // VITE_TARGET=ios build emits no AuthCallback-*.js; the web build still does).
 const AuthCallback          = features.googleLogin ? lazy(() => import("./pages/AuthCallback").then(m => ({ default: m.AuthCallback }))) : null;
+// La page d'accueil des visiteurs non connectés — en lazy : les connectés ne la
+// téléchargent jamais.
+const IntroLanding          = lazy(() => import("./pages/IntroLanding").then(m => ({ default: m.IntroLanding })));
 const NHLPredictionsPage    = lazy(() => import("./pages/NHLPredictionsPage").then(m => ({ default: m.NHLPredictionsPage })));
 const MoreParlaysPage       = lazy(() => import("./pages/MoreParlaysPage").then(m => ({ default: m.MoreParlaysPage })));
 // Les deux écrans de développement, sous la MÊME liaison conditionnelle que
@@ -140,6 +143,37 @@ function Protected({ children }: { children: ReactNode }) {
 }
 
 /**
+ * `/` — page d'accueil des visiteurs (IntroLanding, 2026-11-19, demande du user).
+ *
+ * Non connecté → la patinoire et « Voir ArakIce ». Le clic ouvre l'accueil
+ * habituel (les matchs de ce soir) et le retient pour la SESSION de l'onglet :
+ * le logo et les liens vers `/` ne ramènent plus sur la patinoire, mais une
+ * nouvelle visite la remontre. Connecté → toujours les matchs, jamais la
+ * patinoire. Pendant la réhydratation de la session (quelques ms, lecture du
+ * jeton local), on ne montre ni l'une ni l'autre pour éviter un éclair.
+ */
+const INTRO_SEEN_KEY = "arakice_intro_seen";
+function HomeRoute() {
+  const { user, loading } = useAuth();
+  const [entered, setEntered] = useState(() => {
+    try { return sessionStorage.getItem(INTRO_SEEN_KEY) === "1"; } catch { return false; }
+  });
+  if (loading) return <PageFallback />;
+  if (!user && !entered) {
+    return withSuspense(
+      <IntroLanding
+        onEnter={() => {
+          try { sessionStorage.setItem(INTRO_SEEN_KEY, "1"); } catch { /* navigation privée */ }
+          window.scrollTo(0, 0);
+          setEntered(true);
+        }}
+      />,
+    );
+  }
+  return withSuspense(<HockeyLanding />);
+}
+
+/**
  * Root layout — mounts the AuthGate popup once for every route (it lives inside
  * the router so it can navigate to /login) and renders the matched page via
  * <Outlet />.
@@ -192,7 +226,7 @@ export const router = createBrowserRouter([
 
       // Public browsing — everything the basic plan offers, no account needed.
       // Write actions inside these pages (e.g. chat) are gated by AuthGate.
-      { path: "/",                                   element: withSuspense(<HockeyLanding />)                },
+      { path: "/",                                   element: <HomeRoute />                                  },
       { path: "/stats",                              element: withSuspense(<StatsPage />)                    },
       { path: "/schedule",                           element: withSuspense(<SchedulePage />)                 },
       { path: "/stats/prediction/:type/:id",         element: withSuspense(<PredictionPage />), loader: primeMatchPage,

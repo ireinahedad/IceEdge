@@ -1,0 +1,61 @@
+/* coach-rink.css — la patinoire de la page d'accueil des visiteurs (IntroLanding).
+   Les @keyframes sont GÉNÉRÉES (une par trait, cr-k0…) : chaque trait se dessine
+   dans sa propre fenêtre d'une boucle de 10.55 s. Ne pas les retoucher à la main —
+   régénérer avec le script de la maquette si la jouée change. */
+.cr-red{stroke:#d31f38;stroke-opacity:.85;stroke-width:12}
+.cr-red.cr-thin{stroke-width:5}
+.cr-blue{stroke:#2f6fd0;stroke-opacity:.9;stroke-width:12}
+.cr-redc{fill:none;stroke:#d31f38;stroke-opacity:.6;stroke-width:5}
+.cr-bluec{fill:none;stroke:#2f6fd0;stroke-opacity:.8;stroke-width:5}
+.cr-crease{fill:#2f6fd0;fill-opacity:.35;stroke:#d31f38;stroke-opacity:.7;stroke-width:4}
+.cr-net{fill:none;stroke:#eaf6fb;stroke-opacity:.35;stroke-width:4}
+.cr-boards{fill:none;stroke:#eaf6fb;stroke-opacity:.5;stroke-width:10}
+.cr-ink{fill:none;stroke:#f4fbfe;stroke-width:8;stroke-linecap:round;stroke-linejoin:round}
+.cr-ink.cr-o{stroke:#86d1ea;stroke-width:8.5}
+.cr-ink.cr-pass{stroke-dasharray:18 20}
+.cr-mask{fill:none;stroke:#fff;stroke-width:22;stroke-linecap:round}
+.cr-draw{stroke-dasharray:1 1;stroke-dashoffset:1;opacity:0;animation-duration:10.55s;animation-iteration-count:infinite;animation-timing-function:cubic-bezier(.45,.05,.4,1)}
+.cr-lamp{opacity:0;animation:cr-lamp 10.55s infinite}
+@keyframes cr-k0{0%,2.84%{stroke-dashoffset:1;opacity:0}2.89%{opacity:1}5.69%,89.57%{stroke-dashoffset:0;opacity:1}95.26%,100%{stroke-dashoffset:0;opacity:0}}
+@keyframes cr-k1{0%,6.16%{stroke-dashoffset:1;opacity:0}6.21%{opacity:1}8.25%,89.57%{stroke-dashoffset:0;opacity:1}95.26%,100%{stroke-dashoffset:0;opacity:0}}
+@keyframes cr-k2{0%,8.72%{stroke-dashoffset:1;opacity:0}8.77%{opacity:1}9.48%,89.57%{stroke-dashoffset:0;opacity:1}95.26%,100%{stroke-dashoffset:0;opacity:0}}
+@keyframes cr-k3{0%,9.76%{stroke-dashoffset:1;opacity:0}9.81%{opacity:1}10.52%,89.57%{stroke-dashoffset:0;opacity:1}95.26%,100%{stroke-dashoffset:0;opacity:0}}
+@keyframes cr-k4{0%,10.81%{stroke-dashoffset:1;opacity:0}10.86%{opacity:1}13.65%,89.57%{stroke-dashoffset:0;opacity:1}95.26%,100%{stroke-dashoffset:0;opacity:0}}
+@keyframes cr-k5{0%,14.13%{stroke-dashoffset:1;opacity:0}14.18%{opacity:1}17.01%,89.57%{stroke-dashoffset:0;opacity:1}95.26%,100%{stroke-dashoffset:0;opacity:0}}
+@keyframes cr-k6{0%,17.49%{stroke-dashoffset:1;opacity:0}17.54%{opacity:1}18.24%,89.57%{stroke-dashoffset:0;opacity:1}95.26%,100%{stroke-dashoffset:0;opacity:0}}
+@keyframes cr-k7{0%,18.53%{stroke-dashoffset:1;opacity:0}18.58%{opacity:1}19.29%,89.57%{stroke-dashoffset:0;opacity:1}95.26%,100%{stroke-dashoffset:0;opacity:0}}
+@keyframes cr-k8{0%,19.57%{stroke-dashoffset:1;opacity:0}19.62%{opacity:1}20.43%,89.57%{stroke-dashoffset:0;opacity:1}95.26%,100%{stroke-dashoffset:0;opacity:0}}
+@keyframes cr-k9{0%,20.71%{stroke-dashoffset:1;opacity:0}20.76%{opacity:1}21.56%,89.57%{stroke-dashoffset:0;opacity:1}95.26%,100%{stroke-dashoffset:0;opacity:0}}
+@keyframes cr-k10{0%,21.85%{stroke-dashoffset:1;opacity:0}21.9%{opacity:1}24.69%,89.57%{stroke-dashoffset:0;opacity:1}95.26%,100%{stroke-dashoffset:0;opacity:0}}
+@keyframes cr-k11{0%,25.17%{stroke-dashoffset:1;opacity:0}25.22%{opacity:1}27.71%,89.57%{stroke-dashoffset:0;opacity:1}95.26%,100%{stroke-dashoffset:0;opacity:0}}
+@keyframes cr-k12{0%,28.18%{stroke-dashoffset:1;opacity:0}28.23%{opacity:1}28.94%,89.57%{stroke-dashoffset:0;opacity:1}95.26%,100%{stroke-dashoffset:0;opacity:0}}
+@keyframes cr-k13{0%,29.22%{stroke-dashoffset:1;opacity:0}29.27%{opacity:1}29.98%,89.57%{stroke-dashoffset:0;opacity:1}95.26%,100%{stroke-dashoffset:0;opacity:0}}
+@keyframes cr-k14{0%,30.27%{stroke-dashoffset:1;opacity:0}30.32%{opacity:1}32.35%,89.57%{stroke-dashoffset:0;opacity:1}95.26%,100%{stroke-dashoffset:0;opacity:0}}
+@keyframes cr-k15{0%,32.82%{stroke-dashoffset:1;opacity:0}32.87%{opacity:1}33.58%,89.57%{stroke-dashoffset:0;opacity:1}95.26%,100%{stroke-dashoffset:0;opacity:0}}
+@keyframes cr-k16{0%,33.87%{stroke-dashoffset:1;opacity:0}33.92%{opacity:1}34.63%,89.57%{stroke-dashoffset:0;opacity:1}95.26%,100%{stroke-dashoffset:0;opacity:0}}
+@keyframes cr-k17{0%,34.91%{stroke-dashoffset:1;opacity:0}34.96%{opacity:1}35.76%,89.57%{stroke-dashoffset:0;opacity:1}95.26%,100%{stroke-dashoffset:0;opacity:0}}
+@keyframes cr-k18{0%,36.05%{stroke-dashoffset:1;opacity:0}36.1%{opacity:1}36.9%,89.57%{stroke-dashoffset:0;opacity:1}95.26%,100%{stroke-dashoffset:0;opacity:0}}
+@keyframes cr-k19{0%,37.19%{stroke-dashoffset:1;opacity:0}37.24%{opacity:1}40.03%,89.57%{stroke-dashoffset:0;opacity:1}95.26%,100%{stroke-dashoffset:0;opacity:0}}
+@keyframes cr-k20{0%,40.5%{stroke-dashoffset:1;opacity:0}40.55%{opacity:1}44.73%,89.57%{stroke-dashoffset:0;opacity:1}95.26%,100%{stroke-dashoffset:0;opacity:0}}
+@keyframes cr-k21{0%,45.2%{stroke-dashoffset:1;opacity:0}45.25%{opacity:1}45.96%,89.57%{stroke-dashoffset:0;opacity:1}95.26%,100%{stroke-dashoffset:0;opacity:0}}
+@keyframes cr-k22{0%,46.25%{stroke-dashoffset:1;opacity:0}46.3%{opacity:1}47.01%,89.57%{stroke-dashoffset:0;opacity:1}95.26%,100%{stroke-dashoffset:0;opacity:0}}
+@keyframes cr-k23{0%,47.29%{stroke-dashoffset:1;opacity:0}47.34%{opacity:1}48.14%,89.57%{stroke-dashoffset:0;opacity:1}95.26%,100%{stroke-dashoffset:0;opacity:0}}
+@keyframes cr-k24{0%,48.43%{stroke-dashoffset:1;opacity:0}48.48%{opacity:1}49.28%,89.57%{stroke-dashoffset:0;opacity:1}95.26%,100%{stroke-dashoffset:0;opacity:0}}
+@keyframes cr-k25{0%,49.57%{stroke-dashoffset:1;opacity:0}49.62%{opacity:1}51.83%,89.57%{stroke-dashoffset:0;opacity:1}95.26%,100%{stroke-dashoffset:0;opacity:0}}
+@keyframes cr-k26{0%,52.3%{stroke-dashoffset:1;opacity:0}52.35%{opacity:1}53.06%,89.57%{stroke-dashoffset:0;opacity:1}95.26%,100%{stroke-dashoffset:0;opacity:0}}
+@keyframes cr-k27{0%,53.34%{stroke-dashoffset:1;opacity:0}53.39%{opacity:1}54.1%,89.57%{stroke-dashoffset:0;opacity:1}95.26%,100%{stroke-dashoffset:0;opacity:0}}
+@keyframes cr-k28{0%,54.39%{stroke-dashoffset:1;opacity:0}54.44%{opacity:1}55.24%,89.57%{stroke-dashoffset:0;opacity:1}95.26%,100%{stroke-dashoffset:0;opacity:0}}
+@keyframes cr-k29{0%,55.53%{stroke-dashoffset:1;opacity:0}55.58%{opacity:1}56.38%,89.57%{stroke-dashoffset:0;opacity:1}95.26%,100%{stroke-dashoffset:0;opacity:0}}
+@keyframes cr-k30{0%,56.66%{stroke-dashoffset:1;opacity:0}56.71%{opacity:1}58.75%,89.57%{stroke-dashoffset:0;opacity:1}95.26%,100%{stroke-dashoffset:0;opacity:0}}
+@keyframes cr-k31{0%,59.22%{stroke-dashoffset:1;opacity:0}59.27%{opacity:1}59.98%,89.57%{stroke-dashoffset:0;opacity:1}95.26%,100%{stroke-dashoffset:0;opacity:0}}
+@keyframes cr-k32{0%,60.27%{stroke-dashoffset:1;opacity:0}60.32%{opacity:1}61.02%,89.57%{stroke-dashoffset:0;opacity:1}95.26%,100%{stroke-dashoffset:0;opacity:0}}
+@keyframes cr-k33{0%,61.31%{stroke-dashoffset:1;opacity:0}61.36%{opacity:1}62.16%,89.57%{stroke-dashoffset:0;opacity:1}95.26%,100%{stroke-dashoffset:0;opacity:0}}
+@keyframes cr-k34{0%,62.45%{stroke-dashoffset:1;opacity:0}62.5%{opacity:1}63.3%,89.57%{stroke-dashoffset:0;opacity:1}95.26%,100%{stroke-dashoffset:0;opacity:0}}
+@keyframes cr-k35{0%,63.58%{stroke-dashoffset:1;opacity:0}63.63%{opacity:1}66.15%,89.57%{stroke-dashoffset:0;opacity:1}95.26%,100%{stroke-dashoffset:0;opacity:0}}
+@keyframes cr-k36{0%,66.63%{stroke-dashoffset:1;opacity:0}66.68%{opacity:1}67.39%,89.57%{stroke-dashoffset:0;opacity:1}95.26%,100%{stroke-dashoffset:0;opacity:0}}
+@keyframes cr-k37{0%,67.67%{stroke-dashoffset:1;opacity:0}67.72%{opacity:1}68.43%,89.57%{stroke-dashoffset:0;opacity:1}95.26%,100%{stroke-dashoffset:0;opacity:0}}
+@keyframes cr-lamp{0%,68.21%{opacity:0}70.21%{opacity:1}76.71%{opacity:.45}89.57%{opacity:.45}95.26%,100%{opacity:0}}
+@media (prefers-reduced-motion: reduce){
+  .cr-draw{animation:none!important;opacity:1;stroke-dashoffset:0}
+  .cr-lamp{animation:none!important;opacity:.45}
+}
