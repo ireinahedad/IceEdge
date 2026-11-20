@@ -90,6 +90,33 @@ export async function authedFetch(path: string, init: TimedRequestInit = {}): Pr
 }
 
 /**
+ * Comme `authedFetch`, mais sur une URL ABSOLUE et sans `Content-Type` imposé.
+ *
+ * Depuis le 2026-11-20 (demande du user), le serveur exige un compte pour tout
+ * le contenu (/api/nhl, /api/predict, /api/odds, /api/news…). Ces services ont
+ * chacun leur base d'URL (`nhlApiUrl`, `predictionApiUrl`…) et passaient par
+ * `fetchWithTimeout` sans jeton : ils passent maintenant par ici. Le
+ * `Content-Type` n'est pas ajouté d'office (seul l'appelant qui envoie un corps
+ * le met) ; l'en-tête `Authorization` rend de toute façon la requête « non
+ * simple » au sens CORS, d'où un preflight, gardé 2 h à 24 h par le
+ * navigateur (`maxAge` côté serveur).
+ */
+export async function authedUrlFetch(url: string, init: TimedRequestInit = {}): Promise<Response> {
+  const withToken = (token: string | null): TimedRequestInit => ({
+    ...init,
+    headers: {
+      ...(init.headers as Record<string, string> ?? {}),
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+  });
+  const res = await fetchWithTimeout(url, withToken(await getFreshAccessToken()));
+  if (res.status === 401 && (await tryRefresh())) {
+    return fetchWithTimeout(url, withToken(await tokenStore.getAccess()));
+  }
+  return res;
+}
+
+/**
  * Exchange the refresh credential for a new access token. R3.5.
  *
  * One branch, keyed on what the store holds rather than on the platform:

@@ -29,8 +29,8 @@ import type {
   BetMarketType,
 } from "./../types/bet";
 import { env } from "../env";
-import { fetchWithTimeout } from "./http";
-import { authedFetch } from "./authService";
+
+import { authedFetch, authedUrlFetch } from "./authService";
 
 const BASE_URL = env.predictionApiUrl;
 
@@ -75,7 +75,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
   let res: Response;
   try {
-    res = await fetchWithTimeout(`${BASE_URL}${path}`, {
+    res = await authedUrlFetch(`${BASE_URL}${path}`, {
       ...init,
       headers: {
         // `Content-Type` seulement quand il y a un corps (POST). Sur un GET, il

@@ -19,7 +19,7 @@
  * La page du match garde le paquet complet (`fetchGameMlBundle`).
  */
 import { env } from "../env";
-import { fetchWithTimeout } from "./http";
+import { authedUrlFetch } from "./authService";
 
 export interface GameMlSummary {
   /** P(victoire domicile), 0–100. */
@@ -50,7 +50,7 @@ function flush(): void {
   for (let i = 0; i < pending.length; i += MAX_IDS) {
     const chunk = pending.slice(i, i + MAX_IDS);
     const ids = chunk.map((p) => p.id).join(",");
-    fetchWithTimeout(`${BASE}/summary?ids=${ids}`)
+    authedUrlFetch(`${BASE}/summary?ids=${ids}`)
       .then(async (r) => (r.ok ? ((await r.json()) as { games?: Record<string, GameMlSummary | null> }) : null))
       .catch(() => null)
       .then((body) => {

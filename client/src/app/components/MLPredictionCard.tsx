@@ -26,7 +26,7 @@ import { useEffect, useState } from "react";
 import { useI18n } from "../i18n";
 import { mlExplanation } from "../i18n/serverText";
 import { FramedLabel } from "./brand/FramedLabel";
-import { fetchWithTimeout } from "../services/http";
+import { authedUrlFetch } from "../services/authService";
 import {
   ML_BASE, normalizeMLResponse,
   type MLFeatureImportance, type MLPredictionResult,
@@ -526,7 +526,7 @@ export function MLSection({ type, subjectId, opponentId, propType, line, selecti
     // plus du tout — un échec donne l'état « indisponible ».
     setState({ status: "loading" });
 
-    fetchWithTimeout(`${ML_BASE}/ml`, {
+    authedUrlFetch(`${ML_BASE}/ml`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ type, subjectId, opponentId, propType, line, selection, isHome,

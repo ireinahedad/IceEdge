@@ -5,7 +5,7 @@
  */
 
 import { env } from '../env';
-import { fetchWithTimeout } from './http';
+import { authedUrlFetch } from './authService';
 
 export type NewsFlag = 'goalie' | 'lineup' | 'transaction';
 
@@ -23,7 +23,7 @@ export interface NewsItem {
 export async function fetchMatchNews(teams: string[], signal?: AbortSignal): Promise<NewsItem[]> {
   const q = encodeURIComponent(teams.join(','));
   try {
-    const res = await fetchWithTimeout(`${env.nhlServerUrl}/api/news?teams=${q}`, { signal });
+    const res = await authedUrlFetch(`${env.nhlServerUrl}/api/news?teams=${q}`, { signal });
     if (!res.ok) return [];
     const body = await res.json();
     return Array.isArray(body?.items) ? body.items : [];

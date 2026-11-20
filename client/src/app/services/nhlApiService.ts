@@ -14,7 +14,7 @@ import type {
 
 import { weightsQuery } from './ruleWeightsService';
 import { env } from '../env';
-import { fetchWithTimeout } from './http';
+import { authedUrlFetch } from './authService';
 
 const BASE_URL = env.nhlApiUrl;
 
@@ -353,7 +353,7 @@ function get<T>(path: string, signal?: AbortSignal): Promise<T> {
 
 async function rawGet<T>(path: string, signal?: AbortSignal): Promise<T> {
   if (!BASE_URL) throw new Error('VITE_NHL_API_URL is not configured');
-  const res = await fetchWithTimeout(`${BASE_URL}${path}`, {
+  const res = await authedUrlFetch(`${BASE_URL}${path}`, {
     headers: GET_HEADERS,
     signal,
   });
@@ -372,7 +372,7 @@ async function rawGet<T>(path: string, signal?: AbortSignal): Promise<T> {
  */
 async function getFresh<T>(path: string): Promise<T> {
   if (!BASE_URL) throw new Error('VITE_NHL_API_URL is not configured');
-  const res = await fetchWithTimeout(`${BASE_URL}${path}`, {
+  const res = await authedUrlFetch(`${BASE_URL}${path}`, {
     headers: GET_HEADERS,
   });
   if (!res.ok) {

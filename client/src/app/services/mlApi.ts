@@ -7,7 +7,7 @@
  * `MLPredictionCard.tsx` les ré-exporte : ses importeurs ne changent pas.
  */
 import { env } from "../env";
-import { fetchWithTimeout } from "./http";
+import { authedUrlFetch } from "./authService";
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 export interface MLFeatureImportance {
@@ -144,7 +144,7 @@ export function fetchMLProbability(req: MLProbabilityRequest): Promise<number | 
 
 async function requestMLProbability(req: MLProbabilityRequest): Promise<number | null> {
   try {
-    const r = await fetchWithTimeout(`${ML_BASE}/ml`, {
+    const r = await authedUrlFetch(`${ML_BASE}/ml`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(req),
@@ -222,7 +222,7 @@ export interface GameLiveState<G = unknown, M = unknown> {
   bundle: GameMlBundle | null;
 }
 export async function fetchGameLive<G = unknown, M = unknown>(gameId: string): Promise<GameLiveState<G, M>> {
-  const r = await fetchWithTimeout(`${ML_BASE}/game/${encodeURIComponent(gameId)}/live`, { cache: "no-store" });
+  const r = await authedUrlFetch(`${ML_BASE}/game/${encodeURIComponent(gameId)}/live`, { cache: "no-store" });
   if (!r.ok) throw new Error(`live state ${r.status}`);
   const body = await r.json() as { game?: G | null; markets?: GameLiveState<G, M>["markets"]; bundle?: unknown };
   return {
@@ -240,7 +240,7 @@ export function fetchGameMlBundle(gameId: string): Promise<GameMlBundle | null> 
     at: Date.now(),
     promise: (async (): Promise<GameMlBundle | null> => {
       try {
-        const r = await fetchWithTimeout(`${ML_BASE}/game/${encodeURIComponent(gameId)}/bundle`);
+        const r = await authedUrlFetch(`${ML_BASE}/game/${encodeURIComponent(gameId)}/bundle`);
         if (!r.ok) return null;
         return parseGameMlBundle(await r.json());
       } catch {

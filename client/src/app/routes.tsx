@@ -1,4 +1,4 @@
-import { createBrowserRouter, isRouteErrorResponse, Navigate, Outlet, useLocation, useRouteError } from "react-router";
+import { createBrowserRouter, isRouteErrorResponse, Navigate, Outlet, useLocation, useNavigate, useRouteError } from "react-router";
 import { lazy, Suspense, useEffect, useState, type ReactNode } from "react";
 import { ErrorScreen, reportError } from "./components/ErrorScreen";
 import { useAuth } from "./context/AuthContext";
@@ -125,11 +125,11 @@ function withSuspense(node: ReactNode) {
 }
 
 /**
- * Route guard for account-only pages (profile, Pro, dev tools).
- * The rest of the app — stats, schedule, predictions, the bet builder and the
- * public chat — is browsable while signed out. Guests are sent to /login only
- * for pages that inherently need an account; the nav bar stays visible so they
- * can go back.
+ * Garde des pages réservées aux comptes. Depuis le 2026-11-20 (demande du
+ * user), TOUT le contenu d'ArakIce en fait partie : stats, calendrier,
+ * prédictions, bet builder, ligue… Restent publics : `/` (la patinoire pour
+ * les visiteurs), /login, /pro (l'offre), les pages légales et la 404.
+ * Un visiteur est renvoyé vers /login avec `returnTo`, et y revient après.
  */
 function Protected({ children }: { children: ReactNode }) {
   const { user, loading } = useAuth();
@@ -143,32 +143,20 @@ function Protected({ children }: { children: ReactNode }) {
 }
 
 /**
- * `/` — page d'accueil des visiteurs (IntroLanding, 2026-11-19, demande du user).
+ * `/` — page d'accueil des visiteurs (IntroLanding).
  *
- * Non connecté → la patinoire et « Voir ArakIce ». Le clic ouvre l'accueil
- * habituel (les matchs de ce soir) et le retient pour la SESSION de l'onglet :
- * le logo et les liens vers `/` ne ramènent plus sur la patinoire, mais une
- * nouvelle visite la remontre. Connecté → toujours les matchs, jamais la
- * patinoire. Pendant la réhydratation de la session (quelques ms, lecture du
- * jeton local), on ne montre ni l'une ni l'autre pour éviter un éclair.
+ * Non connecté → toujours la patinoire ; « Voir ArakIce » mène à /login
+ * (2026-11-20, demande du user : plus de contenu sans compte). Connecté →
+ * les matchs de ce soir. Pendant la réhydratation de la session (quelques ms,
+ * lecture du jeton local), on ne montre ni l'une ni l'autre pour éviter un
+ * éclair.
  */
-const INTRO_SEEN_KEY = "arakice_intro_seen";
 function HomeRoute() {
   const { user, loading } = useAuth();
-  const [entered, setEntered] = useState(() => {
-    try { return sessionStorage.getItem(INTRO_SEEN_KEY) === "1"; } catch { return false; }
-  });
+  const navigate = useNavigate();
   if (loading) return <PageFallback />;
-  if (!user && !entered) {
-    return withSuspense(
-      <IntroLanding
-        onEnter={() => {
-          try { sessionStorage.setItem(INTRO_SEEN_KEY, "1"); } catch { /* navigation privée */ }
-          window.scrollTo(0, 0);
-          setEntered(true);
-        }}
-      />,
-    );
+  if (!user) {
+    return withSuspense(<IntroLanding onEnter={() => navigate("/login")} />);
   }
   return withSuspense(<HockeyLanding />);
 }
@@ -224,12 +212,13 @@ export const router = createBrowserRouter([
       { path: "/privacy",                            element: withSuspense(<PrivacyPage />)                  },
       { path: "/support",                            element: withSuspense(<SupportPage />)                  },
 
-      // Public browsing — everything the basic plan offers, no account needed.
-      // Write actions inside these pages (e.g. chat) are gated by AuthGate.
+      // Contenu de l'app — réservé aux comptes connectés (2026-11-20, demande du
+      // user). Avant, tout le plan de base se consultait sans compte. `/` reste
+      // public mais n'affiche que la patinoire (IntroLanding) aux visiteurs.
       { path: "/",                                   element: <HomeRoute />                                  },
-      { path: "/stats",                              element: withSuspense(<StatsPage />)                    },
-      { path: "/schedule",                           element: withSuspense(<SchedulePage />)                 },
-      { path: "/stats/prediction/:type/:id",         element: withSuspense(<PredictionPage />), loader: primeMatchPage,
+      { path: "/stats",                              element: withSuspense(<Protected><StatsPage /></Protected>) },
+      { path: "/schedule",                           element: withSuspense(<Protected><SchedulePage /></Protected>) },
+      { path: "/stats/prediction/:type/:id",         element: withSuspense(<Protected><PredictionPage /></Protected>), loader: primeMatchPage,
         // Pas de nouvel amorçage quand seuls les paramètres d'URL changent (onglet,
         // marché ouvert) : la page ne relit rien, l'appel serait perdu.
         shouldRevalidate: ({ currentParams, nextParams }) => currentParams.id !== nextParams.id || currentParams.type !== nextParams.type },
@@ -241,13 +230,13 @@ export const router = createBrowserRouter([
       // pas se disputer une URL. Son premier segment reste `:type` et non le
       // littéral « team » : ChartPage aiguille sur `type`, et un littéral ne
       // remplit pas ce paramètre — la page retomberait sur son accueil.
-      { path: "/stats/chart",                        element: withSuspense(<ChartPage />)                    },
-      { path: "/stats/chart/:type/:id?",             element: withSuspense(<ChartPage />)                    },
-      { path: "/stats/chart/:type/:id/:section",     element: withSuspense(<ChartPage />)                    },
-      { path: "/bet",                                element: withSuspense(<BetBuilderPage />)               },
-      { path: "/league",                             element: withSuspense(<LeaguePage />)                   },
-      { path: "/nhl-predictions",                    element: withSuspense(<NHLPredictionsPage />)           },
-      { path: "/parlays",                            element: withSuspense(<MoreParlaysPage />)              },
+      { path: "/stats/chart",                        element: withSuspense(<Protected><ChartPage /></Protected>) },
+      { path: "/stats/chart/:type/:id?",             element: withSuspense(<Protected><ChartPage /></Protected>) },
+      { path: "/stats/chart/:type/:id/:section",     element: withSuspense(<Protected><ChartPage /></Protected>) },
+      { path: "/bet",                                element: withSuspense(<Protected><BetBuilderPage /></Protected>) },
+      { path: "/league",                             element: withSuspense(<Protected><LeaguePage /></Protected>) },
+      { path: "/nhl-predictions",                    element: withSuspense(<Protected><NHLPredictionsPage /></Protected>) },
+      { path: "/parlays",                            element: withSuspense(<Protected><MoreParlaysPage /></Protected>) },
       // `/share/:id` a été supprimée le 2026-09-06 : la page n'affichait qu'un
       // « les coupons partagés arrivent bientôt », rien dans l'app n'y renvoyait
       // (le partage passe par une image, ce qui reste le bon choix), et Apple

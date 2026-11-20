@@ -16,16 +16,11 @@
  * page publique). Le top 3 est calculé ici, sur les marchés et le paquet ML
  * du match — les mêmes données, gratuites, que la page du match.
  */
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import { useNavigate } from "react-router";
 import { CoachRink } from "../components/landing-intro/CoachRink";
 import { useI18n, type Lang } from "../i18n";
-import { marketText } from "../i18n/serverText";
 import { accuracyRecord, ACCURACY_PAGE } from "../data/accuracyRecord";
-import { nhlApiService } from "../services/nhlApiService";
-import { fetchGameMlBundle, type GameMlBundle } from "../services/mlApi";
-import { homeWeek } from "../data/gameDay";
-import type { NHLGame } from "../types/bet";
 import "./intro-landing.css";
 
 type TFn = (k: string, p?: Record<string, string | number>) => string;
@@ -151,7 +146,7 @@ export function IntroLanding({ onEnter }: { onEnter: () => void }) {
             <a className="il-link" href={ACCURACY_PAGE}>{t("intro.trust.more")}</a>
           </div>
 
-          <TonightCard t={t} lang={lang} onEnter={onEnter} />
+          <TonightCard t={t} onEnter={onEnter} />
         </div>
 
         <p className="il-disclaimer">{t("intro.disclaimer")}</p>
@@ -171,144 +166,18 @@ function Stat({ value, label }: { value: string; label: string }) {
 
 /* ─── Ce soir, match par match ────────────────────────────────────────────── */
 
-type Pick = { label: string; market: string; pct: number };
-type Tonight = { game: NHLGame; homePct: number | null; picks: Pick[]; source: "ml" | "rules" };
-
-type ApiOption = { id: string; label?: string; rulePct?: number };
-type ApiGroup = { id: string; title?: string; options?: ApiOption[] };
-
-/** Probabilité d'arakiceML pour une tuile (paquet ML du match), sinon `null`. */
-function mlPct(o: ApiOption, bundle: GameMlBundle | null): number | null {
-  const p = bundle?.byId[o.id]?.probability;
-  return typeof p === "number" && Number.isFinite(p) ? p : null;
-}
-
 /**
- * Le top 3 (demandes du user, 2026-11-19) : les paris du match entre 70 et
- * 80 % — assez sûrs pour impressionner, sans les évidences à 95 % (« moins de
- * 8,5 buts »). Classés du plus probable au moins probable, tous marchés du
- * match confondus.
- *
- * Source : arakiceML (paquet ML du match). Si le ML ne répond pas ou ne chiffre
- * aucune tuile, on prend les chiffres des RÈGLES (`rulePct`), et la carte le
- * dit (`source: "rules"`). Moins de trois paris dans la fourchette : on
- * complète avec les plus proches de la fourchette.
- *
- * Les libellés restent ceux du serveur (anglais) ; ils sont traduits au rendu
- * par `marketText`, comme sur la page du match.
+ * 2026-11-20 (demande du user) : le contenu d'ArakIce exige un compte, API
+ * comprise. Cette carte montrait le top 3 des prédictions du prochain match ;
+ * pour un visiteur, l'API répond maintenant 401. Elle ne charge donc plus rien
+ * et invite à se connecter.
  */
-const TOP_MIN = 70, TOP_MAX = 80;
-function topPicks(groups: ApiGroup[], bundle: GameMlBundle | null): { homePct: number | null; picks: Pick[]; source: "ml" | "rules" } {
-  const collect = (src: "ml" | "rules") => {
-    const out: Pick[] = [];
-    for (const g of groups) {
-      for (const o of g.options ?? []) {
-        const pct = src === "ml" ? mlPct(o, bundle) : (typeof o.rulePct === "number" ? o.rulePct : null);
-        if (pct == null || !o.label) continue;
-        out.push({ label: o.label, market: g.title ?? "", pct });
-      }
-    }
-    return out;
-  };
-  let source: "ml" | "rules" = "ml";
-  let all = collect("ml");
-  if (all.length === 0) { source = "rules"; all = collect("rules"); }
-
-  const dist = (p: number) => (p < TOP_MIN ? TOP_MIN - p : p > TOP_MAX ? p - TOP_MAX : 0);
-  const seen = new Set<string>();
-  const picks = all
-    .sort((x, y) => dist(x.pct) - dist(y.pct) || y.pct - x.pct)
-    .filter((x) => (seen.has(x.label) ? false : (seen.add(x.label), true)))
-    .slice(0, 3)
-    .sort((x, y) => y.pct - x.pct);
-
-  const ml = groups.find((x) => x.id === "moneyline")?.options?.find((o) => o.id === "mw-home");
-  const homePct = ml ? ((source === "ml" ? mlPct(ml, bundle) : null) ?? (typeof ml.rulePct === "number" ? ml.rulePct : null)) : null;
-  return { homePct, picks, source };
-}
-
-/** Prochain match à venir de la semaine (ce soir d'abord), comme l'accueil. */
-async function loadTonight(): Promise<Tonight | null> {
-  const days = homeWeek().filter((d) => d.offset >= 0);
-  const range = await nhlApiService.getGamesRange(days[0].dateStr, days[days.length - 1].dateStr);
-  const ms = (g: NHLGame) => (g.startTimeUTC ? new Date(g.startTimeUTC).getTime() : Number.MAX_SAFE_INTEGER);
-  const next = range
-    .filter((g) => (g.status as string) === "scheduled" || (g.status as string) === "preview")
-    .sort((a, b) => ms(a) - ms(b))[0];
-  if (!next) return null;
-  const [groups, bundle] = await Promise.all([
-    nhlApiService.getGamePredictions(String(next.id)) as Promise<ApiGroup[]>,
-    fetchGameMlBundle(String(next.id)).catch(() => null),
-  ]);
-  return { game: next, ...topPicks(Array.isArray(groups) ? groups : [], bundle) };
-}
-
-function TonightCard({ t, lang, onEnter }: { t: TFn; lang: Lang; onEnter: () => void }) {
-  const ref = useRef<HTMLDivElement>(null);
-  const [state, setState] = useState<{ status: "idle" | "loading" | "ready" | "empty" | "error"; data?: Tonight }>({ status: "idle" });
-
-  // Rien n'est demandé avant que la carte approche de l'écran : la plupart des
-  // visiteurs cliquent « Voir ArakIce » sans descendre.
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    let cancelled = false;
-    const start = () => {
-      setState({ status: "loading" });
-      loadTonight()
-        .then((data) => { if (!cancelled) setState(data ? { status: "ready", data } : { status: "empty" }); })
-        .catch(() => { if (!cancelled) setState({ status: "error" }); });
-    };
-    if (typeof IntersectionObserver === "undefined") { start(); return () => { cancelled = true; }; }
-    const io = new IntersectionObserver((e) => { if (e.some((x) => x.isIntersecting)) { io.disconnect(); start(); } }, { rootMargin: "300px" });
-    io.observe(el);
-    return () => { cancelled = true; io.disconnect(); };
-  }, []);
-
-  const d = state.data;
-  const time = d?.game.startTimeUTC
-    ? new Date(d.game.startTimeUTC).toLocaleString(lang === "fr" ? "fr-CA" : "en-US", { weekday: "short", hour: "numeric", minute: "2-digit" })
-    : "";
-
+function TonightCard({ t, onEnter }: { t: TFn; onEnter: () => void }) {
   return (
-    <div ref={ref} className="il-card il-pad">
+    <div className="il-card il-pad">
       <h3 className="il-card-title">{t("intro.tonight.title")}</h3>
-      {state.status === "ready" && d ? (
-        <>
-          <p className="il-note">{d.game.awayTeam.name} @ {d.game.homeTeam.name}{time ? ` · ${time}` : ""}</p>
-          {d.homePct != null && (
-            <div className="il-teams">
-              <TeamBar team={d.game.awayTeam.name} pct={100 - d.homePct} color="#2f6fd0" />
-              <TeamBar team={d.game.homeTeam.name} pct={d.homePct} color="#86d1ea" />
-            </div>
-          )}
-          <div className="il-top">
-            <div className="il-top-head">{t("intro.tonight.top3")}</div>
-            {d.source === "rules" && <p className="il-note">{t("intro.tonight.rules")}</p>}
-            {d.picks.map((p, i) => (
-              <div key={p.label} className="il-top-row">
-                <span className="il-top-rank">{i + 1}</span>
-                <div className="il-top-text"><span className="il-top-pick">{marketText(p.label, lang)}</span><span className="il-top-mkt">{marketText(p.market, lang)}</span></div>
-                <span className="il-top-pct">{Math.round(p.pct)}{"\u00a0%"}</span>
-              </div>
-            ))}
-          </div>
-        </>
-      ) : state.status === "empty" || state.status === "error" ? (
-        <p className="il-note">{t(state.status === "empty" ? "intro.tonight.none" : "intro.tonight.error")}</p>
-      ) : (
-        <div className="il-skeleton" aria-busy="true" />
-      )}
+      <p className="il-note">{t("intro.tonight.locked")}</p>
       <button type="button" className="il-link il-link-btn" onClick={onEnter}>{t("intro.tonight.cta")}</button>
-    </div>
-  );
-}
-
-function TeamBar({ team, pct, color }: { team: string; pct: number; color: string }) {
-  return (
-    <div className="il-team">
-      <div className="il-team-row"><span>{team}</span><span className="il-team-pct">{Math.round(pct)}{"\u00a0%"}</span></div>
-      <div className="il-team-track"><div className="il-team-bar" style={{ width: `${pct}%`, background: color }} /></div>
     </div>
   );
 }

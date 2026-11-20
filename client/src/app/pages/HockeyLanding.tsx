@@ -215,7 +215,9 @@ export function HockeyLanding() {
   }
   /** Au-delà de J+2, pas de cote (demande du user, 2026-10-02). */
   const dayOffset = gameDays[dayIdx]?.offset ?? 0;
-  const showOdds = dayOffset >= 0 && dayOffset <= 2;
+  // Hier aussi (2026-11-20) : ses matchs pas encore joués gardent leurs cotes ;
+  // un match terminé n'en montre jamais (voir la ligne du match).
+  const showOdds = dayOffset >= -1 && dayOffset <= 2;
 
   // En-tête qui se réduit au défilement (2026-09-27). Ce n'est pas la fenêtre
   // qui défile mais le conteneur de `App.tsx` : on écoute donc TOUS les
@@ -292,11 +294,13 @@ export function HockeyLanding() {
             : offset === 0 ? t("home.tonightGames")
             : offset === 1 ? t("home.tomorrowGames")
             : t("home.gamesOn", { date: d.toLocaleDateString(locale, { weekday: "long", month: "short", day: "numeric" }) }),
-          // Hier : les matchs TERMINÉS (avec leur score) ; les autres jours,
-          // seulement ceux à venir ou en cours, comme avant.
+          // Hier : les matchs terminés (avec leur score) ET ceux pas encore
+          // joués (2026-11-20, demande du user) — depuis Bali, la soirée LNH
+          // d'« hier » se joue le matin local : ses matchs restent à venir.
+          // Les autres jours, seulement ceux à venir ou en cours, comme avant.
           games: range.filter((g) =>
             String(g.gameDate ?? "").slice(0, 10) === dateStr &&
-            (offset < 0 ? g.status === "final" : ["scheduled", "live", "preview"].includes(g.status))).sort(byFaceoff),
+            (offset < 0 ? ["final", "scheduled", "live", "preview"] : ["scheduled", "live", "preview"]).includes(g.status)).sort(byFaceoff),
         })).filter((x) => x.games.length > 0);
         // La journée que le lecteur regardait avant de quitter l'accueil, si
         // elle est toujours dans la semaine ; sinon la première, comme avant.
@@ -470,7 +474,7 @@ export function HockeyLanding() {
                         </h3>
                       )}
                       {items.map((g) => (
-                        <UpcomingGameRow key={g.id} game={g} showOdds={showOdds} onOpenSheet={() => openGameSheet(g.id)} />
+                        <UpcomingGameRow key={g.id} game={g} showOdds={showOdds && !g.final} onOpenSheet={() => openGameSheet(g.id)} />
                       ))}
                     </div>
                   ))}

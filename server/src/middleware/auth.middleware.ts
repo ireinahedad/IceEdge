@@ -112,3 +112,34 @@ export function requireOwnerOrAdmin(req: Request, res: Response, next: NextFunct
     res.status(403).json({ error: 'Forbidden' });
   }
 }
+// -------------------------------------------------------
+//  Contenu réservé aux comptes (2026-11-20, demande du user)
+// -------------------------------------------------------
+//  Toutes les données d'ArakIce (NHL, prédictions, cotes, nouvelles, pick'em,
+//  classement) exigent désormais un jeton valide. Les routes concernées
+//  posaient un `Cache-Control: public` : sur une requête portant
+//  `Authorization`, `public` AUTORISE un cache partagé (CDN) à stocker la
+//  réponse et à la resservir à n'importe qui, connecté ou non (RFC 9111 §3.5).
+//  `privatizeCache` réécrit donc toute politique `public` en `private` au
+//  moment où elle est posée, et retire `s-maxage` (qui ne vise que les caches
+//  partagés). Le navigateur de la personne connectée garde son cache ; le CDN
+//  ne garde plus rien.
+
+export function privatizeCache(_req: Request, res: Response, next: NextFunction): void {
+  const setHeader = res.setHeader.bind(res);
+  res.setHeader = ((name: string, value: number | string | readonly string[]) => {
+    if (name.toLowerCase() === 'cache-control' && typeof value === 'string') {
+      value = value
+        .split(',')
+        .map((d) => d.trim())
+        .filter((d) => d && !/^s-maxage=/i.test(d))
+        .map((d) => (d.toLowerCase() === 'public' ? 'private' : d))
+        .join(', ');
+    }
+    return setHeader(name, value);
+  }) as typeof res.setHeader;
+  next();
+}
+
+/** `privatizeCache` puis `authenticate` : à monter sur tout routeur de contenu. */
+export const requireAccount = [privatizeCache, authenticate];

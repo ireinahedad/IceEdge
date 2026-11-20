@@ -10,7 +10,7 @@
 // Falls back to empty array when the backend/upstream is unavailable.
 
 import { env } from "../env";
-import { fetchWithTimeout } from "./http";
+import { authedUrlFetch } from "./authService";
 
 // Backend base, e.g. https://<railway>/api — validated in env.ts, no localhost fallback.
 const API_BASE = env.apiBase;
@@ -87,7 +87,7 @@ export async function fetchBet365Odds(
 ): Promise<OddsEvent[]> {
   try {
     const params = new URLSearchParams({ markets: markets.join(",") });
-    const res = await fetchWithTimeout(
+    const res = await authedUrlFetch(
       `${API_BASE}/odds/bet365/${encodeURIComponent(sportKey)}?${params}`
     );
     if (!res.ok) {
@@ -159,7 +159,7 @@ export async function fetchLegPrices(
                    selectionValue: l.selectionValue, line: l.line ?? null }));
   if (!wanted.length) return {};
   try {
-    const res = await fetchWithTimeout(`${API_BASE}/odds/legs`, {
+    const res = await authedUrlFetch(`${API_BASE}/odds/legs`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ legs: wanted }),
@@ -180,7 +180,7 @@ export async function fetchLegPrices(
 export async function fetchGameExtras(homeAbbr: string, awayAbbr: string): Promise<OddsEvent["bookmakers"]> {
   if (!/^[A-Za-z]{2,3}$/.test(homeAbbr) || !/^[A-Za-z]{2,3}$/.test(awayAbbr)) return [];
   try {
-    const res = await fetchWithTimeout(
+    const res = await authedUrlFetch(
       `${API_BASE}/odds/extras/${encodeURIComponent(homeAbbr)}/${encodeURIComponent(awayAbbr)}`,
     );
     if (!res.ok) return [];
