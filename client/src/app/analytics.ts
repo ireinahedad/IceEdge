@@ -124,6 +124,7 @@ function applyConsent(choice: ConsentChoice) {
 export function setConsent(choice: ConsentChoice) {
   try { localStorage.setItem(CONSENT_KEY, choice); } catch { /* rien */ }
   applyConsent(choice);
+  flushPending();
   consentListeners.forEach((l) => l());
 }
 
@@ -145,6 +146,8 @@ export function onConsentChange(l: () => void) {
  * en attendant le bandeau.
  */
 export function resolveRegion(country: string | null) {
+  regionNeedsConsent = consentRequired(country);
+  flushPending();
   if (!active || readConsent()) return;
   applyConsent(consentRequired(country) ? "denied" : "granted");
 }
@@ -183,7 +186,77 @@ export function tagUser(userId: string | null, isPro: boolean) {
   if (userId) clarity("identify", userId);
 }
 
-/** Événement personnalisé (ex. « pro_checkout_click ») : filtrable dans Clarity. */
+/**
+ * Événement personnalisé (ex. « pro_checkout_click ») : filtrable dans Clarity,
+ * ET journalisé en base (`product_events`, migration 055) pour que l'entonnoir
+ * se lise en SQL — Clarity n'a ni SQL ni historique exportable.
+ *
+ * Le serveur n'accepte que sa liste blanche (`CLIENT_EVENTS`, growth.service.ts) :
+ * un nom inconnu reçoit un 400 sans conséquence. Même règle de consentement
+ * que Clarity : en Europe, rien ne part sans « Accepter ».
+ */
 export function trackEvent(name: string) {
   if (window.clarity) clarity("event", name);
+  if (!active) return;
+  // Pays pas encore connu et pas de réponse gardée : on attend `resolveRegion`
+  // (quelques centaines de ms) au lieu de perdre les événements du chargement.
+  if (regionNeedsConsent === null && !readConsent()) {
+    if (pendingEvents.length < 20) pendingEvents.push(name);
+    return;
+  }
+  if (!productEventsAllowed()) return;
+  postEvent(name);
+}
+
+function postEvent(name: string) {
+  void import("./services/authService")
+    .then((m) => m.authedFetch("/growth/event", { method: "POST", body: JSON.stringify({ name }), keepalive: true }))
+    .catch(() => { /* mesure best-effort */ });
+}
+
+/** null = pays pas encore connu. Posé par `resolveRegion`. */
+let regionNeedsConsent: boolean | null = null;
+/** Événements émis avant que le pays soit connu ; vidés par `resolveRegion`. */
+const pendingEvents: string[] = [];
+let pendingAttribution: string | null = null;
+
+function flushPending() {
+  const names = pendingEvents.splice(0);
+  const attr = pendingAttribution;
+  pendingAttribution = null;
+  if (!productEventsAllowed()) return;
+  names.forEach(postEvent);
+  if (attr) sendSignupAttribution(attr);
+}
+
+/** Mesure en base permise ? Accord explicite, ou hors Europe une fois le pays connu. */
+function productEventsAllowed(): boolean {
+  if (!active) return false; // dev, iOS : rien
+  const c = readConsent();
+  if (c) return c === "granted";
+  return regionNeedsConsent === false;
+}
+
+const ATTR_SENT_KEY = "ae.attrSent";
+
+/**
+ * Provenance premier contact → compte (migration 055). Une fois par navigateur
+ * et par compte ; le serveur ne l'écrit que pour un compte de moins de 3 jours
+ * et seulement si elle est vide. Sans premier contact gardé (refus du
+ * consentement, navigation privée), rien n'est envoyé.
+ */
+export function sendSignupAttribution(userId: string) {
+  if (!active) return;
+  if (regionNeedsConsent === null && !readConsent()) { pendingAttribution = userId; return; }
+  if (!productEventsAllowed()) return;
+  const touch = readFirstTouch();
+  if (!touch) return;
+  try { if (localStorage.getItem(ATTR_SENT_KEY) === userId) return; } catch { return; }
+  void import("./services/authService")
+    .then((m) => m.authedFetch("/growth/attribution", {
+      method: "POST",
+      body: JSON.stringify({ source: touch.source, medium: touch.medium, campaign: touch.campaign, landing: touch.landing }),
+    }))
+    .then((r) => { if (r.ok) { try { localStorage.setItem(ATTR_SENT_KEY, userId); } catch { /* rien */ } } })
+    .catch(() => { /* réessai au prochain chargement */ });
 }

@@ -3,6 +3,7 @@ import { verifyAccessToken } from '../services/auth.service';
 import { isPro } from '../services/subscription.service';
 import { UserRole } from '../types/user.type';
 import { sendError } from '../httpError';
+import { touchActivity } from '../services/growth.service';
 
 // -------------------------------------------------------
 //  Require a valid JWT access token
@@ -19,6 +20,8 @@ export function authenticate(req: Request, res: Response, next: NextFunction): v
 
   try {
     req.user = verifyAccessToken(token);
+    // Rétention (migration 055) : une écriture par compte et par jour, au plus.
+    touchActivity(req.user.sub);
     next();
   } catch (err: any) {
     sendError(res, err, { fallbackStatus: 401 });

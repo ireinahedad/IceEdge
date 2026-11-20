@@ -9,6 +9,7 @@ import { initSocket, io, socketAdapter } from './socket';
 import { startSettlementJob } from './services/settlement.service';
 import { startValueBetScan } from './services/valueBetScan.service';
 import { startCleanupJob } from './services/cleanup.service';
+import { startTrialLifecycleJob } from './services/trialLifecycle.service';
 import { startOddsLogger, verifyOddsApiKey } from './services/oddsLogger.service';
 import { startPropsLogger } from './services/propsLogger.service';
 import { startNewsSync } from './services/newsSync.service';
@@ -55,6 +56,8 @@ const DORMANT = process.env.DORMANT === 'true';
       startValueBetScan();
       // Daily housekeeping: prune expired/revoked tokens and used codes
       startCleanupJob();
+      // Courriels de fin d'essai Pro (opt-in TRIAL_EMAILS_ENABLED=true, migration 055)
+      startTrialLifecycleJob();
       // Journalise les cotes NHL du jour pour le réentraînement ML
       // (tables `odds_log` et `odds_snapshots` — plus de CSV depuis la 027)
       startOddsLogger();

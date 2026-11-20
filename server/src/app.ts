@@ -24,6 +24,7 @@ import pushRoutes          from './routes/push.routes';
 import widgetRoutes        from './routes/widget.routes';
 import scanRoutes          from './routes/scan.routes';
 import contentRoutes       from './routes/content.routes';
+import growthRoutes        from './routes/growth.routes';
 import { createAgentsRouter } from './routes/x402.routes';
 import { loadX402Config }  from './services/x402/config';
 import { getLeaderboard }  from './services/profile.service';
@@ -168,6 +169,9 @@ app.use('/api/nhl',           requireAccount, nhlRoutes);
 app.use('/api/news',          requireAccount, newsRoutes);
 // Visitor location (Cloudflare headers) → may we show a sportsbook link? Per visitor, no-store.
 app.use('/api/geo',           geoRoutes);
+// Mesure de l'entonnoir (migration 055) : étapes côté client + provenance des
+// comptes neufs. Compte facultatif pour /event (un visiteur déconnecté compte).
+app.use('/api/growth',        writeLimiter, noStore, growthRoutes);
 // Pick'em ICEEDGE (F3) — GET public, POST connecté. `noStore` : la réponse porte
 // le vote de la personne connectée. `writeLimiter` laisse passer les GET.
 // `/public-vs-model` reste public : c'est un agrégat (précision du public vs

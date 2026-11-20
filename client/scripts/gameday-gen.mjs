@@ -875,7 +875,9 @@ function gamePage({ lang, game, a, b, series, ra, rb, final, sameDay, pred }) {
   // Appel à l'action (2026-11-18) : vers la page du match DANS l'appli (cotes,
   // value bets, props), plus vers l'accueil. Un match joué renvoie au programme
   // du soir. UTM : on mesure les visiteurs que chaque page envoie à l'appli.
-  const campaign = `${game.date}_${game.slug}`;
+  // `slug` (local), pas `game.slug` : ce champ n'existe pas ici et donnait
+  // « 2026-11-19_undefined » dans toutes les campagnes UTM (corrigé 2026-11-20).
+  const campaign = `${game.date}_${slug}`;
   const gameAppUrl = isFinal ? appUrl("/", "match_page", campaign) : appUrl(`/stats/prediction/game/${game.id}`, "match_page", campaign);
   const quickCta = isFinal ? "" : `    <div class="cta-inline">
       <a class="btn" href="${gameAppUrl}">${esc(T.ctaGameBtn)}</a>

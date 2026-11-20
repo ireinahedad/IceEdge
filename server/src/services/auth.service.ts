@@ -10,6 +10,7 @@ import { pool } from '../db/connection';
 import { logger } from '../logger';
 import { sendVerificationCode, sendPasswordResetCode, sendAccountDeletionCode } from './email.service';
 import { profileAlreadyEnsured, markProfileEnsured } from './profileEnsured';
+import { trackEvent as trackGrowthEvent } from './growth.service';
 import {
   UserRow, UserPublic, RegisterBody, LoginBody,
   AuthTokens, AuthResponse, JwtPayload, RefreshTokenRow,
@@ -251,6 +252,8 @@ export async function register(body: RegisterBody): Promise<PendingVerificationR
   } finally {
     client.release();
   }
+  // Mesure (migration 055) : compte créé, courriel pas encore confirmé.
+  void trackGrowthEvent(user.id, 'signup', { method: 'email' });
 
   // Dev bypass: mark verified and log in immediately (no email required).
   if (VERIFICATION_DISABLED) {
@@ -518,6 +521,7 @@ export async function loginWithGoogle(googleUser: GoogleUserInfo): Promise<AuthR
   // atomic, and account-linking updates shouldn't half-apply either.
   const client = await pool.connect();
   let user: UserRow;
+  let createdNow = false;
   try {
     await client.query('BEGIN');
 
@@ -557,6 +561,7 @@ export async function loginWithGoogle(googleUser: GoogleUserInfo): Promise<AuthR
           ],
         );
         user = newRows[0];
+        createdNow = true;
       }
     }
 
@@ -571,6 +576,7 @@ export async function loginWithGoogle(googleUser: GoogleUserInfo): Promise<AuthR
   } finally {
     client.release();
   }
+  if (createdNow) void trackGrowthEvent(user.id, 'signup', { method: 'google' });
 
   // Google sign-in is treated as a persistent session by default.
   const tokens = await issueTokens(user, true);

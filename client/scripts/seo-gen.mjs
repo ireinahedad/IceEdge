@@ -346,6 +346,7 @@ ${hreflang}  <meta name="robots" content="index, follow, max-image-preview:large
   <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/seo.css" />
 ${jsonld ? `  <script type="application/ld+json">\n${JSON.stringify(jsonld, null, 2)}\n  </script>\n` : ""}${extraHead}  <script defer src="/_vercel/insights/script.js"></script>
+  <script defer src="/seo-utm.js"></script>
 </head>
 <body>
   <header class="site-header">

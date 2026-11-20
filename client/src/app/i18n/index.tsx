@@ -1335,6 +1335,13 @@ const DICT: Record<string, { en: string; fr: string }> = {
   "home.trialNoCard": { en: "No credit card", fr: "Sans carte bancaire" },
   "pro.trialActive":  { en: "Free trial active", fr: "Essai gratuit actif" },
   "pro.trialEnds":    { en: "Trial ends on",   fr: "Essai se termine le" },
+  // Fin d'essai (TrialStatusNotice, 2026-11-20).
+  "trial.endedTitle": { en: "Your Pro trial has ended", fr: "Votre essai Pro est terminé" },
+  "trial.endedBody":  { en: "Daily Best Bets, the +EV finder and its alerts, and the included AI analysis are off now. Keep them for CA$5.99/month, cancel anytime.", fr: "Les Meilleurs paris du jour, le détecteur +EV et ses alertes, et l'analyse IA incluse sont désactivés. Gardez-les pour 5,99 $ CA par mois, annulable en tout temps." },
+  "trial.keepPro":    { en: "Keep Pro",          fr: "Garder Pro" },
+  "trial.notNow":     { en: "Not now",           fr: "Pas maintenant" },
+  "trial.endingOne":  { en: "Pro trial: last day.", fr: "Essai Pro : dernier jour." },
+  "trial.endingMany": { en: "Pro trial: {n} days left.", fr: "Essai Pro : encore {n} jours." },
   "pro.loginPrompt":  { en: "Sign in to subscribe", fr: "Connectez-vous pour vous abonner" },
   "pro.cancel":       { en: "Cancel subscription", fr: "Annuler l'abonnement" },
   "pro.isProTitle":   { en: "You're Pro",   fr: "Vous êtes Pro" },

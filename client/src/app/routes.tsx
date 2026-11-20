@@ -3,6 +3,8 @@ import { lazy, Suspense, useEffect, useState, type ReactNode } from "react";
 import { ErrorScreen, reportError } from "./components/ErrorScreen";
 import { useAuth } from "./context/AuthContext";
 import { AuthGateProvider } from "./context/AuthGateContext";
+import { TrialStatusNotice } from "./components/TrialStatusNotice";
+import { trackEvent } from "./analytics";
 import { features } from "./platform";
 import { primeGet, gamePredictionsPath, primeMatchContext } from "./services/nhlApiService";
 import { fetchGameMlBundle } from "./services/mlApi";
@@ -156,7 +158,9 @@ function HomeRoute() {
   const navigate = useNavigate();
   if (loading) return <PageFallback />;
   if (!user) {
-    return withSuspense(<IntroLanding onEnter={() => navigate("/login")} />);
+    // `landing_enter_click` : mesure du mur de connexion du 2026-11-20 (combien
+    // de visiteurs de la patinoire vont jusqu'à /login).
+    return withSuspense(<IntroLanding onEnter={() => { trackEvent("landing_enter_click"); navigate("/login"); }} />);
   }
   return withSuspense(<HockeyLanding />);
 }
@@ -170,6 +174,8 @@ function RootLayout() {
   return (
     <AuthGateProvider>
       <Outlet />
+      {/* Fin d'essai Pro : bandeau J-2 et fiche « essai terminé » (2026-11-20). */}
+      <TrialStatusNotice />
     </AuthGateProvider>
   );
 }

@@ -23,7 +23,12 @@ import { useSubscription } from "./context/SubscriptionContext";
 import { useMemo } from "react";
 
 type Variant = "A" | "B";
-const FORCED: Record<string, Variant> = {};
+// 2026-11-20 (audit Growth) : à ~20 visiteurs par jour, chaque bras aurait
+// besoin d'environ 1 470 visiteurs pour détecter un CTR de 5 % → 7,5 % (α 0,05,
+// puissance 0,8), soit ~5 mois. Les deux tests sont clos au jugement, dans le
+// sens des décisions du 2026-11-18 (montrer Pro plus tôt, pousser l'essai
+// gratuit). Mesure désormais en avant/après dans `product_events`.
+const FORCED: Record<string, Variant> = { pro_position: "B", pro_cta: "B" };
 
 function clarityTag(name: string, v: Variant) {
   const c = (window as { clarity?: (...a: unknown[]) => void }).clarity;

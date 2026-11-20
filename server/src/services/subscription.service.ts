@@ -9,6 +9,7 @@ import { pool } from '../db/connection';
 import { SubscriptionRow, SubscriptionStatus, BillingPlan, SubStatus, SubSource } from '../types/subscription.type';
 import { logger } from '../logger';
 import { TtlCache } from './ttlCache';
+import { trackEvent as trackGrowthEvent } from './growth.service';
 
 // ─── Stripe client (lazy) ─────────────────────────────────────────────────────
 // Only constructed when STRIPE_SECRET_KEY is set, so the app runs fine without
@@ -273,6 +274,7 @@ export async function startTrial(userId: string, days = 7): Promise<Subscription
     [userId, end],
   );
   invalidateProCache(userId);
+  void trackGrowthEvent(userId, 'trial_started', { days });
   return toStatus(rows[0]);
 }
 
@@ -493,6 +495,8 @@ export async function createCheckoutSession(
   });
 
   if (!session.url) throw Object.assign(new Error('Stripe did not return a checkout URL'), { status: 502 });
+  // Mesure (migration 055) : le compte est parti vers la page de paiement Stripe.
+  void trackGrowthEvent(userId, 'checkout_started', { period });
   return session.url;
 }
 
@@ -609,13 +613,26 @@ export async function handleStripeWebhook(rawBody: Buffer, signature: string | u
           sub.metadata = { ...sub.metadata, userId: session.client_reference_id };
         }
         await syncSubscription(sub, eventCreatedAt);
+        // Mesure (migration 055). Le registre `stripe_events` garantit qu'un
+        // rejeu de Stripe n'arrive pas jusqu'ici : un seul événement par achat.
+        const buyer = session.client_reference_id ?? sub.metadata?.userId ?? null;
+        void trackGrowthEvent(buyer, 'subscription_started', {
+          period: sub.metadata?.period ?? 'unknown',
+          status: sub.status,
+        });
       }
       break;
     }
     case 'customer.subscription.created':
     case 'customer.subscription.updated':
     case 'customer.subscription.deleted': {
-      await syncSubscription(event.data.object as Stripe.Subscription, eventCreatedAt);
+      const sub = event.data.object as Stripe.Subscription;
+      await syncSubscription(sub, eventCreatedAt);
+      if (event.type === 'customer.subscription.deleted') {
+        void trackGrowthEvent(sub.metadata?.userId ?? null, 'subscription_canceled', {
+          period: sub.metadata?.period ?? 'unknown',
+        });
+      }
       break;
     }
     default:
