@@ -136,7 +136,10 @@ export async function fetchHockeyOdds(): Promise<OddsEvent[]> {
   if (inflight) return inflight;
   inflight = fetchBet365Odds(ODDS_SPORT_KEYS.hockey, MARKETS)
     .then((events) => {
-      cache = { at: Date.now(), events };
+      // Une liste vide peut venir d'un échec (401 avant connexion, panne) :
+      // `fetchBet365Odds` rend [] dans ce cas. On ne la garde pas en cache,
+      // sinon les cotes restent absentes pendant tout le TTL.
+      if (events.length > 0) cache = { at: Date.now(), events };
       return events;
     })
     .catch(() => [] as OddsEvent[])

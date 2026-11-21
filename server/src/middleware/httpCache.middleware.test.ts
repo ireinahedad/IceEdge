@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeAll } from 'vitest';
 import express from 'express';
 import request from 'supertest';
 
@@ -153,6 +153,12 @@ describe('câblage de app.ts', () => {
     return cached;
   }
 
+  // 2026-11-21 : l'import de `app` passait dans le PREMIER test du bloc, qui
+  // dépassait à lui seul les 20 s sur Windows (graphe complet à transpiler).
+  // On le paie ici, une fois, avec son propre délai ; les tests ne mesurent
+  // plus que leurs requêtes.
+  beforeAll(async () => { await loadAppWithoutDb(); }, 90_000);
+
   /**
    * `noStore` est monté sur le PRÉFIXE, pas sur chaque route : c'est ce qui
    * garantit qu'une route ajoutée demain dans l'un de ces routeurs est couverte
@@ -193,12 +199,29 @@ describe('câblage de app.ts', () => {
     }
   }, IMPORT_HEAVY_TIMEOUT_MS);
 
-  it('les routes NHL publiques annoncent bien un cache partagé', async () => {
+  // Depuis le 2026-11-20, /api/nhl exige un compte (`requireAccount`) : sans
+  // jeton, le 401 passe AVANT la validation des paramètres.
+  it('les routes NHL refusent un visiteur sans compte', async () => {
     const appUnderTest = await loadAppWithoutDb();
+
+    const anon = await request(appUnderTest).get('/api/nhl/games/range?start=nope&end=nope');
+    expect(anon.status).toBe(401);
+  }, IMPORT_HEAVY_TIMEOUT_MS);
+
+  it('les routes NHL ne cachent pas un 400 (compte connecté)', async () => {
+    const appUnderTest = await loadAppWithoutDb();
+    const jwt = (await import('jsonwebtoken')).default;
+    const token = jwt.sign(
+      { sub: 'test-user', email: 'test@example.com', role: 'user' },
+      process.env.JWT_SECRET!,
+      { expiresIn: '5m' },
+    );
 
     // Paramètres invalides → 400 immédiat, aucun appel réseau vers la NHL.
     // Un 400 ne doit justement PAS être caché.
-    const bad = await request(appUnderTest).get('/api/nhl/games/range?start=nope&end=nope');
+    const bad = await request(appUnderTest)
+      .get('/api/nhl/games/range?start=nope&end=nope')
+      .set('Authorization', `Bearer ${token}`);
     expect(bad.status).toBe(400);
     expect(bad.headers['cache-control']).toBe(NO_STORE);
   }, IMPORT_HEAVY_TIMEOUT_MS);

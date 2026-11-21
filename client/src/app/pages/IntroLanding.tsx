@@ -3,14 +3,14 @@
  * maquette « ArakIce — Landing page » validée par le user).
  *
  *   1. ARAKICE au-dessus d'une patinoire de nuit où un entraîneur dessine une
- *      jouée (CoachRink), puis « Voir ArakIce » et « Se connecter ».
+ *      jouée (CoachRink), puis un seul bouton « Se connecter » (2026-11-21).
  *   2. Plus bas : trois cartes (ce que fait ArakIce), quatre chiffres,
  *      la calibration (« quand il dit 55 %, l'équipe gagne 54 % ») et le top 3
  *      des prédictions du prochain match (les plus proches de 100 % selon le modèle).
  *
- * « Voir ArakIce » appelle `onEnter` : HomeRoute (routes.tsx) affiche alors
- * l'accueil habituel (HockeyLanding, les matchs de ce soir) pour le reste de
- * la session. Un utilisateur connecté ne voit jamais cette page.
+ * « Se connecter » appelle `onEnter` : HomeRoute (routes.tsx) envoie vers
+ * /login (le contenu exige un compte depuis le 2026-11-20). Un utilisateur
+ * connecté ne voit jamais cette page.
  *
  * Les chiffres de précision viennent de `data/accuracyRecord.ts` (copie de la
  * page publique). Le top 3 est calculé ici, sur les marchés et le paquet ML
@@ -98,8 +98,10 @@ export function IntroLanding({ onEnter }: { onEnter: () => void }) {
           <CoachRink />
         </div>
         <div className="il-ctas">
-          <button type="button" className="il-cta" onClick={onEnter}>{t("intro.see")}</button>
-          <button type="button" className="il-ghost" onClick={() => navigate("/login")}>{t("intro.login")}</button>
+          {/* 2026-11-21 (demande du user) : le contenu exige un compte, donc
+              « Voir ArakIce » menait de toute façon à /login. Un seul bouton,
+              qui dit ce qu'il fait. */}
+          <button type="button" className="il-cta" onClick={onEnter}>{t("intro.login")}</button>
         </div>
         <a href="#how" className="il-scroll">
           {t("intro.how")}

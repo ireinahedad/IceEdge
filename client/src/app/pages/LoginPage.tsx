@@ -5,7 +5,6 @@ import { useAuth } from "../context/AuthContext";
 import { getGoogleLoginUrl, apiResendVerification, apiForgotPassword, apiResetPassword, EmailNotVerifiedError } from "../services/authService";
 import { IceedgeLogo } from "../components/brand/IceedgeLogo";
 import { AppButton } from "../components/AppButton";
-import { BottomNav } from "../components/BottomNav";
 import { useI18n } from "../i18n";
 import { features } from "../platform";
 import { ResponsibleGamblingNote } from "../components/ResponsibleGamblingNote";
@@ -224,7 +223,7 @@ export function LoginPage() {
 
   return (
     <div
-      className="flex flex-col min-h-screen text-white max-w-[430px] mx-auto px-5 pt-16 pb-[calc(7rem+env(safe-area-inset-bottom,0px))]"
+      className="flex flex-col min-h-screen text-white max-w-[430px] mx-auto px-5 pt-16 pb-[calc(2.5rem+env(safe-area-inset-bottom,0px))]"
       style={{ background: "#0A0E0C" }}
     >
       {/* Brand hero */}
@@ -240,16 +239,6 @@ export function LoginPage() {
         </h1>
 
         <div className="mt-4 w-12 h-0.5 rounded-full" style={{ background: ACCENT, opacity: 0.5 }} />
-
-        {/* Let visitors leave the login screen and browse the app signed-out. */}
-        <button
-          type="button"
-          onClick={() => navigate("/")}
-          className="mt-5 text-xs"
-          style={{ color: ACCENT }}
-        >
-          {t("login.continueGuest")}
-        </button>
       </div>
 
       {step === "form" ? (
@@ -511,9 +500,9 @@ export function LoginPage() {
         <a href="/about" className="underline underline-offset-2">{t("login.guide.about")}</a>
       </nav>}
 
-      {/* Keep the app nav visible so visitors can leave the login screen and
-          browse signed-out — the page already reserves space via its bottom padding. */}
-      <BottomNav />
+      {/* 2026-11-21 (demande du user) : plus de barre de navigation ici. Tout
+          le contenu exige un compte, ses onglets ramenaient donc à cette même
+          page. Le logo en haut ramène à l'accueil. */}
     </div>
   );
 }

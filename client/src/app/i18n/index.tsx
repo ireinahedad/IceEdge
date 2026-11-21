@@ -1296,7 +1296,6 @@ const DICT: Record<string, { en: string; fr: string }> = {
   "login.pwdMismatch": { en: "Passwords do not match.", fr: "Les mots de passe ne correspondent pas." },
   "login.introTitle": { en: "Smarter bets, backed by data", fr: "Des paris plus malins, basés sur les données" },
   "login.introSubtitle": { en: "Sign in to unlock the full experience.", fr: "Connectez-vous pour débloquer toute l'expérience." },
-  "login.continueGuest": { en: "Browse without signing in →", fr: "Parcourir sans se connecter →" },
   "login.feat1Title": { en: "AI predictions", fr: "Prédictions IA" },
   "login.feat1Body": { en: "Model-driven win probabilities on every market.", fr: "Probabilités de victoire par modèle sur chaque marché." },
   "login.feat2Title": { en: "Best bets & edges", fr: "Meilleurs paris & edges" },
@@ -1569,7 +1568,6 @@ const DICT: Record<string, { en: string; fr: string }> = {
 
   // ── Page d'accueil des visiteurs non connectés (IntroLanding, 2026-11-19) ──
   "intro.langAria":     { en: "Language", fr: "Langue" },
-  "intro.see":          { en: "See ArakIce", fr: "Voir ArakIce" },
   "intro.login":        { en: "Log in", fr: "Se connecter" },
   "intro.how":          { en: "How it works", fr: "Comment ça marche" },
   "intro.f1.t":         { en: "Reads the game", fr: "Lit le match" },

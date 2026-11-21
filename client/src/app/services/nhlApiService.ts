@@ -346,7 +346,11 @@ function get<T>(path: string, signal?: AbortSignal): Promise<T> {
   const hit = primed.get(path);
   if (hit) {
     primed.delete(path);
-    if (!signal && Date.now() - hit.at < PRIME_TTL_MS) return hit.promise as Promise<T>;
+    // Un préchargement en échec (ex. 401 parti avant la connexion) ne doit
+    // pas devenir la réponse de la page : on refait l'appel une fois.
+    if (!signal && Date.now() - hit.at < PRIME_TTL_MS) {
+      return (hit.promise as Promise<T>).catch(() => rawGet<T>(path));
+    }
   }
   return rawGet<T>(path, signal);
 }

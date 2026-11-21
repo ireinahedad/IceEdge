@@ -6,6 +6,7 @@ import App from "./app/App";
 import { primeGet, gamesRangePath } from "./app/services/nhlApiService";
 import { fetchHockeyOdds } from "./app/services/gameOdds";
 import { homeWeek } from "./app/data/gameDay";
+import { tokenStore } from "./app/services/tokenStore";
 import "./styles/index.css";
 
 // Sentry : chargé après le premier rendu (QA P4, LCP) — voir app/sentry.ts.
@@ -90,12 +91,22 @@ try {
   // le routeur et la page soient montés. Les composants reprennent ces requêtes
   // (`primeGet`, cache de `fetchHockeyOdds`) : aucune requête de plus. Après
   // `assertEnv()` : une configuration invalide ne lance rien.
+  //
+  // 2026-11-21 : depuis que le contenu exige un compte (2026-11-20), ces appels
+  // partaient aussi pour un visiteur sans jeton → 401 « Missing or malformed
+  // Authorization header ». Le 401 restait gardé (15 s pour `primeGet`, TTL
+  // pour les cotes vides) et, juste après la connexion, l'accueil reprenait
+  // cette réponse en échec : pas de matchs. On ne précharge donc que si un
+  // jeton est déjà là.
   if (window.location.pathname === "/") {
-    const week = homeWeek();
-    primeGet("/games/live");
-    primeGet(gamesRangePath(week[0].dateStr, week[week.length - 1].dateStr));
-    primeGet("/teams");
-    void fetchHockeyOdds();
+    void tokenStore.getAccess().then((token) => {
+      if (!token) return;
+      const week = homeWeek();
+      primeGet("/games/live");
+      primeGet(gamesRangePath(week[0].dateStr, week[week.length - 1].dateStr));
+      primeGet("/teams");
+      void fetchHockeyOdds();
+    }, () => { /* pas de jeton lisible : pas de préchargement */ });
   }
 
   createRoot(rootEl).render(<App />);
