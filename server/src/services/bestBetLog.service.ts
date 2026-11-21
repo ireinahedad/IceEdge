@@ -90,7 +90,20 @@ export interface SettleBestBetsSummary { checked: number; settled: number }
  * Idempotent (l'UPDATE est gardé par `outcome = 'pending'`) : deux appels
  * simultanés ne règlent rien deux fois.
  */
-export async function settlePendingBestBets(max = 300): Promise<SettleBestBetsSummary> {
+export async function settlePendingBestBets(
+  max = 300,
+  /** Jours NHL `[from, to]` inclus. Sans fenêtre, toute la table : les plus
+   *  anciens d'abord — et d'anciens paris jamais réglables (marché non
+   *  auto-réglé…) peuvent alors occuper tout le `LIMIT` à chaque appel
+   *  (constaté le 2026-11-21 : 88 paris de la semaine restés en attente). */
+  window?: { from: string; to: string },
+): Promise<SettleBestBetsSummary> {
+  const params: unknown[] = [new Date(Date.now() - SETTLE_AFTER_MS), max];
+  let range = '';
+  if (window) {
+    params.push(window.from, window.to);
+    range = 'AND game_date BETWEEN $3::date AND $4::date';
+  }
   const { rows } = await pool.query<{
     id: string; game_id: string; market_type: string; selection_value: string;
     line: string | null; subject_id: string;
@@ -99,9 +112,10 @@ export async function settlePendingBestBets(max = 300): Promise<SettleBestBetsSu
        FROM best_bet_log
       WHERE outcome = 'pending'
         AND (start_time_utc < $1 OR (start_time_utc IS NULL AND game_date < CURRENT_DATE - 1))
+        ${range}
       ORDER BY start_time_utc NULLS FIRST
       LIMIT $2`,
-    [new Date(Date.now() - SETTLE_AFTER_MS), max],
+    params,
   );
   if (rows.length === 0) return { checked: 0, settled: 0 };
 

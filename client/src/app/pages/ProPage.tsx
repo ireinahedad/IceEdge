@@ -12,6 +12,10 @@ import {
 } from "../services/subscriptionService";
 
 import { Check } from "lucide-react";
+import {
+  ProofChips, TrackRecordCard, TonightTeaser, LeaderTeaser, CompareTable, RiskReversal, Faq,
+  StickyCta, SectionTitle, useAnyVisible,
+} from "./pro/ProSections";
 
 // APPLE_PLAN Phase 5 — l'achat iOS (StoreKit). `isIOS` est une constante de
 // build : sur le web, ni le composant ni le plugin Capacitor ne sont empaquetés.
@@ -67,7 +71,11 @@ function useBenefits(llmMonthlyQuota?: number): Benefit[] {
         ? t("pro.b.llm.d", { n: llmMonthlyQuota })
         : t("pro.b.llm.dNoCount"),
     },
-    { title: t("pro.b.markets.t"),  desc: t("pro.b.markets.d") },
+    // 2026-11-21 : « Tous les marchés & calendrier complet / chaque marché
+    // bet365 » retiré — le calendrier et les marchés sont gratuits, et les
+    // cotes viennent de DraftKings. Remplacé par ce que Pro donne vraiment.
+    { title: t("pro.b.parlays.t"),  desc: t("pro.b.parlays.d") },
+    { title: t("pro.b.scan.t"),     desc: t("pro.b.scan.d") },
     { title: t("pro.b.others.t"),   desc: t("pro.b.others.d") },
   ];
 }
@@ -131,6 +139,13 @@ export function ProPage() {
   const [promo,      setPromo]      = useState("");
   const [promoBusy,  setPromoBusy]  = useState(false);
   const [promoError, setPromoError] = useState<string | null>(null);
+  const [promoOpen,  setPromoOpen]  = useState(false);
+  // Les deux zones d'achat ; la barre collante ne s'affiche que si aucune
+  // n'est à l'écran.
+  const heroCtaRef  = useRef<HTMLDivElement>(null);
+  const priceRef    = useRef<HTMLElement>(null);
+  const finalCtaRef = useRef<HTMLDivElement>(null);
+  const anyCtaVisible = useAnyVisible([heroCtaRef, priceRef, finalCtaRef]);
 
   // `user?.id` et non `user` : l'objet est remplacé quand AuthContext enrichit
   // le profil, ce qui relançait `GET /subscription/me` (audit du 2026-09-16).
@@ -225,8 +240,24 @@ export function ProPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id, sub]);
 
+  // Prix ramené au jour, arrondi au cent SUPÉRIEUR : « moins de 0,20 $ »
+  // doit rester vrai (5,99 / 30 = 0,1997).
+  const perDay = Math.ceil(((isYearly ? PRICE_YEARLY / 365 : PRICE_MONTHLY / 30)) * 100) / 100;
+  const perDayLabel  = formatPrice(perDay, lang);
+  const monthlyLabel = `${formatPrice(PRICE_MONTHLY, lang)}${t("pro.perMonth")}`;
+
+  // Le bouton principal, le même en haut, sous le prix et dans la barre.
+  // Essai d'abord (aucun risque) ; sinon l'achat, prix dans le libellé.
+  const primary: { label: string; onClick: () => void } | null =
+    trialAvailable
+      ? { label: t("pro.startTrial"), onClick: () => void handleTrial() }
+      : features.stripeCheckout
+        ? { label: user ? t("pro.ctaPrice", { price: monthlyLabel }) : t("pro.loginPrompt"),
+            onClick: () => void handleUpgrade() }
+        : null;
+
   return (
-    <div className="flex flex-col min-h-screen text-white max-w-[430px] mx-auto px-5 pt-14 pb-12"
+    <div className="flex flex-col min-h-screen text-white max-w-[430px] mx-auto px-5 pt-14 pb-28"
       style={{ background: "#0A0E0C" }}>
 
       {/* Explicit back button — this page has no BottomNav, so it must never be a
@@ -240,19 +271,21 @@ export function ProPage() {
         ← {t("pro.back") || "Retour"}
       </button>
 
-      {/* Hero */}
-      <div className="flex flex-col items-center text-center mb-8">
+      {/* Hero — la promesse (le résultat pour le parieur), pas le nom du
+          produit ; puis trois preuves vérifiables, avant toute demande. */}
+      <div className="flex flex-col items-center text-center mb-6">
         <button onClick={() => navigate("/")} aria-label={t("common.homeAria")}>
-          <IceedgeLogo size={56} wordmark={false} className="mb-4" />
+          <IceedgeLogo size={48} wordmark={false} className="mb-3" />
         </button>
         <div className="px-3 py-1 rounded-full text-[11px] font-bold uppercase tracking-widest mb-3"
           style={{ background: ACCENT_BG, color: ACCENT, border: `1px solid ${ACCENT_BORDER}` }}>
           ArakIce Pro
         </div>
-        <h1 className="text-2xl font-bold mb-2" style={{ fontFamily: "'Oswald', 'Oswald Fallback', 'Arial Narrow', sans-serif" }}>
-          {t("pro.title")}
+        <h1 className="text-[26px] leading-tight font-bold mb-2" style={{ fontFamily: "'Oswald', 'Oswald Fallback', 'Arial Narrow', sans-serif" }}>
+          {isPro ? "ArakIce Pro" : t("pro.hero.title")}
         </h1>
-        <p className="text-sm" style={{ color: "#B7C4AD" }}>{t("pro.subtitle")}</p>
+        {!isPro && <p className="text-sm" style={{ color: "#B7C4AD" }}>{t("pro.hero.sub")}</p>}
+        {!isPro && <ProofChips />}
       </div>
 
       {/* Pro active banner */}
@@ -305,150 +338,220 @@ export function ProPage() {
         </Suspense>
       ) : (
         <>
-      {/* Price card — a price shown without a way to buy is worse than no
-          price, so it travels with the checkout flag (APPLE_PLAN §7). */}
-      {!isPro && features.stripeCheckout && (
-        <div className="rounded-2xl p-5 mb-6 text-center"
-          style={{ background: SURFACE, border: `1px solid ${BORDER}` }}>
-
-          {/* Sélecteur de cadence. Absent tant que le serveur n'annonce pas de
-              tarif annuel — voir `yearlyAvailable`. */}
-          {yearlyAvailable && (
-            <div role="radiogroup" aria-label={t("pro.billingPeriod")}
-              className="flex gap-1 p-1 rounded-xl mb-4"
-              style={{ background: "rgba(255,255,255,0.05)" }}>
-              {(["monthly", "yearly"] as BillingPeriod[]).map((p) => (
-                <button
-                  key={p}
-                  role="radio"
-                  aria-checked={period === p}
-                  onClick={() => setPeriod(p)}
-                  className="flex-1 py-2 rounded-lg text-xs font-bold transition-colors tap-44"
-                  style={period === p
-                    ? { background: ACCENT, color: "#0A0E0C" }
-                    : { color: MUTED, background: "transparent" }}
-                >
-                  {t(p === "yearly" ? "pro.planYearly" : "pro.planMonthly")}
-                </button>
-              ))}
-            </div>
+      {/* ── Refonte CRO 2026-11-21 ─────────────────────────────────────────
+          Ordre voulu, une hésitation par bloc (voir pro/ProSections.tsx) :
+          bouton tout de suite → ce que vous ratez ce soir → gratuit vs Pro →
+          preuves → prix ancré → objections. Le bouton revient sous le prix,
+          et une barre collante le garde à portée entre les deux. */}
+      {!isPro && primary && (
+        <div ref={heroCtaRef} className="mb-7">
+          <AppButton onClick={primary.onClick} disabled={loading} loading={loading} fullWidth size="lg">
+            {primary.label}
+          </AppButton>
+          {features.stripeCheckout && (
+            <p className="text-center text-[11.5px] mt-2" style={{ color: MUTED }}>
+              {trialAvailable
+                ? t("pro.heroThen", { price: monthlyLabel })
+                : t("pro.perDayLine", { price: perDayLabel })}
+            </p>
           )}
-
-          <div className="flex items-end justify-center gap-1 mb-1">
-            <span className="text-4xl font-bold" style={{ color: ACCENT }}>
-              {formatPrice(isYearly ? PRICE_YEARLY : PRICE_MONTHLY, lang)}
-            </span>
-            <span className="text-sm mb-1" style={{ color: MUTED }}>
-              {CURRENCY} {t(isYearly ? "pro.perYear" : "pro.perMonth")}
-            </span>
-          </div>
-
-          {/* Sur le mensuel on montre l'économie de l'annuel (argument d'achat) ;
-              sur l'annuel on ramène le prix au mois, la seule comparaison que le
-              lecteur veut faire à cet instant. */}
-          {yearlyAvailable && (
-            <div className="text-xs" style={{ color: MUTED }}>
-              {isYearly
-                ? t("pro.yearlyNote")
-                : t("pro.annualNote", { price: `${formatPrice(PRICE_YEARLY, lang)} ${CURRENCY}` })}
-            </div>
-          )}
-
-          {trialAvailable && (
-            <div className="text-[11px] font-semibold mt-2" style={{ color: ACCENT }}>
-              {t(isYearly ? "pro.trialNoteYearly" : "pro.trialNote")}
-            </div>
-          )}
+          <RiskReversal trial={trialAvailable} />
         </div>
       )}
 
-      {/* Pro-exclusive benefits */}
-      <div className="rounded-2xl overflow-hidden mb-6" style={{ border: `1px solid ${BORDER}` }}>
-        <div className="px-4 py-3 text-[11px] uppercase tracking-wider"
-          style={{ background: SURFACE, color: ACCENT }}>
-          {t("pro.included")}
-        </div>
-        {benefits.map((b, i) => (
-          <div key={i} className="flex items-start gap-3 px-4 py-3"
-            style={{ borderTop: `1px solid ${BORDER}` }}>
-            <Check size={15} strokeWidth={3} className="mt-0.5 shrink-0" style={{ color: ACCENT }} />
-            <div>
-              <div className="text-sm font-semibold" style={{ color: "#F3F7F0" }}>{b.title}</div>
-              <div className="text-xs mt-0.5" style={{ color: MUTED }}>{b.desc}</div>
-            </div>
-          </div>
-        ))}
-      </div>
-
       {error && (
-        <div className="text-red-400 text-xs text-center py-2 px-3 rounded-xl bg-red-500/10 border border-red-500/20 mb-3">
+        <div className="text-red-400 text-xs text-center py-2 px-3 rounded-xl bg-red-500/10 border border-red-500/20 mb-6">
           {error}
         </div>
       )}
 
-      {/* CTA */}
       {isPro ? (
-        !sub?.cancelAtPeriodEnd && (
-          // Acheté sur iPhone : seul Apple peut l'annuler. Le serveur refuserait
-          // (409 APPLE_MANAGED) ; mieux vaut dire où aller que d'afficher un
-          // bouton qui échoue.
-          sub?.source === "apple" ? (
-            <p className="text-xs text-center" style={{ color: MUTED }}>{t("pro.apple.managedOnIphone")}</p>
-          ) : (
-            <AppButton variant="ghost" onClick={handleCancel} disabled={loading} loading={loading} fullWidth>
-              {t("pro.cancel")}
-            </AppButton>
-          )
-        )
-      ) : trialAvailable ? (
-        <div className="flex flex-col gap-2">
-          {/* Free trial is the primary CTA when still available */}
-          <AppButton onClick={handleTrial} disabled={loading} loading={loading} fullWidth size="lg">
-            {t("pro.startTrial")}
-          </AppButton>
-          {features.stripeCheckout && (
-            <AppButton variant="ghost" onClick={handleUpgrade} disabled={loading} loading={loading} fullWidth>
-              {t("pro.cta")}
-            </AppButton>
-          )}
+        /* Abonné : la liste de ce qu'il a, sans argumentaire de vente. */
+        <div className="rounded-2xl overflow-hidden mb-6" style={{ border: `1px solid ${BORDER}` }}>
+          <div className="px-4 py-3 text-[11px] uppercase tracking-wider"
+            style={{ background: SURFACE, color: ACCENT }}>
+            {t("pro.included")}
+          </div>
+          {benefits.map((b, i) => (
+            <div key={i} className="flex items-start gap-3 px-4 py-3"
+              style={{ borderTop: `1px solid ${BORDER}` }}>
+              <Check size={15} strokeWidth={3} className="mt-0.5 shrink-0" style={{ color: ACCENT }} />
+              <div>
+                <div className="text-sm font-semibold" style={{ color: "#F3F7F0" }}>{b.title}</div>
+                <div className="text-xs mt-0.5" style={{ color: MUTED }}>{b.desc}</div>
+              </div>
+            </div>
+          ))}
         </div>
-      ) : features.stripeCheckout ? (
-        <AppButton onClick={handleUpgrade} disabled={loading} loading={loading} fullWidth size="lg">
-          {user ? t("pro.cta") : t("pro.loginPrompt")}
-        </AppButton>
-      ) : null}
+      ) : (
+        <CompareTable llmMonthlyQuota={sub?.llmMonthlyQuota} />
+      )}
 
-      {/* Promo code — activate Pro without payment */}
+      {/* Price card — a price shown without a way to buy is worse than no
+          price, so it travels with the checkout flag (APPLE_PLAN §7). */}
+      {!isPro && features.stripeCheckout && (
+        <section ref={priceRef} className="mb-8">
+          <SectionTitle>{t("pro.priceTitle")}</SectionTitle>
+          <div className="rounded-2xl p-5 text-center"
+            style={{ background: SURFACE, border: `1px solid ${ACCENT_BORDER}` }}>
+
+            {/* Sélecteur de cadence. Absent tant que le serveur n'annonce pas de
+                tarif annuel — voir `yearlyAvailable`. Mensuel par défaut (le
+                moindre engagement) ; l'annuel porte son économie en badge. */}
+            {yearlyAvailable && (
+              <div role="radiogroup" aria-label={t("pro.billingPeriod")}
+                className="flex gap-1 p-1 rounded-xl mb-4"
+                style={{ background: "rgba(255,255,255,0.05)" }}>
+                {(["monthly", "yearly"] as BillingPeriod[]).map((p) => (
+                  <button
+                    key={p}
+                    role="radio"
+                    aria-checked={period === p}
+                    onClick={() => { setPeriod(p); if (p === "yearly") trackEvent("pro_yearly_select"); }}
+                    className="flex-1 py-2 rounded-lg text-xs font-bold transition-colors tap-44 flex items-center justify-center gap-1.5"
+                    style={period === p
+                      ? { background: ACCENT, color: "#0A0E0C" }
+                      : { color: MUTED, background: "transparent" }}
+                  >
+                    {t(p === "yearly" ? "pro.planYearly" : "pro.planMonthly")}
+                    {p === "yearly" && (
+                      <span className="text-[9.5px] px-1.5 py-0.5 rounded-full"
+                        style={period === p
+                          ? { background: "rgba(10,14,12,0.15)" }
+                          : { background: ACCENT_BG, color: ACCENT }}>
+                        {t("pro.yearlyBadge")}
+                      </span>
+                    )}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            <div className="flex items-end justify-center gap-1 mb-1">
+              <span className="text-4xl font-bold" style={{ color: ACCENT }}>
+                {formatPrice(isYearly ? PRICE_YEARLY : PRICE_MONTHLY, lang)}
+              </span>
+              <span className="text-sm mb-1" style={{ color: MUTED }}>
+                {CURRENCY} {t(isYearly ? "pro.perYear" : "pro.perMonth")}
+              </span>
+            </div>
+
+            {/* Ancrage : le prix ramené au jour, la comparaison qui le rend
+                petit ; sur l'annuel, aussi ramené au mois. */}
+            <div className="text-xs" style={{ color: "#B7C4AD" }}>
+              {t("pro.perDayLine", { price: perDayLabel })}
+            </div>
+            {/* 2026-11-21 (demande du user) : l'argument « un pari le
+                rembourse », avec le rappel de jeu responsable juste dessous.
+                10 $ gagnés à cote paire couvrent 5,99 $ (et 5 $/mois à l'année). */}
+            <div className="text-[11.5px] mt-3 px-3 py-2 rounded-lg text-left"
+              style={{ background: ACCENT_BG, color: "#F3F7F0" }}>
+              {t("pro.payback")}
+              <div className="text-[10.5px] mt-1" style={{ color: MUTED }}>{t("pro.payback.responsible")}</div>
+            </div>
+            {yearlyAvailable && (
+              <div className="text-[11px] mt-1" style={{ color: MUTED }}>
+                {isYearly
+                  ? t("pro.yearlyNote")
+                  : t("pro.annualNote", { price: `${formatPrice(PRICE_YEARLY, lang)} ${CURRENCY}` })}
+              </div>
+            )}
+
+            <div ref={finalCtaRef} className="mt-5 flex flex-col gap-2 text-left">
+              {trialAvailable ? (
+                <>
+                  <AppButton onClick={handleTrial} disabled={loading} loading={loading} fullWidth size="lg">
+                    {t("pro.startTrial")}
+                  </AppButton>
+                  <AppButton variant="ghost" onClick={handleUpgrade} disabled={loading} loading={loading} fullWidth>
+                    {t(isYearly ? "pro.ctaNowYearly" : "pro.ctaNow")}
+                  </AppButton>
+                </>
+              ) : (
+                <AppButton onClick={handleUpgrade} disabled={loading} loading={loading} fullWidth size="lg">
+                  {user ? t(isYearly ? "pro.ctaNowYearly" : "pro.ctaNow") : t("pro.loginPrompt")}
+                </AppButton>
+              )}
+              <RiskReversal trial={trialAvailable} />
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* Preuves et « ce que vous ratez », après le tableau et le prix
+          (2026-11-21, demande du user : comparer et voir le prix d'abord). */}
+      {!isPro && <TrackRecordCard />}
+      {!isPro && user && <TonightTeaser />}
+      {!isPro && user && <LeaderTeaser />}
+
+      {/* Essai sans paiement possible mais pas de Stripe (cas théorique) :
+          le bouton du haut suffit. */}
+
+      {!isPro && <Faq />}
+
+      {/* CTA abonné : résiliation */}
+      {isPro && !sub?.cancelAtPeriodEnd && (
+        // Acheté sur iPhone : seul Apple peut l'annuler. Le serveur refuserait
+        // (409 APPLE_MANAGED) ; mieux vaut dire où aller que d'afficher un
+        // bouton qui échoue.
+        sub?.source === "apple" ? (
+          <p className="text-xs text-center" style={{ color: MUTED }}>{t("pro.apple.managedOnIphone")}</p>
+        ) : (
+          <AppButton variant="ghost" onClick={handleCancel} disabled={loading} loading={loading} fullWidth>
+            {t("pro.cancel")}
+          </AppButton>
+        )
+      )}
+
+      {/* Code promo — replié : un champ « code promo » bien visible envoie les
+          gens chercher un code ailleurs au lieu d'acheter (classique en CRO). */}
       {!isPro && features.promoCodes && (
-        <div className="mt-6">
-          <div className="text-[11px] uppercase tracking-wider mb-2" style={{ color: MUTED }}>
-            {t("pro.promo.label")}
-          </div>
-          <div className="flex gap-2">
-            <input
-              value={promo}
-              onChange={(e) => { setPromo(e.target.value); setPromoError(null); }}
-              onKeyDown={(e) => { if (e.key === "Enter") handleRedeem(); }}
-              placeholder={t("pro.promo.placeholder")}
-              autoCapitalize="characters"
-              autoCorrect="off"
-              spellCheck={false}
-              className="flex-1 py-3 px-3 rounded-xl text-sm outline-none uppercase tracking-wide"
-              style={{ background: SURFACE, border: `1px solid ${BORDER}`, color: "#F3F7F0" }}
-            />
-            <AppButton
-              variant="secondary"
-              onClick={handleRedeem}
-              disabled={promoBusy || !promo.trim()}
-              loading={promoBusy}
-            >
-              {t("pro.promo.apply")}
-            </AppButton>
-          </div>
-          {promoError && (
-            <div className="text-red-400 text-xs mt-2">{promoError}</div>
+        <div className="mt-2 mb-4">
+          {!promoOpen ? (
+            <button type="button" onClick={() => setPromoOpen(true)}
+              className="text-xs underline underline-offset-2" style={{ color: MUTED }}>
+              {t("pro.promo.label")}
+            </button>
+          ) : (
+            <>
+              <div className="flex gap-2">
+                <input
+                  value={promo}
+                  onChange={(e) => { setPromo(e.target.value); setPromoError(null); }}
+                  onKeyDown={(e) => { if (e.key === "Enter") handleRedeem(); }}
+                  placeholder={t("pro.promo.placeholder")}
+                  autoFocus
+                  autoCapitalize="characters"
+                  autoCorrect="off"
+                  spellCheck={false}
+                  className="flex-1 py-3 px-3 rounded-xl text-sm outline-none uppercase tracking-wide"
+                  style={{ background: SURFACE, border: `1px solid ${BORDER}`, color: "#F3F7F0" }}
+                />
+                <AppButton
+                  variant="secondary"
+                  onClick={handleRedeem}
+                  disabled={promoBusy || !promo.trim()}
+                  loading={promoBusy}
+                >
+                  {t("pro.promo.apply")}
+                </AppButton>
+              </div>
+              {promoError && (
+                <div className="text-red-400 text-xs mt-2">{promoError}</div>
+              )}
+            </>
           )}
         </div>
+      )}
+
+      {!isPro && primary && (
+        <StickyCta
+          show={!anyCtaVisible}
+          label={primary.label}
+          sub={features.stripeCheckout ? (trialAvailable ? t("pro.sticky.trialSub") : monthlyLabel) : undefined}
+          disabled={loading}
+          onClick={() => { trackEvent("pro_sticky_cta_click"); primary.onClick(); }}
+        />
       )}
 
         </>

@@ -32,7 +32,8 @@ import { pool }            from './db/connection';
 import { httpLogger, logger } from './logger';
 import { seedAll }         from './db/seed';
 import { apiLimiter, authLimiter, writeLimiter } from './middleware/rateLimit.middleware';
-import { noStore }            from './middleware/httpCache.middleware';
+import { noStore, publicCache } from './middleware/httpCache.middleware';
+import { getTrackRecord }    from './services/trackRecord.service';
 import { authenticate, privatizeCache, requireAccount } from './middleware/auth.middleware';
 import { corsOriginCallback }  from './cors';
 import { sendError, errorStatus, errorBody } from './httpError';
@@ -159,7 +160,7 @@ app.use('/api/users',         noStore, userRoutes);
 // `public` réécrite en `private`, pour qu'aucun CDN ne resserve une réponse
 // à un visiteur sans compte. Restent publics : /api/auth, /api/geo, le webhook
 // Stripe, /api/content (secret cron), l'API agents x402 (payante, hôte à part)
-// et /api/pickem/public-vs-model.
+// /api/pickem/public-vs-model et /api/track-record.
 //
 // NHL data (live from NHL API) — identique pour tous.
 // Les en-têtes de cache sont posés par route dans nhl.routes.ts, alignés sur
@@ -180,6 +181,14 @@ app.use('/api/growth',        writeLimiter, noStore, growthRoutes);
 app.use('/api/pickem',        writeLimiter, noStore,
   (req, res, next) => (req.method === 'GET' && req.path === '/public-vs-model' ? next() : authenticate(req, res, next)),
   pickemRoutes);
+
+// Bilan des meilleurs paris sur 7 jours (2026-11-21, page /pro) — PUBLIC :
+// un agrégat sans aucun pari visible (taux de réussite, pas de ROI), lu aussi
+// par les visiteurs déconnectés de /pro. Identique pour tous → cache partagé.
+app.get('/api/track-record', publicCache(600), async (_req, res) => {
+  try { res.json(await getTrackRecord()); }
+  catch (err: any) { sendError(res, err, { context: '[track-record]' }); }
+});
 
 // Leaderboard — public, identique pour tous, caché 60 s côté service.
 // Le même Cache-Control côté HTTP laisse navigateur et CDN absorber le reste.

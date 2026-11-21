@@ -47,6 +47,11 @@ export const CLIENT_EVENTS = [
   'trial_ending_banner_click',
   'landing_enter_click',
   'slip_add_leg',
+  // /pro, refonte CRO (2026-11-21)
+  'pro_teaser_view',
+  'pro_yearly_select',
+  'pro_faq_open',
+  'pro_sticky_cta_click',
 ] as const;
 
 type EventName = (typeof SERVER_EVENTS)[number] | (typeof CLIENT_EVENTS)[number];
