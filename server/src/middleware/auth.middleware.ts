@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import { Request, Response, NextFunction } from 'express';
 import { verifyAccessToken } from '../services/auth.service';
 import { isPro } from '../services/subscription.service';
@@ -146,3 +147,28 @@ export function privatizeCache(_req: Request, res: Response, next: NextFunction)
 
 /** `privatizeCache` puis `authenticate` : à monter sur tout routeur de contenu. */
 export const requireAccount = [privatizeCache, authenticate];
+
+// -------------------------------------------------------
+//  Fil de nouvelles : clé de service OU compte (2026-11-22)
+// -------------------------------------------------------
+//  Les comptes de nouvelles par équipe (dépôt NHL-posting) lisent `/api/news`
+//  depuis GitHub Actions, sans compte. Ils envoient `X-News-Key`, comparé en
+//  temps constant à `NEWS_FEED_SECRET`. Sans la variable, ou sans l'en-tête,
+//  on retombe sur `authenticate` : rien n'est ouvert par défaut. Une clé
+//  FAUSSE répond 401 tout de suite, sans essayer le jeton.
+
+const sha256 = (s: string) => crypto.createHash('sha256').update(s).digest();
+
+export function newsFeedKeyOrAccount(req: Request, res: Response, next: NextFunction): void {
+  const given = req.get('x-news-key');
+  const secret = process.env.NEWS_FEED_SECRET;
+  if (given == null || given === '' || !secret) {
+    authenticate(req, res, next);
+    return;
+  }
+  if (crypto.timingSafeEqual(sha256(given), sha256(secret))) {
+    next();
+    return;
+  }
+  res.status(401).json({ error: 'Invalid news key' });
+}

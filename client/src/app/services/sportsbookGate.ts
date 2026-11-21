@@ -12,10 +12,10 @@ import { features } from "../platform";
 import { getGeo, useGeo } from "./geo";
 
 export function bookmakerLinksAllowed(): boolean {
-  return features.bookmakerLinks && getGeo().sportsbookEligible;
+  return features.bookmakerLinks && getGeo().linksEligible;
 }
 
 export function useBookmakerLinks(): boolean {
   const geo = useGeo();
-  return features.bookmakerLinks && geo.sportsbookEligible;
+  return features.bookmakerLinks && geo.linksEligible;
 }

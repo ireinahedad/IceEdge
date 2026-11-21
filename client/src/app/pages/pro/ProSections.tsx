@@ -20,16 +20,14 @@
  *   - quota IA : `sub.llmMonthlyQuota`, sinon formulation sans chiffre ;
  *   - value bets et « Plus de parlays » derrière `requirePro`.
  */
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Check, Lock, Minus, ChevronDown, ShieldCheck, Trophy } from "lucide-react";
 import { useI18n } from "../../i18n";
 import { trackEvent } from "../../analytics";
 import { accuracyRecord, ACCURACY_PAGE } from "../../data/accuracyRecord";
-import { predictionApiService, type ApiBestBet } from "../../services/predictionApiService";
+import type { ApiBestBet } from "../../services/predictionApiService";
 import { marketName } from "../landing/BestBetsSection";
-import { profileApiService } from "../../services/userService";
 import { authedFetch } from "../../services/authService";
-import type { LeaderboardEntry } from "../../types/user";
 
 export const ACCENT        = "#86d1ea";
 export const ACCENT_BG     = "rgba(134,209,234,0.12)";
@@ -152,64 +150,75 @@ export function TrackRecordCard() {
 // choix : c'est la « boucle ouverte » qui donne envie, sans rien donner.
 // Échec ou aucun pari → le bloc disparaît (rien de pire qu'un teaser vide).
 
-interface TeaserData { bets: ApiBestBet[]; parlaysTotal: number | null; parlaysFree: number | null }
+// Depuis le 2026-11-20 le contenu exige un compte : les deux blocs lisent la
+// vitrine PUBLIQUE `GET /api/pro-teaser` (proTeaser.service.ts), une seule
+// requête partagée. Le serveur y a déjà retiré le choix, le côté du pari
+// (`context` → match neutre « VIS @ DOM ») et l'identité des joueurs.
+
+interface TeaserBet {
+  id: string; marketType: string; marketLabel: string;
+  matchup: string | null; startTimeUTC: string | null; pct: number;
+}
+interface ProTeaserData {
+  tonight: { count: number; bets: TeaserBet[]; parlays: { total: number; free: number } | null } | null;
+  leaders: { rank: number; name: string; hitRate: number; totalBets: number }[];
+}
+
+let teaserPromise: Promise<ProTeaserData | null> | null = null;
+/** Une requête pour les deux blocs ; un échec n'est pas gardé (prochaine visite = nouvel essai). */
+function loadProTeaser(): Promise<ProTeaserData | null> {
+  if (!teaserPromise) {
+    teaserPromise = authedFetch("/pro-teaser")
+      .then((r) => (r.ok ? (r.json() as Promise<ProTeaserData>) : null))
+      .catch(() => null)
+      .then((d) => { if (!d) teaserPromise = null; else setTimeout(() => { teaserPromise = null; }, 60_000); return d; });
+  }
+  return teaserPromise;
+}
 
 export function TonightTeaser() {
   const { t, lang } = useI18n();
-  const [data, setData] = useState<TeaserData | null>(null);
+  const [data, setData] = useState<ProTeaserData["tonight"]>(null);
 
   useEffect(() => {
     let cancelled = false;
-    (async () => {
-      const [bets, parlays] = await Promise.allSettled([
-        predictionApiService.getBestBets({ limit: 30, source: "ml" }),
-        predictionApiService.getBestParlays(),
-      ]);
-      if (cancelled) return;
+    loadProTeaser().then((d) => {
+      if (cancelled || !d?.tonight) return;
       const now = Date.now();
-      const list = bets.status === "fulfilled"
-        ? bets.value.bets.filter((b) => {
-            const start = b.game?.startTimeUTC ? Date.parse(b.game.startTimeUTC) : NaN;
-            return !Number.isFinite(start) || start > now;
-          })
-        : [];
-      const meta = parlays.status === "fulfilled" ? parlays.value.meta : null;
-      setData({
-        bets: list,
-        parlaysTotal: meta?.total ?? null,
-        parlaysFree:  meta?.freeCount ?? null,
+      // Le serveur filtre déjà ; on refiltre au cas où la réponse est en cache depuis 60 s.
+      const bets = d.tonight.bets.filter((b) => {
+        const start = b.startTimeUTC ? Date.parse(b.startTimeUTC) : NaN;
+        return !Number.isFinite(start) || start > now;
       });
-      if (list.length > 0) trackEvent("pro_teaser_view");
-    })();
+      setData({ ...d.tonight, bets });
+      if (bets.length > 0) trackEvent("pro_teaser_view");
+    });
     return () => { cancelled = true; };
   }, []);
 
-  const top = useMemo(() => {
-    if (!data) return [];
-    const pct = (b: ApiBestBet) => b.mlPct ?? b.rulePct;
-    return [...data.bets].sort((a, b) => pct(b) - pct(a)).slice(0, 3);
-  }, [data]);
-
+  const top = data?.bets ?? [];
   if (!data || top.length === 0) return null;
 
-  const hiddenParlays = data.parlaysTotal != null && data.parlaysFree != null
-    ? Math.max(0, data.parlaysTotal - data.parlaysFree) : 0;
+  const hiddenParlays = data.parlays ? Math.max(0, data.parlays.total - data.parlays.free) : 0;
 
   return (
     <section className="mb-8">
       <SectionTitle>{t("pro.tonight.title")}</SectionTitle>
       <div className="rounded-2xl overflow-hidden" style={{ border: `1px solid ${BORDER}` }}>
         <div className="px-4 py-3 text-sm font-semibold" style={{ background: SURFACE, color: TEXT }}>
-          {t("pro.tonight.bets", { n: data.bets.length })}
+          {t("pro.tonight.bets", { n: data.count })}
         </div>
         {top.map((b) => {
-          const p = b.mlPct ?? b.rulePct;
+          const p = b.pct;
+          const time = b.startTimeUTC
+            ? new Date(b.startTimeUTC).toLocaleTimeString(lang === "fr" ? "fr-CA" : "en-US", { hour: "numeric", minute: "2-digit" })
+            : null;
           return (
             <div key={b.id} className="flex items-center gap-3 px-4 py-3" style={{ borderTop: `1px solid ${BORDER}` }}>
               <Lock size={14} className="shrink-0" style={{ color: "#f2c744" }} />
               <div className="flex-1 min-w-0">
                 <div className="text-[11px] truncate" style={{ color: MUTED }}>
-                  {marketName(b, t)} · {b.context}
+                  {marketName(b as Pick<ApiBestBet, "marketType" | "marketLabel">, t)}{b.matchup ? ` · ${b.matchup}` : ""}{time ? ` · ${time}` : ""}
                 </div>
                 {/* Choix masqué : un bloc flou de longueur fixe, pas le vrai
                     texte flouté (lisible avec un zoom ou dans le DOM). */}
@@ -225,7 +234,7 @@ export function TonightTeaser() {
         })}
         {hiddenParlays > 0 && (
           <div className="px-4 py-3 text-xs" style={{ borderTop: `1px solid ${BORDER}`, color: SUBTLE }}>
-            {t("pro.tonight.parlays", { total: data.parlaysTotal!, free: data.parlaysFree! })}
+            {t("pro.tonight.parlays", { total: data.parlays!.total, free: data.parlays!.free })}
           </div>
         )}
       </div>
@@ -243,16 +252,12 @@ export function TonightTeaser() {
 
 export function LeaderTeaser() {
   const { t } = useI18n();
-  const [top, setTop] = useState<LeaderboardEntry[] | null>(null);
+  const [top, setTop] = useState<ProTeaserData["leaders"] | null>(null);
 
   useEffect(() => {
     let cancelled = false;
-    profileApiService.getLeaderboard()
-      .then((list) => {
-        if (cancelled) return;
-        setTop(list.filter((e) => e.totalBets > 0).sort((a, b) => a.rank - b.rank).slice(0, 3));
-      })
-      .catch(() => { if (!cancelled) setTop([]); });
+    // Déjà filtré (paris réglés > 0), trié et limité à 3 côté serveur.
+    loadProTeaser().then((d) => { if (!cancelled) setTop(d?.leaders ?? []); });
     return () => { cancelled = true; };
   }, []);
 
@@ -264,11 +269,11 @@ export function LeaderTeaser() {
       <SectionTitle>{t("pro.leaders.title")}</SectionTitle>
       <div className="rounded-2xl overflow-hidden" style={{ border: `1px solid ${BORDER}` }}>
         {top.map((e, i) => (
-          <div key={e.userId} className="flex items-center gap-3 px-4 py-3" style={{ borderTop: i ? `1px solid ${BORDER}` : undefined }}>
+          <div key={e.rank} className="flex items-center gap-3 px-4 py-3" style={{ borderTop: i ? `1px solid ${BORDER}` : undefined }}>
             <Trophy size={15} className="shrink-0" style={{ color: medal[i] ?? MUTED }} />
             <div className="flex-1 min-w-0">
               <div className="text-sm font-semibold truncate" style={{ color: TEXT }}>
-                {e.displayName || e.username}
+                {e.name}
               </div>
               <div className="text-[11px]" style={{ color: MUTED }}>
                 {t("pro.leaders.stats", { rate: e.hitRate, n: e.totalBets })}

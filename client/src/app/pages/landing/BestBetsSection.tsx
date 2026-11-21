@@ -120,7 +120,7 @@ export function betLabel(b: ApiBestBet, t: TFn): string {
 }
 
 /** Exportés (2026-10-04) : « Best Parlay » nomme ses jambes exactement comme ici. */
-export function marketName(b: ApiBestBet, t: TFn): string {
+export function marketName(b: Pick<ApiBestBet, "marketType" | "marketLabel">, t: TFn): string {
   const key = `market.${b.marketType}`;
   const out = t(key);
   return out === key ? b.marketLabel : out;   // clé absente → libellé serveur

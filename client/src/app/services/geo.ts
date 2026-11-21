@@ -20,13 +20,17 @@ import { isIOS } from "../platform";
 export interface GeoInfo {
   country: string | null;
   region: string | null;
-  sportsbookEligible: boolean;
+  /** Liens d'affiliation permis ici. Renommé le 2026-11-22 : les clés d'objet
+   *  survivent à la minification et ce mot-là est refusé dans le bundle iOS
+   *  (scripts/build-ios.mjs, APPLE_PLAN 2.2). Le serveur garde son champ ;
+   *  on le recalcule ici depuis `market` (même règle : `market !== null`). */
+  linksEligible: boolean;
   /** 'US' or 'ON' (Ontario): which age, helpline and advertising rules apply. */
   market: "US" | "ON" | null;
   minAge: 18 | 19 | 21 | null;
 }
 
-const UNKNOWN: GeoInfo = { country: null, region: null, sportsbookEligible: false, market: null, minAge: null };
+const UNKNOWN: GeoInfo = { country: null, region: null, linksEligible: false, market: null, minAge: null };
 const OVERRIDE_KEY = "arakice_geo_override";
 /** Mirrors the default list in server/src/services/geo.ts — dev override only. */
 const DEV_STATES = new Set(["AZ","CO","CT","DC","IL","IN","IA","KS","KY","LA","ME","MD","MA","MI","MO","NH","NJ","NY","NC","OH","OR","PA","TN","VT","VA","WV","WY"]);
@@ -53,14 +57,28 @@ function devOverride(): GeoInfo | null {
     const market = country === "US" && !!region && DEV_STATES.has(region) ? "US"
       : country === "CA" && region === "ON" ? "ON" : null;
     const minAge = market === "ON" ? 19 : market === "US" ? (DEV_AGE_18.has(region!) ? 18 : 21) : null;
-    return { country, region, sportsbookEligible: market !== null, market, minAge };
+    return { country, region, linksEligible: market !== null, market, minAge };
   } catch {
     return null;
   }
 }
 
-function isGeoInfo(v: unknown): v is GeoInfo {
-  return !!v && typeof v === "object" && typeof (v as GeoInfo).sportsbookEligible === "boolean";
+type GeoResponse = Pick<GeoInfo, "country" | "region" | "market" | "minAge">;
+
+function isGeoResponse(v: unknown): v is GeoResponse {
+  return !!v && typeof v === "object" && "market" in v;
+}
+
+/** Réponse de `/api/geo` → GeoInfo. Un marché inconnu compte comme aucun. */
+function fromResponse(j: GeoResponse): GeoInfo {
+  const market = j.market === "US" || j.market === "ON" ? j.market : null;
+  return {
+    country: j.country ?? null,
+    region:  j.region ?? null,
+    market,
+    minAge:  market ? (j.minAge ?? null) : null,
+    linksEligible: market !== null,
+  };
 }
 
 function start() {
@@ -70,7 +88,7 @@ function start() {
   if (o) { set(o); return; }
   fetch(`${env.apiBase}/geo`, { credentials: "omit" })
     .then((r) => (r.ok ? r.json() : null))
-    .then((j) => { if (isGeoInfo(j)) set({ ...UNKNOWN, ...j }); })
+    .then((j) => { if (isGeoResponse(j)) set(fromResponse(j)); })
     .catch(() => { /* stays UNKNOWN: fail closed */ });
 }
 

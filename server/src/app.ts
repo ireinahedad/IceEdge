@@ -34,7 +34,8 @@ import { seedAll }         from './db/seed';
 import { apiLimiter, authLimiter, writeLimiter } from './middleware/rateLimit.middleware';
 import { noStore, publicCache } from './middleware/httpCache.middleware';
 import { getTrackRecord }    from './services/trackRecord.service';
-import { authenticate, privatizeCache, requireAccount } from './middleware/auth.middleware';
+import { getProTeaser }     from './services/proTeaser.service';
+import { authenticate, privatizeCache, requireAccount, newsFeedKeyOrAccount } from './middleware/auth.middleware';
 import { corsOriginCallback }  from './cors';
 import { sendError, errorStatus, errorBody } from './httpError';
 
@@ -160,14 +161,19 @@ app.use('/api/users',         noStore, userRoutes);
 // `public` réécrite en `private`, pour qu'aucun CDN ne resserve une réponse
 // à un visiteur sans compte. Restent publics : /api/auth, /api/geo, le webhook
 // Stripe, /api/content (secret cron), l'API agents x402 (payante, hôte à part)
-// /api/pickem/public-vs-model et /api/track-record.
+// /api/pickem/public-vs-model, /api/track-record et /api/pro-teaser ;
+// /api/news accepte aussi la clé `X-News-Key` (NHL-posting).
 //
 // NHL data (live from NHL API) — identique pour tous.
 // Les en-têtes de cache sont posés par route dans nhl.routes.ts, alignés sur
 // les TTL serveur de nhlApiClient.
 app.use('/api/nhl',           requireAccount, nhlRoutes);
 // Fil de nouvelles par match (F1) — public, lecture seule.
-app.use('/api/news',          requireAccount, newsRoutes);
+// 2026-11-22 : les comptes de nouvelles par équipe (dépôt NHL-posting, GitHub
+// Actions) lisent ce fil sans compte, avec l'en-tête `X-News-Key`
+// (= `NEWS_FEED_SECRET`, Railway + secrets GitHub de NHL-posting). Clé à part,
+// en LECTURE SEULE : surtout pas `CONTENT_CRON_SECRET`, qui gèle les combinés.
+app.use('/api/news',          privatizeCache, newsFeedKeyOrAccount, newsRoutes);
 // Visitor location (Cloudflare headers) → may we show a sportsbook link? Per visitor, no-store.
 app.use('/api/geo',           geoRoutes);
 // Mesure de l'entonnoir (migration 055) : étapes côté client + provenance des
@@ -188,6 +194,14 @@ app.use('/api/pickem',        writeLimiter, noStore,
 app.get('/api/track-record', publicCache(600), async (_req, res) => {
   try { res.json(await getTrackRecord()); }
   catch (err: any) { sendError(res, err, { context: '[track-record]' }); }
+});
+
+// Vitrine des blocs « ce soir » et « meilleurs du classement » de /pro
+// (2026-11-22) — PUBLIC : marché, match neutre et probabilité, jamais le choix ;
+// top 3 sans identifiant. Détail et garde-fous dans proTeaser.service.ts.
+app.get('/api/pro-teaser', publicCache(60), async (_req, res) => {
+  try { res.json(await getProTeaser()); }
+  catch (err: any) { sendError(res, err, { context: '[pro-teaser]' }); }
 });
 
 // Leaderboard — public, identique pour tous, caché 60 s côté service.
