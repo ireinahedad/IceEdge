@@ -165,7 +165,7 @@ export function TeamPrediction({ teamId }: { teamId: string }) {
       ],
     },
     {
-      id: "puckline", title: "Puck Line", cols: 2,
+      id: "puckline", title: "Handicap", cols: 2,
       options: [
         { id: "t-pl-fav", label: `${data.abbr} -1.5`,          rulePct: 0,
           ruleNote: fr ? "Gagne par 2 buts ou plus." : "Win by 2+ goals.",

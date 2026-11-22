@@ -13,6 +13,7 @@
 
 import { promises as fs } from 'fs';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
+import { EMAIL_COLORS as C, emailLayout } from '../../src/services/emailTheme';
 
 function need(name: string): string {
   const v = process.env[name]?.trim();
@@ -150,18 +151,15 @@ export interface TiktokMail {
 }
 
 export async function sendTiktokMail(m: TiktokMail): Promise<void> {
-  const html = `
-  <div style="font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;max-width:520px;margin:0 auto;padding:28px 22px;background:#0A0E0C;color:#F3F7F0;border-radius:16px">
-    <h1 style="font-size:18px;letter-spacing:0.14em;text-transform:uppercase;color:#90C9F0;margin:0 0 18px">ArakIce · TikTok${m.trial ? ' · ESSAI' : ''}</h1>
-    <p style="margin:0 0 18px"><a href="${escHtml(m.videoUrl)}" style="display:inline-block;background:#90C9F0;color:#0A0E0C;font-weight:700;padding:14px 22px;border-radius:12px;text-decoration:none">Télécharger la vidéo</a></p>
-    <p style="margin:0 0 8px;color:#8A9EA6">Légende à coller :</p>
-    <pre style="white-space:pre-wrap;font:15px/1.45 -apple-system,Segoe UI,Roboto,Arial,sans-serif;background:#131A12;padding:14px;border-radius:10px;margin:0 0 18px;color:#F3F7F0">${escHtml(m.caption)}</pre>
-    ${m.note ? `<p style="margin:0 0 12px;color:#F3F7F0">${escHtml(m.note)}</p>` : ''}
-    ${(m.extras ?? []).map((x) => `<p style="margin:18px 0 8px;color:#8A9EA6">${escHtml(x.label)} :</p>
-    <pre style="white-space:pre-wrap;font:15px/1.45 -apple-system,Segoe UI,Roboto,Arial,sans-serif;background:#131A12;padding:14px;border-radius:10px;margin:0 0 18px;color:#F3F7F0">${escHtml(x.text)}</pre>`).join('')}
-    ${m.youtubeUrl ? `<p style="margin:0;color:#8A9EA6">YouTube : <a href="${escHtml(m.youtubeUrl)}" style="color:#90C9F0">${escHtml(m.youtubeUrl)}</a></p>` : ''}
-    ${m.trial ? '<p style="margin:18px 0 0;color:#FACC15">Mode essai : la vidéo YouTube est « non répertoriée ». Ne pas publier sur TikTok avant la fin de l’essai.</p>' : ''}
-  </div>`;
+  const html = emailLayout(`
+    <p style="margin:0 0 18px"><a href="${escHtml(m.videoUrl)}" style="display:inline-block;background:${C.accent};color:${C.onAccent};font-weight:700;padding:14px 22px;border-radius:12px;text-decoration:none">Télécharger la vidéo</a></p>
+    <p style="margin:0 0 8px;color:${C.muted}">Légende à coller :</p>
+    <pre style="white-space:pre-wrap;font:15px/1.45 -apple-system,Segoe UI,Roboto,Arial,sans-serif;background:${C.surface};padding:14px;border-radius:10px;margin:0 0 18px;color:${C.text}">${escHtml(m.caption)}</pre>
+    ${m.note ? `<p style="margin:0 0 12px;color:${C.text}">${escHtml(m.note)}</p>` : ''}
+    ${(m.extras ?? []).map((x) => `<p style="margin:18px 0 8px;color:${C.muted}">${escHtml(x.label)} :</p>
+    <pre style="white-space:pre-wrap;font:15px/1.45 -apple-system,Segoe UI,Roboto,Arial,sans-serif;background:${C.surface};padding:14px;border-radius:10px;margin:0 0 18px;color:${C.text}">${escHtml(x.text)}</pre>`).join('')}
+    ${m.youtubeUrl ? `<p style="margin:0;color:${C.muted}">YouTube : <a href="${escHtml(m.youtubeUrl)}" style="color:${C.accent}">${escHtml(m.youtubeUrl)}</a></p>` : ''}
+    ${m.trial ? `<p style="margin:18px 0 0;color:${C.warning}">Mode essai : la vidéo YouTube est « non répertoriée ». Ne pas publier sur TikTok avant la fin de l’essai.</p>` : ''}`, { label: `TikTok${m.trial ? ' · ESSAI' : ''}`, maxWidth: 520 });
   const res = await fetch('https://api.resend.com/emails', {
     method: 'POST',
     headers: { Authorization: `Bearer ${need('RESEND_API_KEY')}`, 'Content-Type': 'application/json' },

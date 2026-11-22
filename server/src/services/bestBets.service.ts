@@ -225,7 +225,7 @@ async function buildGameCandidates(g: any): Promise<Candidate[]> {
       ml: { kind: 'game', homeId: homeLc, awayId: awayLc, gameDate, marketType: 'total_goals_under', line },
     },
     {
-      id: `bb-${g.id}-pl-home`, subjectType: 'game', marketType: 'puck_line', marketLabel: 'Puck Line',
+      id: `bb-${g.id}-pl-home`, subjectType: 'game', marketType: 'puck_line', marketLabel: 'Handicap',
       subjectId: g.id, subjectName: matchup, subjectLogo: '', teamAbbr: home,
       label: `${home} -1.5`, selection: `${home} -1.5`, selectionValue: homeLc, selectionShort: `${home} -1.5`,
       context: ctxHome, line: -1.5, gameId: g.id, teamId: homeLc, playerId: null, rulePct: pl,

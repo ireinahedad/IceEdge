@@ -12,6 +12,7 @@
 // sent — handy for local development without hitting the network.
 
 import { logger } from '../logger';
+import { EMAIL_COLORS as C, emailLayout, emailCodeBox, emailButton } from './emailTheme';
 
 const RESEND_ENDPOINT = 'https://api.resend.com/emails';
 
@@ -86,14 +87,11 @@ export async function sendVerificationCode(to: string, code: string, firstName?:
   const hello = firstName ? `Bonjour ${firstName},` : 'Bonjour,';
   const subject = `Votre code de confirmation ArakIce : ${code}`;
 
-  const html = `
-  <div style="font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;max-width:480px;margin:0 auto;padding:32px 24px;background:#0A0E0C;color:#F3F7F0;border-radius:16px">
-    <h1 style="font-size:20px;letter-spacing:0.16em;text-transform:uppercase;color:#9BF019;margin:0 0 24px">ARAKICE</h1>
-    <p style="margin:0 0 16px;color:#F3F7F0">${hello}</p>
-    <p style="margin:0 0 24px;color:#B7C4AD">Voici votre code de confirmation pour activer votre compte&nbsp;:</p>
-    <div style="font-size:34px;font-weight:700;letter-spacing:10px;text-align:center;padding:20px;background:#131A12;border:1px solid #283323;border-radius:12px;color:#9BF019">${code}</div>
-    <p style="margin:24px 0 0;color:#92A08A;font-size:13px">Ce code expire dans 15 minutes. Si vous n'avez pas créé de compte ArakIce, ignorez ce courriel.</p>
-  </div>`;
+  const html = emailLayout(`
+    <p style="margin:0 0 16px;color:${C.text}">${hello}</p>
+    <p style="margin:0 0 24px;color:${C.subtle}">Voici votre code de confirmation pour activer votre compte&nbsp;:</p>
+    ${emailCodeBox(code)}
+    <p style="margin:24px 0 0;color:${C.muted};font-size:13px">Ce code expire dans 15 minutes. Si vous n'avez pas créé de compte ArakIce, ignorez ce courriel.</p>`);
 
   const text =
     `${hello}\n\nVotre code de confirmation ArakIce est : ${code}\n` +
@@ -107,14 +105,11 @@ export async function sendPasswordResetCode(to: string, code: string, firstName?
   const hello = firstName ? `Bonjour ${firstName},` : 'Bonjour,';
   const subject = `Réinitialisation de votre mot de passe ArakIce : ${code}`;
 
-  const html = `
-  <div style="font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;max-width:480px;margin:0 auto;padding:32px 24px;background:#0A0E0C;color:#F3F7F0;border-radius:16px">
-    <h1 style="font-size:20px;letter-spacing:0.16em;text-transform:uppercase;color:#9BF019;margin:0 0 24px">ARAKICE</h1>
-    <p style="margin:0 0 16px;color:#F3F7F0">${hello}</p>
-    <p style="margin:0 0 24px;color:#B7C4AD">Voici votre code pour réinitialiser votre mot de passe&nbsp;:</p>
-    <div style="font-size:34px;font-weight:700;letter-spacing:10px;text-align:center;padding:20px;background:#131A12;border:1px solid #283323;border-radius:12px;color:#9BF019">${code}</div>
-    <p style="margin:24px 0 0;color:#92A08A;font-size:13px">Ce code expire dans 15 minutes. Si vous n'avez pas demandé de réinitialisation, ignorez ce courriel — votre mot de passe reste inchangé.</p>
-  </div>`;
+  const html = emailLayout(`
+    <p style="margin:0 0 16px;color:${C.text}">${hello}</p>
+    <p style="margin:0 0 24px;color:${C.subtle}">Voici votre code pour réinitialiser votre mot de passe&nbsp;:</p>
+    ${emailCodeBox(code)}
+    <p style="margin:24px 0 0;color:${C.muted};font-size:13px">Ce code expire dans 15 minutes. Si vous n'avez pas demandé de réinitialisation, ignorez ce courriel — votre mot de passe reste inchangé.</p>`);
 
   const text =
     `${hello}\n\nVotre code de réinitialisation ArakIce est : ${code}\n` +
@@ -128,14 +123,11 @@ export async function sendAccountDeletionCode(to: string, code: string, firstNam
   const hello = firstName ? `Bonjour ${firstName},` : 'Bonjour,';
   const subject = `Suppression de votre compte ArakIce : ${code}`;
 
-  const html = `
-  <div style="font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;max-width:480px;margin:0 auto;padding:32px 24px;background:#0A0E0C;color:#F3F7F0;border-radius:16px">
-    <h1 style="font-size:20px;letter-spacing:0.16em;text-transform:uppercase;color:#9BF019;margin:0 0 24px">ARAKICE</h1>
-    <p style="margin:0 0 16px;color:#F3F7F0">${hello}</p>
-    <p style="margin:0 0 24px;color:#B7C4AD">Voici votre code pour confirmer la suppression définitive de votre compte&nbsp;:</p>
-    <div style="font-size:34px;font-weight:700;letter-spacing:10px;text-align:center;padding:20px;background:#131A12;border:1px solid #283323;border-radius:12px;color:#9BF019">${code}</div>
-    <p style="margin:24px 0 0;color:#92A08A;font-size:13px">Ce code expire dans 15 minutes. Si vous n'avez pas demandé la suppression de votre compte, ignorez ce courriel — rien ne sera supprimé — et écrivez-nous à ${SUPPORT_EMAIL}.</p>
-  </div>`;
+  const html = emailLayout(`
+    <p style="margin:0 0 16px;color:${C.text}">${hello}</p>
+    <p style="margin:0 0 24px;color:${C.subtle}">Voici votre code pour confirmer la suppression définitive de votre compte&nbsp;:</p>
+    ${emailCodeBox(code)}
+    <p style="margin:24px 0 0;color:${C.muted};font-size:13px">Ce code expire dans 15 minutes. Si vous n'avez pas demandé la suppression de votre compte, ignorez ce courriel — rien ne sera supprimé — et écrivez-nous à ${SUPPORT_EMAIL}.</p>`);
 
   const text =
     `${hello}\n\nVotre code pour confirmer la suppression de votre compte ArakIce est : ${code}\n` +
@@ -162,21 +154,17 @@ const PRO_URL = (campaign: string) =>
 function lifecycleHtml(opts: {
   hello: string; helloFr: string; lines: string[]; linesFr: string[]; cta: string; ctaFr: string; url: string;
 }): string {
-  const p = (t: string, color = '#B7C4AD') => `<p style="margin:0 0 14px;color:${color};line-height:1.5">${t}</p>`;
-  const btn = (label: string) =>
-    `<a href="${opts.url}" style="display:inline-block;margin:8px 0 22px;padding:12px 22px;background:#9BF019;color:#0A0E0C;font-weight:700;text-decoration:none;border-radius:10px">${label}</a>`;
-  return `
-  <div style="font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;max-width:480px;margin:0 auto;padding:32px 24px;background:#0A0E0C;color:#F3F7F0;border-radius:16px">
-    <h1 style="font-size:20px;letter-spacing:0.16em;text-transform:uppercase;color:#9BF019;margin:0 0 24px">ARAKICE</h1>
-    ${p(opts.hello, '#F3F7F0')}
+  const p = (t: string, color: string = C.subtle) => `<p style="margin:0 0 14px;color:${color};line-height:1.5">${t}</p>`;
+  const btn = (label: string) => emailButton(label, opts.url);
+  return emailLayout(`
+    ${p(opts.hello, C.text)}
     ${opts.lines.map((l) => p(l)).join('\n    ')}
     ${btn(opts.cta)}
-    <hr style="border:none;border-top:1px solid #283323;margin:8px 0 22px">
-    ${p(opts.helloFr, '#F3F7F0')}
+    <hr style="border:none;border-top:1px solid ${C.border};margin:8px 0 22px">
+    ${p(opts.helloFr, C.text)}
     ${opts.linesFr.map((l) => p(l)).join('\n    ')}
     ${btn(opts.ctaFr)}
-    <p style="margin:8px 0 0;color:#92A08A;font-size:12px">Questions? / Une question ? ${SUPPORT_EMAIL}</p>
-  </div>`;
+    <p style="margin:8px 0 0;color:${C.muted};font-size:12px">Questions? / Une question ? ${SUPPORT_EMAIL}</p>`);
 }
 
 /** Veille de la fin de l'essai. */

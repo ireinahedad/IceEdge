@@ -331,7 +331,7 @@ const MARKET_LABELS: Record<string, string> = {
   total_goals:  'Totals',
   shots_ou:     'Shots O/U',
   anytime_goal: 'Goal Scorer',
-  puck_line:    'Puck Line',
+  puck_line:    'Handicap',
   assists_ou:   'Assists O/U',
 };
 

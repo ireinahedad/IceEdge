@@ -30,8 +30,8 @@ export const MARKET_DEFINITIONS: MarketDefinition[] = [
   },
   {
     type: "puck_line",
-    label: "Puck Line (–1.5 Goals)",
-    shortLabel: "Puck Line",
+    label: "Handicap (–1.5 Goals)",
+    shortLabel: "Handicap",
     category: "match",
     description: "Favored team wins by 2 or more goals",
     requiresLine: false,
@@ -110,10 +110,10 @@ export const MARKET_DEFINITIONS: MarketDefinition[] = [
   // ── Nouveaux marchés NHL bet365 ────────────────────────────────────────────
   {
     type: "alt_puck_line",
-    label: "Alternate Puck Line",
-    shortLabel: "Alt Puck Line",
+    label: "Alternate Handicap",
+    shortLabel: "Alt Handicap",
     category: "match",
-    description: "Alternative puck line spreads (-2.5, +2.5, etc.)",
+    description: "Alternative handicaps (-2.5, +2.5, etc.)",
     requiresLine: true,
     requiresSelection: true,
     lineOptions: [-2.5, -1.5, 1.5, 2.5],
@@ -502,14 +502,14 @@ export const CATEGORY_ICONS: Record<MarketDefinition["category"], LucideIcon> = 
  */
 const MARKET_FR: Partial<Record<BetMarketType, { label: string; short: string; desc: string; unit?: string }>> = {
   moneyline:               { label: "Vainqueur du match", short: "Vainqueur", desc: "L'équipe qui gagne (prolongation et tirs de barrage compris)" },
-  puck_line:               { label: "Écart (puck line, −1,5 but)", short: "Écart", desc: "L'équipe favorite gagne par 2 buts ou plus" },
+  puck_line:               { label: "Handicap (−1,5 but)", short: "Handicap", desc: "L'équipe favorite gagne par 2 buts ou plus" },
   total_goals:             { label: "Total de buts (plus/moins)", short: "Total de buts", desc: "Buts des deux équipes au-dessus ou au-dessous de la ligne", unit: "buts" },
   regulation_result:       { label: "Résultat à 60 minutes", short: "60 min", desc: "Le gagnant après 60 minutes de temps réglementaire (sans prolongation)" },
   double_chance:           { label: "Double chance (60 min)", short: "Double chance", desc: "Deux des trois issues à 60 minutes : une équipe ou le nul, ou pas de nul" },
   game_to_ot:              { label: "Le match va en prolongation", short: "Prolongation", desc: "Le match ne se décide pas en temps réglementaire" },
   both_teams_score:        { label: "Les deux équipes marquent", short: "Les deux marquent", desc: "Chaque équipe marque au moins un but" },
   winning_margin:          { label: "Écart à la victoire", short: "Écart", desc: "L'écart exact de buts du gagnant", unit: "buts" },
-  alt_puck_line:           { label: "Écart alternatif", short: "Écart alt.", desc: "Autres écarts de buts (−2,5, +2,5, etc.)", unit: "buts" },
+  alt_puck_line:           { label: "Handicap alternatif", short: "Handicap alt.", desc: "Autres handicaps (−2,5, +2,5, etc.)", unit: "buts" },
   ot_winner:               { label: "Vainqueur en prolongation", short: "Vainqueur prol.", desc: "Qui gagne si le match va en prolongation ou en tirs de barrage" },
   period1_winner:          { label: "Vainqueur de la 1re période", short: "Vainqueur P1", desc: "L'équipe qui mène à la fin de la 1re période" },
   period2_winner:          { label: "Vainqueur de la 2e période", short: "Vainqueur P2", desc: "L'équipe qui mène à la fin de la 2e période" },

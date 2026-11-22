@@ -89,6 +89,38 @@ export function isAllowedEvent(name: string): name is EventName {
   return ALLOWED.has(name);
 }
 
+// ── PostHog (2026-11-22) ───────────────────────────────────────────────────
+//
+// Les étapes SERVEUR (signup, trial_started, checkout_started,
+// subscription_started…) sont la vérité de l'entonnoir : Stripe et la base,
+// pas le navigateur (un bloqueur ne les coupe pas). On les recopie dans
+// PostHog avec l'id de compte comme `distinct_id` ; le client fait
+// `identify(id)` à la connexion, donc elles tombent sur la même personne que
+// ses pages vues anonymes. Les événements CLIENT ne sont PAS recopiés ici :
+// le navigateur les envoie déjà à PostHog (sinon doublons).
+// Simple POST HTTP (pas de SDK) : rien à vider à l'arrêt, rien qui retienne
+// le processus. POSTHOG_KEY absente → no-op.
+
+const POSTHOG_KEY = process.env.POSTHOG_KEY?.trim() || '';
+const POSTHOG_HOST = (process.env.POSTHOG_HOST?.trim() || 'https://us.i.posthog.com').replace(/\/$/, '');
+const SERVER_SET = new Set<string>(SERVER_EVENTS);
+
+function forwardToPosthog(userId: string, name: string, props: Record<string, string | number | boolean>): void {
+  if (!POSTHOG_KEY || !SERVER_SET.has(name)) return;
+  void fetch(`${POSTHOG_HOST}/i/v0/e/`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      api_key: POSTHOG_KEY,
+      event: name,
+      distinct_id: userId,
+      timestamp: new Date().toISOString(),
+      properties: { ...props, origin: 'server', $lib: 'arakice-server' },
+    }),
+    signal: AbortSignal.timeout(3_000),
+  }).catch((err) => logger.debug({ err: (err as Error)?.message }, `[growth] posthog ${name} failed`));
+}
+
 /** Journalise une étape. Ne lève jamais ; ne pas l'attendre dans un chemin critique. */
 export async function trackEvent(
   userId: string | null,
@@ -96,10 +128,12 @@ export async function trackEvent(
   props?: Record<string, unknown>,
 ): Promise<void> {
   if (!ALLOWED.has(name)) return;
+  const cleaned = cleanProps(props);
+  if (userId) forwardToPosthog(userId, name, cleaned);
   try {
     await pool.query(
       'INSERT INTO product_events (user_id, name, props) VALUES ($1, $2, $3)',
-      [userId, name, JSON.stringify(cleanProps(props))],
+      [userId, name, JSON.stringify(cleaned)],
     );
   } catch (err) {
     onWriteError(err, `trackEvent(${name})`);

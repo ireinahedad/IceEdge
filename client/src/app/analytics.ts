@@ -25,6 +25,8 @@
  * européen — on se trompe du côté prudent. Ailleurs, pas de bandeau.
  */
 
+import { phCapture, phIdentify, startPosthog, stopPosthog } from "./posthog";
+
 const CLARITY_ID = "zfj9sz095j";
 const FIRST_TOUCH_KEY = "ae.firstTouch";
 
@@ -117,7 +119,10 @@ function rememberFirstTouch() {
 function applyConsent(choice: ConsentChoice) {
   clarity("consentv2", { ad_Storage: "denied", analytics_Storage: choice });
   if (choice === "granted") rememberFirstTouch();
-  else { try { localStorage.removeItem(FIRST_TOUCH_KEY); } catch { /* rien */ } }
+  else {
+    try { localStorage.removeItem(FIRST_TOUCH_KEY); } catch { /* rien */ }
+    stopPosthog(); // sans effet s'il n'a jamais été chargé
+  }
 }
 
 /** Réponse du visiteur au bandeau. Gardée, puis appliquée tout de suite. */
@@ -175,11 +180,13 @@ export function initAnalytics() {
   s.async = true;
   s.src = `https://www.clarity.ms/tag/${CLARITY_ID}`;
   document.head.appendChild(s);
+  maybeStartPosthog(); // réponse « Accepter » déjà gardée : tout de suite
   consentListeners.forEach((l) => l());
 }
 
 /** Relie la session au compte (id haché par Clarity) et marque gratuit / Pro. */
 export function tagUser(userId: string | null, isPro: boolean) {
+  phIdentify(userId, userId ? (isPro ? "pro" : "free") : "anonymous");
   if (!window.clarity) return; // Clarity pas chargé (dev, iOS) : rien à faire
   clarity("set", "signed_in", userId ? "yes" : "no");
   clarity("set", "plan", userId ? (isPro ? "pro" : "free") : "anonymous");
@@ -209,6 +216,7 @@ export function trackEvent(name: string) {
 }
 
 function postEvent(name: string) {
+  phCapture(name);
   void import("./services/authService")
     .then((m) => m.authedFetch("/growth/event", { method: "POST", body: JSON.stringify({ name }), keepalive: true }))
     .catch(() => { /* mesure best-effort */ });
@@ -225,8 +233,26 @@ function flushPending() {
   const attr = pendingAttribution;
   pendingAttribution = null;
   if (!productEventsAllowed()) return;
+  maybeStartPosthog();
   names.forEach(postEvent);
   if (attr) sendSignupAttribution(attr);
+}
+
+/**
+ * PostHog ne se charge qu'une fois la mesure permise (accord, ou hors Europe
+ * une fois le pays connu). Super-propriétés : la provenance, comme dans Clarity,
+ * pour couper l'entonnoir par canal (first_source = canal qui a amené l'abonné).
+ */
+function maybeStartPosthog() {
+  if (!productEventsAllowed()) return;
+  const now = pendingTouch;
+  const first = readFirstTouch() ?? now;
+  const props: Record<string, string> = {};
+  if (now) props.source = now.source;
+  if (now?.campaign) props.campaign = now.campaign;
+  if (first) { props.first_source = first.source; props.first_landing = first.landing; }
+  if (first?.campaign) props.first_campaign = first.campaign;
+  startPosthog(props);
 }
 
 /** Mesure en base permise ? Accord explicite, ou hors Europe une fois le pays connu. */

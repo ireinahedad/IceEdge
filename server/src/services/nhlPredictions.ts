@@ -1044,7 +1044,7 @@ function computeGameMarkets(
     plRows.push({ label: `${x}`, cells: teamExtras ? [ids.hm, ids.hp] : [ids.hm, ids.hp, ids.am, ids.ap] });
   }
   const puckLine: MarketGroup = {
-    id: 'puckline', title: 'Puck Line', cols: 2,
+    id: 'puckline', title: 'Handicap', cols: 2,
     options: plOptions,
     tables: [{
       rowHeader: 'Line',

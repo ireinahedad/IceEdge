@@ -324,7 +324,8 @@ const MKT_EXACT: Record<string, string> = {
   "Moneyline": "Vainqueur du match",
   "Match Betting": "Issue du match",
   "Double Chance": "Double chance",
-  "Puck Line": "Écart (puck line)",
+  "Puck Line": "Handicap", // ancien libellé, encore dans les coupons stockés
+  "Handicap": "Handicap",
   "Total Goals": "Total de buts",
   "Team Total Goals": "Buts par équipe",
   "Both Teams to Score": "Les deux équipes marquent",
@@ -437,6 +438,9 @@ const MKT_RULES: Array<[RegExp, string | ((...m: string[]) => string)]> = [
  * l'app. Inconnu → tel quel (un nom d'équipe ou de joueur, un score « 3-1 »).
  */
 export function marketText(text: string, lang: Lang): string {
+  // Ancien libellé serveur (coupons enregistrés avant le 2026-11-22) : l'app dit
+  // « Handicap » dans les deux langues.
+  if (text === "Puck Line" || text === "Puck line") return "Handicap";
   if (lang !== "fr" || !text) return text;
   // « Joueur · Libellé » : chaque morceau à part, le nom reste intact.
   if (text.includes(" · ")) return text.split(" · ").map((p) => marketText(p, lang)).join(" · ");
