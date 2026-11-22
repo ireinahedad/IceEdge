@@ -11,7 +11,7 @@
 
 import { createContext, useContext, useEffect, useState } from "react";
 import type { ReactNode } from "react";
-import { isIOS } from "../platform";
+import { features, isIOS } from "../platform";
 
 export type Lang = "en" | "fr";
 const STORAGE_KEY = "iceedge_lang";
@@ -508,14 +508,16 @@ const DICT: Record<string, { en: string; fr: string }> = {
   // rien — indiscernable d'un bouton mort.
   "slip.lockFailed":   { en: "Couldn't lock the slip — try again", fr: "Impossible de verrouiller le pari — réessayez" },
   "slip.lockTimeout":  { en: "The server took too long — your slip wasn't locked. Try again.", fr: "Le serveur a mis trop de temps — le pari n'a pas été verrouillé. Réessayez." },
+  "slip.gameFinished": { en: "A game in your slip is already over — remove that bet to lock it.", fr: "Un match de votre coupon est déjà terminé — retirez ce pari pour le verrouiller." },
   "slip.gameStarted":  { en: "A game in your slip has already started — remove those bets to lock it.", fr: "Un match de votre coupon a déjà commencé — retirez ces paris pour le verrouiller." },
   "slip.chance":      { en: "chance",          fr: "de chance" },
   "slip.oddsWord":    { en: "odds",            fr: "cote" },
   "slip.noBookOdds":  { en: "no book odds",    fr: "pas de cote" },
   "slip.noBookCombined": { en: "Book odds unavailable for this combination", fr: "Cote du livre indisponible pour ce combiné" },
   "slip.liveTitle":   { en: "Game in progress", fr: "Match en cours" },
-  "slip.liveBody":    { en: "Live betting isn't available: a game in your slip has already started. Remove those bets to lock it.", fr: "Les paris en direct ne sont pas disponibles : un match de votre coupon a déjà commencé. Retirez ces paris pour le verrouiller." },
-  "slip.legLive":     { en: "Game in progress — can't be locked", fr: "Match en cours — impossible à verrouiller" },
+  "slip.liveBody":    { en: "A game in your slip has already started. You can still lock it: each bet keeps the probability shown when it was added.", fr: "Un match de votre coupon a déjà commencé. Vous pouvez quand même le verrouiller : chaque pari garde la probabilité affichée à l\u2019ajout." },
+  "slip.legLive":     { en: "Game in progress", fr: "Match en cours" },
+  "slip.liveAdded":   { en: "This game has already started — the bet was added to your slip.", fr: "Ce match a déjà commencé — le pari est ajouté à votre coupon." },
   "slip.liveBlocked": { en: "This game has already started — live betting isn't available.", fr: "Ce match a déjà commencé — les paris en direct ne sont pas disponibles." },
   "slip.individualProb":{ en: "Individual prediction probability", fr: "Probabilité de prédiction individuelle" },
   // Ce que la combinaison a changé — affiché par `SlipNotices`. Ces trois faits
@@ -1566,6 +1568,13 @@ const DICT: Record<string, { en: string; fr: string }> = {
   "error.updateBody":   { en: "Reload to get the latest version.", fr: "Rechargez pour obtenir la dernière version." },
   "error.reload":       { en: "Reload", fr: "Recharger" },
   "error.code":         { en: "Error code: {id}", fr: "Code d'erreur : {id}" },
+  // Messages de catégorie (services/errors.ts → userErrorMessage).
+  "error.generic":      { en: "Something went wrong. Please try again.", fr: "Une erreur est survenue. Réessayez." },
+  "error.offline":      { en: "You're offline. Check your connection and try again.", fr: "Vous êtes hors ligne. Vérifiez votre connexion et réessayez." },
+  "error.network":      { en: "We couldn't reach ArakIce. Check your connection and try again.", fr: "Impossible de joindre ArakIce. Vérifiez votre connexion et réessayez." },
+  "error.timeout":      { en: "This is taking too long. Please try again.", fr: "La requête a pris trop de temps. Réessayez." },
+  "error.ai":           { en: "The AI analysis is unavailable right now. Please try again later.", fr: "L'analyse IA est indisponible pour le moment. Réessayez plus tard." },
+  "error.rateLimited":  { en: "Too many requests. Wait a moment, then try again.", fr: "Trop de requêtes. Patientez un instant, puis réessayez." },
 
   // ── League: Pro lock on other players' bets ──
   "league.othersProTitle": { en: "See their bets with Pro", fr: "Voyez leurs paris avec Pro" },
@@ -1636,7 +1645,8 @@ const DICT: Record<string, { en: string; fr: string }> = {
   "intro.f2.t":         { en: "Predicts with arakiceML", fr: "Prédit avec arakiceML" },
   "intro.f2.b":         { en: "Win odds, totals, period markets and player props, each with a probability.", fr: "Vainqueur, totaux, marchés par période et paris sur les joueurs, chacun avec sa probabilité." },
   "intro.f3.t":         { en: "Explains the pick", fr: "Explique le choix" },
-  "intro.f3.b":         isIOS ? { en: "An AI write-up for each bet, the fair price next to the market odds, and a bet slip scanner.", fr: "Une analyse IA pour chaque pari, le juste prix à côté de la cote du marché, et un lecteur de coupons." } : { en: "An AI write-up for each bet, the fair price next to the sportsbook line, and a bet slip scanner.", fr: "Une analyse IA pour chaque pari, le juste prix à côté de la cote du site de paris, et un lecteur de coupons." },
+  // Mention du scan retirée tant que VITE_SLIP_SCAN n'est pas « true ».
+  "intro.f3.b":         isIOS ? { en: "An AI write-up for each bet, the fair price next to the market odds" + (features.slipScan ? ", and a bet slip scanner." : "."), fr: "Une analyse IA pour chaque pari, le juste prix à côté de la cote du marché" + (features.slipScan ? ", et un lecteur de coupons." : ".") } : { en: "An AI write-up for each bet, the fair price next to the sportsbook line" + (features.slipScan ? ", and a bet slip scanner." : "."), fr: "Une analyse IA pour chaque pari, le juste prix à côté de la cote du site de paris" + (features.slipScan ? ", et un lecteur de coupons." : ".") },
   "intro.st.closing":   isIOS ? { en: "games tested: arakiceML is as accurate as the market's closing odds", fr: "matchs testés : arakiceML est aussi juste que les cotes de fermeture du marché" } : { en: "games tested: arakiceML is as accurate as the sportsbooks' closing odds", fr: "matchs testés : arakiceML est aussi juste que les cotes de fermeture des sites de paris" },
   "intro.st.winners":   { en: "winners picked correctly", fr: "vainqueurs bien choisis" },
   "intro.st.favs":      { en: "of its strongest favourites ({lo}–⁠{hi} %) won", fr: "de ses plus gros favoris ({lo}–⁠{hi} %) ont gagné" },
@@ -1720,6 +1730,22 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
       {children}
     </I18nContext.Provider>
   );
+}
+
+/**
+ * Traduction HORS composant (services, gestion d'erreurs). La langue est celle
+ * que `LanguageProvider` a posée sur `<html lang>` ; à défaut, la langue
+ * enregistrée, puis l'anglais.
+ */
+export function tNow(key: string, params?: TParams): string {
+  let lang: Lang = "en";
+  try {
+    const docLang = typeof document !== "undefined" ? document.documentElement.lang : "";
+    const stored = typeof localStorage !== "undefined" ? localStorage.getItem(STORAGE_KEY) : null;
+    const l = docLang === "fr" || docLang === "en" ? docLang : stored;
+    if (l === "fr" || l === "en") lang = l;
+  } catch { /* stockage indisponible */ }
+  return translate(key, lang, params);
 }
 
 export function useI18n(): I18nValue {

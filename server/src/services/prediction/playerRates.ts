@@ -313,7 +313,7 @@ export async function playerRatesForGame(gameId: string): Promise<PlayerRatesRes
   const game = await fetchGameById(gameId);
   const home = String(game?.homeTeam?.abbreviation ?? '').toUpperCase();
   const away = String(game?.awayTeam?.abbreviation ?? '').toUpperCase();
-  if (!home || !away) throw Object.assign(new Error('Game not found'), { status: 404 });
+  if (!home || !away) throw Object.assign(new Error('Game not found'), { expose: true, status: 404 });
 
   const [summary, homeRoster, awayRoster, bundle] = await Promise.all([
     fetchTeamSummaryStats().catch(() => ({} as Record<string, any>)),

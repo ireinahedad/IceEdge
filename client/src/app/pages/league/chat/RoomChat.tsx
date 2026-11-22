@@ -14,6 +14,7 @@ import { useI18n } from "../../../i18n";
 import type { ChatRoom, ChatMessage, UserProfile, ReportReason } from "../../../types/user";
 
 import { Lock, Copy, Pin, Users, ClipboardList, LogOut, Trash2, X } from "lucide-react";
+import { userErrorMessage } from "../../../services/errors";
 // ─── Tag styles ───────────────────────────────────────────────────────────────
 
 const TAG_STYLE = {
@@ -146,7 +147,7 @@ export function RoomChat({ room, currentUserId, me, onBack, onUpdate, onLeft, on
       // Toujours fusionner, jamais remplacer — même au montage : le socket peut
       // avoir livré un message pendant que cette requête était en vol.
       .then(mergeMessages)
-      .catch((e) => { if (!isResync) setErrorMsg(e.message ?? t("chat.loadFailed")); })
+      .catch((e) => { if (!isResync) setErrorMsg(userErrorMessage(e, t("chat.loadFailed"))); })
       .finally(() => { if (!isResync) setLoadingMessages(false); });
   }, [room.id, resyncKey]);
 
@@ -277,7 +278,7 @@ export function RoomChat({ room, currentUserId, me, onBack, onUpdate, onLeft, on
       setInput(text);
       setTag(sentTag);
       setReplyTo(sentReplyTo);
-      setErrorMsg(e.message ?? t("chat.sendFailed"));
+      setErrorMsg(userErrorMessage(e, t("chat.sendFailed")));
     }
   }
 
@@ -297,7 +298,7 @@ export function RoomChat({ room, currentUserId, me, onBack, onUpdate, onLeft, on
         try {
           await profileApiService.deleteMessage(room.id, msgId);
         } catch (e: any) {
-          setErrorMsg(e.message ?? t("chat.deleteFailed"));
+          setErrorMsg(userErrorMessage(e, t("chat.deleteFailed")));
         }
       },
     });
@@ -341,7 +342,7 @@ export function RoomChat({ room, currentUserId, me, onBack, onUpdate, onLeft, on
       // personne, autant le retirer tout de suite plutôt qu'au rechargement.
       if (res.hidden) removeMessage(target.id);
     } catch (e: any) {
-      toast.error(e?.message ?? t("report.failed"));
+      toast.error(userErrorMessage(e, t("report.failed")));
     } finally {
       setReporting(false);
     }
@@ -361,7 +362,7 @@ export function RoomChat({ room, currentUserId, me, onBack, onUpdate, onLeft, on
       });
       toast.success(t("block.done", { name: target.displayName || target.username }));
     } catch (e: any) {
-      toast.error(e?.message ?? t("block.failed"));
+      toast.error(userErrorMessage(e, t("block.failed")));
     }
   }
 
@@ -376,7 +377,7 @@ export function RoomChat({ room, currentUserId, me, onBack, onUpdate, onLeft, on
           await profileApiService.leaveRoom(room.id);
           onLeft(room.id);
         } catch (e: any) {
-          setErrorMsg(e.message ?? t("chat.leaveFailed"));
+          setErrorMsg(userErrorMessage(e, t("chat.leaveFailed")));
         }
       },
     });
@@ -393,7 +394,7 @@ export function RoomChat({ room, currentUserId, me, onBack, onUpdate, onLeft, on
           await profileApiService.deleteRoom(room.id);
           onDeleted(room.id);
         } catch (e: any) {
-          setErrorMsg(e.message ?? t("chat.deleteRoomFailed"));
+          setErrorMsg(userErrorMessage(e, t("chat.deleteRoomFailed")));
         }
       },
     });

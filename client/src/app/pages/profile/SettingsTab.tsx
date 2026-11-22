@@ -32,6 +32,7 @@ import { DeleteAccountSheet } from "./DeleteAccountSheet";
 
 
 import { Globe, Moon, Sun, Target, Hash, Lock, FileText, ScanText } from "lucide-react";
+import { userErrorMessage } from "../../services/errors";
 // ── Settings Tab ──────────────────────────────────────────────────────────────
 
 export function SettingsTab({
@@ -94,7 +95,7 @@ export function SettingsTab({
       await unblock(userId);
       toast.success(t("block.unblockDone", { name }));
     } catch (e: any) {
-      toast.error(e?.message ?? t("block.unblockFailed"));
+      toast.error(userErrorMessage(e, t("block.unblockFailed")));
     } finally {
       setUnblocking(null);
     }
@@ -108,7 +109,7 @@ export function SettingsTab({
       await refreshSub();
       toast.success(t("pro.settingsCancel"));
     } catch (e: any) {
-      toast.error(e?.message ?? t("login.error"));
+      toast.error(userErrorMessage(e, t("login.error")));
     } finally {
       setCancelingSub(false);
     }
@@ -121,7 +122,7 @@ export function SettingsTab({
       await logoutAll();
       navigate("/login", { replace: true });
     } catch (e: any) {
-      toast.error(e?.message ?? t("login.error"));
+      toast.error(userErrorMessage(e, t("login.error")));
     } finally {
       setSigningOutAll(false);
     }
@@ -243,7 +244,7 @@ export function SettingsTab({
 
       setSaveMsg("Saved!");
     } catch (err: any) {
-      setSaveMsg(err.message ?? "Failed to save");
+      setSaveMsg(userErrorMessage(err, "Failed to save"));
     } finally {
       setSaving(false);
       setTimeout(() => setSaveMsg(null), 2500);
@@ -268,7 +269,7 @@ export function SettingsTab({
       onSaved(updated);
       setSaveMsg("Saved!");
     } catch (err: any) {
-      setSaveMsg(err.message ?? "Failed to save");
+      setSaveMsg(userErrorMessage(err, "Failed to save"));
     } finally {
       setPickingEmoji(false);
       setTimeout(() => setSaveMsg(null), 2500);

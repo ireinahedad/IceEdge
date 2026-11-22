@@ -35,6 +35,7 @@ import { EmptySlip, LegCard, LockSlipCTA, ProbabilityGauge, SlipNotices, ODDS_CO
 import { useNHLData } from "../hooks/useNHLData";
 import { useOddsFormat } from "../context/OddsFormatContext";
 import { fetchLegPrices } from "../services/oddsApiService";
+import { userErrorMessage } from "../services/errors";
 
 
 // ─── Main page ─────────────────────────────────────────────────────────────────
@@ -211,14 +212,13 @@ export function BetBuilderPage() {
       // Un délai dépassé n'est pas un refus : le coupon n'est pas invalide, le
       // serveur a simplement mis trop longtemps. Le dire évite qu'on retire des
       // paris en croyant que c'est le coupon qui pose problème.
-      // Un match du coupon a déjà commencé : le serveur refuse (pas de pari en
-      // direct, voir `resolveLocksAt` côté serveur). Le dire en clair, avec
-      // quoi faire.
+      // Un match du coupon est TERMINÉ : le serveur refuse (résultat connu).
+      // Les matchs commencés sont acceptés depuis le 2026-11-22.
       const message = isRequestTimeout(err)
         ? t("slip.lockTimeout")
-        : err?.code === "GAME_STARTED"
-        ? t("slip.gameStarted")
-        : (err?.message || t("slip.lockFailed"));
+        : err?.code === "GAME_FINISHED"
+        ? t("slip.gameFinished")
+        : (userErrorMessage(err, t("slip.lockFailed")));
       setSubmitError(message);
       toast.error(message);
     } finally {

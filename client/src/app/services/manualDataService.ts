@@ -21,6 +21,7 @@
  */
 
 import { authedFetch } from './authService';
+import { apiErrorFromResponse } from './errors';
 
 // ── Blessures / alignement ───────────────────────────────────────────────────
 
@@ -55,8 +56,7 @@ export interface LineupsDay {
 async function call<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await authedFetch(`/manual${path}`, init);
   if (!res.ok) {
-    const body = await res.json().catch(() => null) as { error?: string } | null;
-    throw new Error(body?.error ?? `Erreur ${res.status}`);
+    throw await apiErrorFromResponse(res, "La requête a échoué.");
   }
   // 204 sans corps : rien à lire.
   if (res.status === 204) return undefined as T;

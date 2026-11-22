@@ -37,7 +37,7 @@ import { getTrackRecord }    from './services/trackRecord.service';
 import { getProTeaser }     from './services/proTeaser.service';
 import { authenticate, privatizeCache, requireAccount, newsFeedKeyOrAccount } from './middleware/auth.middleware';
 import { corsOriginCallback }  from './cors';
-import { sendError, errorStatus, errorBody } from './httpError';
+import { sendError, errorStatus, errorBody, requestIdOf } from './httpError';
 
 const app = express();
 
@@ -376,7 +376,10 @@ app.use((err: any, req: express.Request, res: express.Response, _next: express.N
   // Log with the request-scoped logger so the error is correlated to its
   // request id; fall back to console if the logger middleware didn't run.
   ((req as any).log?.error?.bind((req as any).log) ?? console.error)({ err }, 'request failed');
-  res.status(errorStatus(err)).json(errorBody(err));
+  // Réponse déjà partie (flux interrompu au milieu) : on ne peut plus rien
+  // écrire, on laisse Express fermer la connexion.
+  if (res.headersSent) return;
+  res.status(errorStatus(err)).json(errorBody(err, { requestId: requestIdOf(req) }));
 });
 
 export default app;

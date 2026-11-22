@@ -285,8 +285,8 @@ export function createAgentsRouter(cfg: X402Config, opts: AgentsRouterOptions = 
       res.setHeader('Cache-Control', 'private, no-store');
       return res.json(body);
     } catch (err: any) {
-      if (err?.code === 'no_games') return res.status(404).json({ error: err.message, code: err.code, excluded: err.excluded ?? [] });
-      if (err?.status === 503) return res.status(503).json({ error: err.message, code: err.code });
+      // Messages et codes de `feed.service` : écrits par nous, marqués `expose`.
+      if (err?.code === 'no_games') return sendError(res, err, { context: '[x402/games]', extra: { excluded: err.excluded ?? [] } });
       return sendError(res, err, { context: '[x402/games]' });
     }
   });

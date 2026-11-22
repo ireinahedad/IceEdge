@@ -484,11 +484,9 @@ function gameStarted(game: DisplayGame): boolean {
  * `link={false}` (décision du user, 2026-09-28) — sinon la moitié de la case
  * Vainqueur ouvrait le livre au lieu d'ajouter le pari.
  *
- * Pas de pari en direct (décision du user, 2026-09-28) : la mise au jeu prévue
- * passée, la case ne pose plus rien, même si la ligne n'a pas encore glissé
- * dans la section « En direct ». Le serveur refuse de toute façon au
- * verrouillage (`GAME_STARTED`) ; ici on évite juste de laisser poser un pari
- * qu'il refusera.
+ * Match commencé (2026-11-22, demande du user) : la case ajoute quand même le
+ * pari et affiche un message (`slip.liveAdded`). Le serveur refuse toujours le
+ * verrouillage (`GAME_STARTED`) ; le Bet Builder le signale jambe par jambe.
  */
 function PickCell({ game, pick, probability, team, label, short, children }: {
   game: DisplayGame;
@@ -508,10 +506,10 @@ function PickCell({ game, pick, probability, team, label, short, children }: {
   const tap = () => {
     // Case prise → on la libère, où que la jambe ait été posée.
     if (selected) { matches.forEach((l) => removeLeg(l.id)); return; }
-    // Match commencé : on le dit au lieu d'ignorer le toucher en silence
-    // (demande du user, 2026-09-30).
-    if (gameStarted(game)) { toast.info(t("slip.liveBlocked")); return; }
     if (probability == null) return;
+    // Match commencé : le pari s'ajoute quand même, avec un message
+    // (demande du user, 2026-11-22 — avant, le toucher était refusé).
+    const started = gameStarted(game);
     const day = weekdayShort(gameIsoDay(game), lang) || gameDayLabel(game, lang);
     const leg: BetLeg = {
       id: `home-${game.id}-${pick.marketType}-${pick.subject}${pick.selectionValue === "no" ? "-no" : ""}`,
@@ -535,6 +533,7 @@ function PickCell({ game, pick, probability, team, label, short, children }: {
       isHome: pick.subjectIsHome,
     };
     addLeg(leg);
+    if (started) toast.info(t("slip.liveAdded"));
   };
 
   return (

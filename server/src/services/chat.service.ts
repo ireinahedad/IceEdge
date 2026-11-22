@@ -53,7 +53,7 @@ const AUTO_HIDE_REPORTS = 3;
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function httpError(message: string, status: number) {
-  return Object.assign(new Error(message), { status });
+  return Object.assign(new Error(message), { status, expose: true });
 }
 
 /** Accepts #RGB or #RRGGBB, returns a normalized #RRGGBB or null. */

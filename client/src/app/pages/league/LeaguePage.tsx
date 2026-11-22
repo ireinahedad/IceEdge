@@ -14,7 +14,8 @@ import "./league-theme.css";
 type Tab = "leaderboard" | "chat";
 
 export function LeaguePage() {
-  const [tab, setTab] = useState<Tab>("chat");
+  // 2026-11-22 : on arrive sur le classement (podium en tête), plus sur le chat.
+  const [tab, setTab] = useState<Tab>("leaderboard");
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
   const [rooms, setRooms] = useState<ChatRoom[]>([]);
   const [loading, setLoading] = useState(true);
@@ -68,7 +69,7 @@ export function LeaguePage() {
         <PlayerSearchBar search={playerSearch} showResults={tab === "chat"} />
       </div>
 
-      {/* Single pane driven by the tab bar (Chat is the default), on all sizes. */}
+      {/* Single pane driven by the tab bar (Classement is the default), on all sizes. */}
       <div className="relative z-10 flex-1 flex flex-col px-4 pb-[calc(7rem+env(safe-area-inset-bottom,0px))] pt-4 overflow-hidden min-h-0">
         {/* Chat */}
         <div

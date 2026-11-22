@@ -14,6 +14,7 @@ import { useSubscription } from "../../context/SubscriptionContext";
 import { tokenStore } from "../../services/tokenStore";
 import { accountApiService, ApiError, type ReauthMethod } from "../../services/userService";
 import { useI18n } from "../../i18n";
+import { userErrorMessage } from "../../services/errors";
 
 export function DeleteAccountSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { t } = useI18n();
@@ -42,7 +43,7 @@ export function DeleteAccountSheet({ open, onClose }: { open: boolean; onClose: 
       const r = await accountApiService.startDeletion();
       setMethod(r.method);
     } catch (e: any) {
-      setError(e?.message ?? t("account.deleteFailed"));
+      setError(userErrorMessage(e, t("account.deleteFailed")));
     } finally {
       setBusy(false);
     }
@@ -59,7 +60,7 @@ export function DeleteAccountSheet({ open, onClose }: { open: boolean; onClose: 
       if (e instanceof ApiError && e.code === "REAUTH_FAILED") setError(t("account.wrongPassword"));
       else if (e instanceof ApiError && e.status === 400) setError(t("account.wrongCode"));
       // 502 (Stripe) et le reste : le message serveur dit déjà que rien n'a été supprimé.
-      else setError(e instanceof ApiError && e.status < 500 ? t("account.deleteFailed") : (e?.message ?? t("account.deleteFailed")));
+      else setError(e instanceof ApiError && e.status < 500 ? t("account.deleteFailed") : (userErrorMessage(e, t("account.deleteFailed"))));
       return;
     }
     // Le compte n'existe plus : ses jetons non plus. `logout` peut échouer sur

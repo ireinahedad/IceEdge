@@ -67,6 +67,7 @@ import {
 } from "../services/manualDataService";
 import type { NHLGame, NHLPlayerInfo } from "../types/bet";
 import { nhlLogoUrl } from "../data/teamEmoji";
+import { userErrorMessage } from "../services/errors";
 
 // ─── Constantes ───────────────────────────────────────────────────────────────
 
@@ -210,7 +211,7 @@ export function ManualEntryPage() {
       setSaved(nextSaved);
       setGames(sortedGames);
     } catch (e: any) {
-      setLoadError(e?.message ?? "Impossible de charger les matchs");
+      setLoadError(userErrorMessage(e, "Impossible de charger les matchs"));
       setGames([]);
     }
   }, []);
@@ -347,7 +348,7 @@ export function ManualEntryPage() {
       toast.success(`${key.replace("@", " @ ")} enregistré.`);
       setOpenKey(null);
     } catch (e: any) {
-      toast.error(e?.message ?? "L'enregistrement a échoué. Réessaie.");
+      toast.error(userErrorMessage(e, "L'enregistrement a échoué. Réessaie."));
     } finally {
       setSavingKey(null);
     }
@@ -373,7 +374,7 @@ export function ManualEntryPage() {
       setSaved((all) => ({ ...all, [key]: JSON.stringify(empty) }));
       toast.success("Saisie du match effacée.");
     } catch (e: any) {
-      toast.error(e?.message ?? "L'effacement a échoué.");
+      toast.error(userErrorMessage(e, "L'effacement a échoué."));
     } finally {
       setSavingKey(null);
     }
@@ -401,7 +402,7 @@ export function ManualEntryPage() {
       setSaved((all) => Object.fromEntries(Object.entries(all).map(([k, s]) => [k, touches(k) ? JSON.stringify(drop(JSON.parse(s))) : s])));
       toast.success(`${player} est de retour au jeu.`);
     } catch (e: any) {
-      toast.error(e?.message ?? "Le retrait a échoué. Réessaie.");
+      toast.error(userErrorMessage(e, "Le retrait a échoué. Réessaie."));
     }
   }
 
@@ -412,7 +413,7 @@ export function ManualEntryPage() {
   if (!isAdmin) return null;
 
   return (
-    <div className="flex flex-col min-h-screen text-white max-w-[900px] mx-auto px-4 pt-14 pb-24" style={{ background: "#0A0E0C" }}>
+    <div className="flex flex-col min-h-screen text-white max-w-[430px] md:max-w-5xl mx-auto w-full px-4 pt-14 pb-24" style={{ background: "#0A0E0C" }}>
       <div className="flex items-center gap-3 mb-4">
         <button onClick={() => navigate("/dev")} className="tap-44 text-[#bfc8cc] text-lg" aria-label="Retour">←</button>
         <h1 className="text-white text-lg font-bold flex-1">Saisie d'avant-match</h1>
@@ -617,7 +618,7 @@ function NewsLinkCard({ teams }: { teams: string[] }) {
       toast.success("Lien ajouté au fil");
       setUrl(""); setExcerpt(""); setFlags([]);
     } catch (e: any) {
-      toast.error(e?.message ?? "Échec de l'ajout");
+      toast.error(userErrorMessage(e, "Échec de l'ajout"));
     } finally {
       setBusy(false);
     }

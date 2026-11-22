@@ -3,6 +3,7 @@ import { profileApiService } from "../services/userService";
 import { useAuth } from "./AuthContext";
 import { useI18n } from "../i18n";
 import type { BlockedUser } from "../types/user";
+import { userErrorMessage } from "../services/errors";
 
 /**
  * BlockContext — la liste des personnes que l'utilisateur a bloquées.
@@ -65,7 +66,7 @@ export function BlockProvider({ children }: { children: ReactNode }) {
     try {
       apply(await profileApiService.getBlockedUsers());
     } catch (e: any) {
-      setError(e?.message ?? "blocked.loadFailed");
+      setError(userErrorMessage(e, "blocked.loadFailed"));
     } finally {
       setLoading(false);
     }

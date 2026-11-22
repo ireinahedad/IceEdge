@@ -27,12 +27,14 @@ import {
 } from "../../../services/pickemService";
 import { PickemLeaderboard } from "./PickemLeaderboard";
 
-const OPEN_KEY = "iceedge_pickem_open";
+// 2026-11-22 : section FERMÉE par défaut (demande du user). Nouvelle clé pour
+// que ceux qui l'avaient ouverte repartent aussi fermés, une fois.
+const OPEN_KEY = "iceedge_pickem_open_v2";
 
 // ─── État ─────────────────────────────────────────────────────────────────────
 
 function readOpen(): boolean {
-  try { return localStorage.getItem(OPEN_KEY) !== "0"; } catch { return true; }
+  try { return localStorage.getItem(OPEN_KEY) === "1"; } catch { return false; }
 }
 function writeOpen(v: boolean) {
   try { localStorage.setItem(OPEN_KEY, v ? "1" : "0"); } catch { /* aperçu, navigation privée */ }
@@ -76,7 +78,7 @@ export function PickemSection() {
       </button>
       {open && (
         <>
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-1.5">
             {day.games.map((g) => <GameDonut key={g.gameId} game={g} onChange={update} />)}
           </div>
           <PickemLeaderboard />
@@ -101,7 +103,7 @@ function Ring({ g, colors, shown }: { g: PickemDayGame; colors: { away: string; 
     // Jauge : combien de votes avant d'afficher une répartition.
     const filled = shown ? Math.min(100, (g.total / g.minVotes) * 100) : 0;
     return (
-      <svg viewBox="0 0 36 36" className="w-[52px] h-[52px] flex-shrink-0 -rotate-90" role="img"
+      <svg viewBox="0 0 36 36" className="w-[40px] h-[40px] flex-shrink-0 -rotate-90" role="img"
            aria-label={t("pickem.day.votes", { n: g.total, min: g.minVotes })}>
         <circle {...common} stroke="rgba(255,255,255,0.08)" strokeDasharray="2 1.2" />
         <circle {...common} stroke="rgba(134,209,234,0.55)" strokeLinecap="round"
@@ -119,7 +121,7 @@ function Ring({ g, colors, shown }: { g: PickemDayGame; colors: { away: string; 
   const fav = g.home.pct >= g.away.pct ? g.home : g.away;
   const favColor = fav === g.home ? colors.home : colors.away;
   return (
-    <svg viewBox="0 0 36 36" className="w-[52px] h-[52px] flex-shrink-0 -rotate-90" role="img"
+    <svg viewBox="0 0 36 36" className="w-[40px] h-[40px] flex-shrink-0 -rotate-90" role="img"
          aria-label={`${g.away.team} ${g.away.pct} % · ${g.home.team} ${g.home.pct} %`}>
       <circle {...common} stroke={colors.away}
               strokeDasharray={`${Math.max(0, away - GAP)} ${100 - Math.max(0, away - GAP)}`}
@@ -217,7 +219,7 @@ function GameDonut({ game: g, onChange }: { game: PickemDayGame; onChange: (g: P
       : t("pickem.voters", { n: g.total }));
 
   return (
-    <div className="chat-tile rounded-xl px-2 py-1.5 flex flex-col gap-1 min-w-0">
+    <div className="chat-tile rounded-lg px-1.5 py-1 flex flex-col gap-0.5 min-w-0">
       <div className="w-full flex items-center justify-between gap-1 text-[9px]">
         <button type="button" onClick={() => navigate(`/stats/prediction/game/${g.gameId}`)}
           className="text-[10px] leading-tight text-white/60 font-medium tracking-wide truncate active:opacity-70">
@@ -226,9 +228,9 @@ function GameDonut({ game: g, onChange }: { game: PickemDayGame; onChange: (g: P
         <span className={`flex-shrink-0 ${live ? "text-red-400 font-bold" : "text-white/45"}`}>{when}</span>
       </div>
 
-      <div className="flex items-center gap-1.5">
+      <div className="flex items-center gap-1">
         <Ring g={g} colors={colors} shown={shown} />
-        <div className="flex-1 min-w-0 flex flex-col gap-1">
+        <div className="flex-1 min-w-0 flex flex-col gap-0.5">
           {g.locked
             ? <><TeamLegend side="away" /><TeamLegend side="home" /></>
             : <><TeamButton side="away" /><TeamButton side="home" /></>}

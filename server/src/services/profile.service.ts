@@ -129,7 +129,7 @@ export async function getProfileById(userId: string) {
      WHERE u.id = $1`,
     [userId]
   );
-  if (!rows[0]) throw Object.assign(new Error('Profile not found'), { status: 404 });
+  if (!rows[0]) throw Object.assign(new Error('Profile not found'), { expose: true, status: 404 });
 
   const profile = rows[0];
   const badges  = await getBadgesForUser(userId);
@@ -218,7 +218,7 @@ export async function updateProfile(userId: string, updates: {
     if (!/^[a-z0-9_]{3,20}$/.test(username)) {
       throw Object.assign(
         new Error('Username must be 3-20 characters: lowercase letters, numbers or underscores'),
-        { status: 400 },
+        { expose: true, status: 400 },
       );
     }
 
@@ -227,7 +227,7 @@ export async function updateProfile(userId: string, updates: {
       [username, userId],
     );
     if (taken.rowCount && taken.rowCount > 0) {
-      throw Object.assign(new Error('Username already taken'), { status: 409 });
+      throw Object.assign(new Error('Username already taken'), { expose: true, status: 409 });
     }
 
     try {
@@ -238,7 +238,7 @@ export async function updateProfile(userId: string, updates: {
     } catch (e: any) {
       // Race-condition safety net: UNIQUE constraint violation
       if (e.code === '23505') {
-        throw Object.assign(new Error('Username already taken'), { status: 409 });
+        throw Object.assign(new Error('Username already taken'), { expose: true, status: 409 });
       }
       throw e;
     }
@@ -298,7 +298,7 @@ export async function updateProfile(userId: string, updates: {
     if (updates.ruleWeights !== null) {
       const parsed = ruleWeightsSchema.safeParse(updates.ruleWeights);
       if (!parsed.success) {
-        throw Object.assign(new Error('Invalid ruleWeights payload'), { status: 400 });
+        throw Object.assign(new Error('Invalid ruleWeights payload'), { expose: true, status: 400 });
       }
       weights = JSON.stringify(parsed.data);
     }
@@ -306,7 +306,7 @@ export async function updateProfile(userId: string, updates: {
   }
 
   if (fields.length === 0 && updates.username === undefined) {
-    throw Object.assign(new Error('Nothing to update'), { status: 400 });
+    throw Object.assign(new Error('Nothing to update'), { expose: true, status: 400 });
   }
 
   if (fields.length > 0) {
@@ -773,10 +773,10 @@ export async function getPublicSlips(targetUserId: string, viewerId: string, lim
       `SELECT up.show_slips AS "showSlips" FROM user_profiles up WHERE up.user_id = $1`,
       [targetUserId],
     );
-    if (!rows[0]) throw Object.assign(new Error('Player not found'), { status: 404 });
+    if (!rows[0]) throw Object.assign(new Error('Player not found'), { expose: true, status: 404 });
     if (!rows[0].showSlips) {
       throw Object.assign(new Error('This player hides their slips'), {
-        status: 403,
+        expose: true, status: 403,
         code: 'SLIPS_HIDDEN',   // distinct du 402 PRO_REQUIRED : l'abonnement n'est pas en cause
       });
     }
@@ -833,13 +833,13 @@ export async function getPlayerSummary(targetUserId: string, viewerId: string) {
     [targetUserId],
   );
   const profile = profileRows[0];
-  if (!profile) throw Object.assign(new Error('Player not found'), { status: 404 });
+  if (!profile) throw Object.assign(new Error('Player not found'), { expose: true, status: 404 });
 
   let cutoff: Date | null = null;
   if (!isOwner) {
     if (!profile.showSlips) {
       throw Object.assign(new Error('This player hides their slips'), {
-        status: 403,
+        expose: true, status: 403,
         code: 'SLIPS_HIDDEN',   // distinct du 402 PRO_REQUIRED : l'abonnement n'est pas en cause
       });
     }

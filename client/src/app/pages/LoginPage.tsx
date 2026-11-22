@@ -8,6 +8,7 @@ import { AppButton } from "../components/AppButton";
 import { useI18n } from "../i18n";
 import { features } from "../platform";
 import { ResponsibleGamblingNote } from "../components/ResponsibleGamblingNote";
+import { userErrorMessage } from "../services/errors";
 
 type Mode = "login" | "register";
 
@@ -101,7 +102,7 @@ export function LoginPage() {
         setStep("verify");
         setNotice(t("login.codeSent"));
       } else {
-        setError(err instanceof Error ? err.message : t("login.error"));
+        setError(userErrorMessage(err, t("login.error")));
       }
     } finally {
       setLoading(false);
@@ -117,7 +118,7 @@ export function LoginPage() {
       await verifyEmail(email, code.trim());
       navigate(returnTo, { replace: true });
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : t("login.error"));
+      setError(userErrorMessage(err, t("login.error")));
     } finally {
       setLoading(false);
     }
@@ -140,7 +141,7 @@ export function LoginPage() {
       setStep("reset");
       setNotice(t("login.codeSent"));
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : t("login.error"));
+      setError(userErrorMessage(err, t("login.error")));
     } finally {
       setLoading(false);
     }
@@ -161,7 +162,7 @@ export function LoginPage() {
       setNewPassword("");
       setNotice(t("login.resetDone"));
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : t("login.error"));
+      setError(userErrorMessage(err, t("login.error")));
     } finally {
       setLoading(false);
     }
@@ -223,7 +224,7 @@ export function LoginPage() {
 
   return (
     <div
-      className="flex flex-col min-h-screen text-white max-w-[430px] mx-auto px-5 pt-16 pb-[calc(2.5rem+env(safe-area-inset-bottom,0px))]"
+      className="flex flex-col min-h-screen text-white max-w-[430px] md:max-w-5xl mx-auto w-full px-5 pt-16 pb-[calc(2.5rem+env(safe-area-inset-bottom,0px))]"
       style={{ background: "#0A0E0C" }}
     >
       {/* Brand hero */}
@@ -244,7 +245,7 @@ export function LoginPage() {
       {step === "form" ? (
       <>
       {/* Mode toggle */}
-      <div className="flex gap-1 rounded-xl p-1 mb-6" style={{ background: SURFACE, border: `1px solid ${BORDER}` }}>
+      <div className="flex gap-1 rounded-xl p-1 mb-6 w-full md:max-w-[800px] md:mx-auto" style={{ background: SURFACE, border: `1px solid ${BORDER}` }}>
         {(["login", "register"] as Mode[]).map((m) => (
           <button
             key={m}
@@ -266,7 +267,7 @@ export function LoginPage() {
         <>
         <button
           onClick={handleGoogleLogin}
-          className="w-full flex items-center justify-center gap-3 py-3 rounded-xl text-sm font-medium active:scale-[0.98] transition-all mb-4"
+          className="w-full md:max-w-[430px] md:mx-auto flex items-center justify-center gap-3 py-3 rounded-xl text-sm font-medium active:scale-[0.98] transition-all mb-4"
           style={{ background: SURFACE, border: `1px solid ${BORDER}`, color: "#F3F7F0" }}
         >
           <svg width="18" height="18" viewBox="0 0 48 48" fill="none">
@@ -279,7 +280,7 @@ export function LoginPage() {
         </button>
 
         {/* Divider */}
-        <div className="flex items-center gap-3 mb-4">
+        <div className="flex items-center gap-3 mb-4 w-full md:max-w-[430px] md:mx-auto">
           <div className="flex-1 h-px" style={{ background: BORDER }} />
           <span className="text-[11px] uppercase tracking-widest" style={{ color: "#92A08A" }}>{t("login.or")}</span>
           <div className="flex-1 h-px" style={{ background: BORDER }} />
@@ -288,7 +289,7 @@ export function LoginPage() {
       )}
 
       {/* Form */}
-      <form onSubmit={handleSubmit} className="flex flex-col gap-3">
+      <form onSubmit={handleSubmit} className="flex flex-col gap-3 w-full md:max-w-[430px] md:mx-auto">
         <input type="email" placeholder={t("login.email")} value={email} onChange={(e) => setEmail(e.target.value)}
           required className={inputCls} style={inputStyle}
           aria-label={t("login.email")}
@@ -382,7 +383,7 @@ export function LoginPage() {
       </>
       ) : step === "verify" ? (
       /* ── Email verification step ─────────────────────────────── */
-      <form onSubmit={handleVerify} className="flex flex-col gap-3">
+      <form onSubmit={handleVerify} className="flex flex-col gap-3 w-full md:max-w-[430px] md:mx-auto">
         <p className="text-sm text-center mb-1" style={{ color: "#B7C4AD" }}>
           {t("login.verifyPrompt")}
         </p>
@@ -407,7 +408,7 @@ export function LoginPage() {
       </form>
       ) : step === "forgot" ? (
       /* ── Forgot password: request a code ─────────────────────── */
-      <form onSubmit={handleForgot} className="flex flex-col gap-3">
+      <form onSubmit={handleForgot} className="flex flex-col gap-3 w-full md:max-w-[430px] md:mx-auto">
         <p className="text-sm text-center mb-2" style={{ color: "#B7C4AD" }}>
           {t("login.forgotPrompt")}
         </p>
@@ -428,7 +429,7 @@ export function LoginPage() {
       </form>
       ) : (
       /* ── Reset password: code + new password ─────────────────── */
-      <form onSubmit={handleReset} className="flex flex-col gap-3">
+      <form onSubmit={handleReset} className="flex flex-col gap-3 w-full md:max-w-[430px] md:mx-auto">
         <p className="text-sm text-center mb-1" style={{ color: "#B7C4AD" }}>
           {t("login.verifyPrompt")}
         </p>

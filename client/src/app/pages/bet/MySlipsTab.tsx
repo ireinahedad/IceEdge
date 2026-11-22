@@ -23,6 +23,7 @@ import { useOddsFormat } from "../../context/OddsFormatContext";
 import { useI18n } from "../../i18n";
 import { outcomeKey } from "../../services/slipOutcome";
 import { toast } from "../../toast";
+import { userErrorMessage } from "../../services/errors";
 
 
 // ─── Textes de l'image de partage ─────────────────────────────────────────────
@@ -111,7 +112,7 @@ function ShareToRoomSheet({ slip, onClose }: { slip: BetSlip; onClose: () => voi
         action: { label: t("slip.openRoom"), onClick: () => navigate("/league") },
       });
     } catch (err: any) {
-      toast.error(err?.message ?? t("slip.shareRoomFailed"));
+      toast.error(userErrorMessage(err, t("slip.shareRoomFailed")));
     } finally {
       setSending(null);
     }
@@ -538,7 +539,7 @@ export function MySlipsTab({
       // que le serveur avait du neuf à montrer.
       await load();
     } catch (err: any) {
-      setError(err.message ?? t("slip.checkFailed"));
+      setError(userErrorMessage(err, t("slip.checkFailed")));
       setTimeout(() => setError(null), 3000);
     } finally {
       setResolving(null);

@@ -51,7 +51,7 @@ export function ErrorScreen({ error, eventId }: { error: unknown; eventId?: stri
   return (
     <div
       role="alert"
-      className="flex flex-col items-center justify-center min-h-screen text-white max-w-[430px] mx-auto px-6 text-center"
+      className="flex flex-col items-center justify-center min-h-screen text-white max-w-[430px] md:max-w-5xl mx-auto w-full px-6 text-center"
       style={{ background: "#0A0E0C" }}
     >
       <div className="mb-4 text-[#86d1ea]" aria-hidden="true">{variant === "offline" ? <WifiOff size={44} /> : variant === "update" ? <RefreshCw size={44} /> : <AlertTriangle size={44} />}</div>

@@ -33,6 +33,7 @@ import { useFoldAll, useSectionFold } from "./foldAll";
 import { useRegisterTopBets } from "./topBetsRegistry";
 
 import { Check, ChevronsDownUp, ChevronsUpDown } from "lucide-react";
+import { userErrorMessage } from "../../services/errors";
 /* ─── Identifiant de la jambe de coupon ──────────────────────────────────────
  *
  * Il vivait DANS `PredictionSheet`, donc seule la fiche ouverte savait si un
@@ -320,7 +321,7 @@ function PredictionSheet({ label, rulePct, serverPct, ruleNote, accent, mlProps,
       setFollowups((fs) => [...fs, { q, a }]);
       setQuestion("");
     } catch (err: any) {
-      setFollowups((fs) => [...fs, { q, a: err?.message ?? "LLM error", failed: true }]);
+      setFollowups((fs) => [...fs, { q, a: userErrorMessage(err, t("error.ai")), failed: true }]);
     } finally {
       setAsking(false);
     }
@@ -593,7 +594,7 @@ function PredictionSheet({ label, rulePct, serverPct, ruleNote, accent, mlProps,
               } catch (err: any) {
                 // Plus de préfixe ❌ / ⚙️ (2026-10-01, pas d'emoji) : l'échec
                 // est porté par `llmFailed`, plus déduit du texte.
-                setLlmText(err?.message ?? "LLM error");
+                setLlmText(userErrorMessage(err, t("error.ai")));
                 setLlmFailed(true);
                 setLlmOpen(true); // les erreurs ne sont pas mises en cache
               } finally {

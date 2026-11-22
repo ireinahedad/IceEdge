@@ -7,6 +7,7 @@ import { useBlocks } from "../context/BlockContext";
 import { useI18n } from "../i18n";
 
 import { Ban } from "lucide-react";
+import { userErrorMessage } from "../services/errors";
 /**
  * UserSheet — la fiche d'un compte, la même d'où qu'on l'ouvre.
  *
@@ -56,7 +57,7 @@ export function UserSheet({
       toast.success(t("block.done", { name }));
       onClose();
     } catch (e: any) {
-      toast.error(e?.message ?? t("block.failed"));
+      toast.error(userErrorMessage(e, t("block.failed")));
     } finally { setBusy(false); }
   }
 
@@ -66,7 +67,7 @@ export function UserSheet({
       await unblock(user.userId);
       toast.success(t("block.unblockDone", { name }));
     } catch (e: any) {
-      toast.error(e?.message ?? t("block.unblockFailed"));
+      toast.error(userErrorMessage(e, t("block.unblockFailed")));
     } finally { setBusy(false); }
   }
 

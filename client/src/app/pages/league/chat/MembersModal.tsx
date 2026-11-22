@@ -4,6 +4,7 @@ import { UserRow, UserTag } from "../../../components/UserIdentity";
 import { UserSheet } from "../../../components/UserSheet";
 import { ConfirmDialog } from "../../../components/ConfirmDialog";
 import { useI18n } from "../../../i18n";
+import { userErrorMessage } from "../../../services/errors";
 import type { ChatRoom, ChatRoomMember } from "../../../types/user";
 
 // ─── Members modal (admin can kick / promote) ─────────────────────────────────
@@ -29,7 +30,7 @@ export function MembersModal({ room, currentUserId, onClose }: {
   function load() {
     profileApiService.getRoomMembers(room.id)
       .then(setMembers)
-      .catch((e) => setError(e.message))
+      .catch((e) => setError(userErrorMessage(e, t("error.generic"))))
       .finally(() => setLoading(false));
   }
   useEffect(load, [room.id]);
@@ -44,12 +45,12 @@ export function MembersModal({ room, currentUserId, onClose }: {
     setKickTarget(null);
     if (!target) return;
     try { await profileApiService.kickMember(room.id, target.userId); load(); }
-    catch (e: any) { setError(e.message); }
+    catch (e: any) { setError(userErrorMessage(e, t("error.generic"))); }
   }
 
   async function handlePromote(userId: string, role: "admin" | "member") {
     try { await profileApiService.setMemberRole(room.id, userId, role); load(); }
-    catch (e: any) { setError(e.message); }
+    catch (e: any) { setError(userErrorMessage(e, t("error.generic"))); }
   }
 
   return (

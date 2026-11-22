@@ -258,7 +258,7 @@ export async function startTrial(userId: string, days = 7): Promise<Subscription
     [userId],
   );
   if (existing[0]?.trial_used) {
-    throw Object.assign(new Error('Free trial already used'), { status: 409 });
+    throw Object.assign(new Error('Free trial already used'), { expose: true, status: 409 });
   }
 
   const end = new Date(Date.now() + days * 24 * 60 * 60 * 1000);
@@ -312,10 +312,10 @@ function promoCatalog(): Record<string, number> {
 /** Redeems a promo code and grants Pro without payment. Throws 400 if invalid. */
 export async function redeemPromo(userId: string, code: string): Promise<SubscriptionStatus> {
   const key = (code ?? '').trim().toUpperCase();
-  if (!key) throw Object.assign(new Error('Code required'), { status: 400 });
+  if (!key) throw Object.assign(new Error('Code required'), { expose: true, status: 400 });
 
   const days = promoCatalog()[key];
-  if (!days) throw Object.assign(new Error('Invalid promo code'), { status: 400 });
+  if (!days) throw Object.assign(new Error('Invalid promo code'), { expose: true, status: 400 });
 
   const end = new Date(Date.now() + days * 24 * 60 * 60 * 1000);
   return upsert(userId, { plan: 'pro', source: 'local', status: 'active', currentPeriodEnd: end });
@@ -336,7 +336,7 @@ export async function cancel(userId: string): Promise<SubscriptionStatus> {
   if (existing[0]?.source === 'apple' && rowIsPro(existing[0])) {
     throw Object.assign(
       new Error("Cet abonnement a été acheté sur iPhone : annule-le dans Réglages → ton nom → Abonnements."),
-      { status: 409, code: 'APPLE_MANAGED' },
+      { expose: true, status: 409, code: 'APPLE_MANAGED' },
     );
   }
   const subId = existing[0]?.stripe_subscription_id;
@@ -578,14 +578,17 @@ async function markProcessed(event: Stripe.Event): Promise<void> {
 export async function handleStripeWebhook(rawBody: Buffer, signature: string | undefined): Promise<void> {
   const secret = process.env.STRIPE_WEBHOOK_SECRET;
   if (!secret) throw Object.assign(new Error('STRIPE_WEBHOOK_SECRET is not set'), { status: 500 });
-  if (!signature) throw Object.assign(new Error('Missing Stripe-Signature header'), { status: 400 });
+  if (!signature) throw Object.assign(new Error('Missing Stripe-Signature header'), { expose: true, status: 400 });
 
   const stripe = getStripe();
   let event: Stripe.Event;
   try {
     event = stripe.webhooks.constructEvent(rawBody, signature, secret);
   } catch (err: any) {
-    throw Object.assign(new Error(`Webhook signature verification failed: ${err.message}`), { status: 400 });
+    // Le détail (`No signatures found matching the expected signature…`) part
+    // au journal seulement : il décrit la configuration du secret.
+    logger.warn({ err: err?.message }, '[stripe/webhook] signature refusée');
+    throw Object.assign(new Error('Invalid webhook signature'), { status: 400, expose: true });
   }
 
   // Rejeu d'un événement déjà traité → acquittement immédiat, sans refaire le

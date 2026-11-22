@@ -32,14 +32,13 @@ import type {
 
 import { authedFetch } from './authService';
 import { tokenStore, onSessionCleared } from './tokenStore';
+import { ApiError, UserFacingError, apiErrorFromResponse } from './errors';
 
 // ---- HTTP helpers (authenticated) ------------------------------------------
 
 /** Transforme une réponse non-OK en `Error` portant le message du serveur. */
 async function throwIfNotOk(res: Response): Promise<void> {
-  if (res.ok) return;
-  const err = await res.json().catch(() => ({ error: res.statusText }));
-  throw new Error((err as { error?: string }).error ?? `API ${res.status}`);
+  if (!res.ok) throw await apiErrorFromResponse(res, 'Request failed');
 }
 
 async function get<T>(path: string): Promise<T> {
@@ -49,20 +48,12 @@ async function get<T>(path: string): Promise<T> {
 }
 
 /**
- * Erreur d'API qui conserve le code HTTP.
- *
- * Le `get` ci-dessus aplatit tout en `Error(message)`, ce qui suffit tant qu'un
- * échec ne veut dire qu'une chose. La page joueur, elle, doit distinguer trois
- * refus qui n'appellent pas la même réaction : 402 « il faut être Pro »,
- * 403 « ce joueur masque ses coupons », 404 « ce joueur n'existe pas ». Les
- * différencier sur le texte du message serait fragile et intraduisible.
+ * `ApiError` (statut HTTP + `code`) vit désormais dans `./errors`, partagée par
+ * tous les services ; ré-exportée ici pour les imports existants. Tous les
+ * échecs de ce service sont des `ApiError` : la page joueur distingue 402 / 403
+ * / 404 par le statut, jamais par le texte.
  */
-export class ApiError extends Error {
-  constructor(message: string, readonly status: number, readonly code?: string) {
-    super(message);
-    this.name = 'ApiError';
-  }
-}
+export { ApiError };
 
 /**
  * Lecture PARTAGÉE : les appels identiques lancés à moins de `SHARED_GET_TTL_MS`
@@ -110,8 +101,7 @@ async function getShared<T>(path: string): Promise<T> {
 async function getOrThrow<T>(path: string): Promise<T> {
   const res = await authedFetch(path);
   if (!res.ok) {
-    const body = await res.json().catch(() => ({})) as { error?: string; code?: string };
-    throw new ApiError(body.error ?? `API ${res.status}`, res.status, body.code);
+    throw await apiErrorFromResponse(res, 'Request failed');
   }
   return res.json() as Promise<T>;
 }
@@ -191,16 +181,16 @@ function loadImage(file: File): Promise<HTMLImageElement> {
  */
 async function resizeAvatar(file: File): Promise<string> {
   if (!file.type.startsWith('image/')) {
-    throw new Error('Please choose an image file');
+    throw new UserFacingError('Please choose an image file');
   }
   if (file.size > MAX_INPUT_BYTES) {
-    throw new Error('Image is too large — please choose one under 20 MB');
+    throw new UserFacingError('Image is too large — please choose one under 20 MB');
   }
 
   const img = await loadImage(file);
 
   const side = Math.min(img.width, img.height);
-  if (!side) throw new Error('Could not read image');
+  if (!side) throw new UserFacingError('Could not read image');
   const sx = Math.round((img.width  - side) / 2);
   const sy = Math.round((img.height - side) / 2);
 
@@ -208,7 +198,7 @@ async function resizeAvatar(file: File): Promise<string> {
   canvas.width = canvas.height = AVATAR_SIZE;
 
   const ctx = canvas.getContext('2d');
-  if (!ctx) throw new Error('Canvas not supported');
+  if (!ctx) throw new UserFacingError('Canvas not supported');
   // White background: neither JPEG nor a flattened WebP carries transparency.
   ctx.fillStyle = '#ffffff';
   ctx.fillRect(0, 0, AVATAR_SIZE, AVATAR_SIZE);
@@ -224,7 +214,7 @@ async function resizeAvatar(file: File): Promise<string> {
     if (out.length <= MAX_DATA_URL_LENGTH) return out;
   }
 
-  throw new Error('Image could not be compressed enough — please choose a smaller one');
+  throw new UserFacingError('Image could not be compressed enough — please choose a smaller one');
 }
 
 // ---- Service ----------------------------------------------------------------
@@ -242,8 +232,7 @@ async function sendOrThrow<T>(path: string, init: RequestInit): Promise<T> {
   invalidateSharedGets();
   const res = await authedFetch(path, init);
   if (!res.ok) {
-    const body = await res.json().catch(() => ({})) as { error?: string; code?: string };
-    throw new ApiError(body.error ?? `API ${res.status}`, res.status, body.code);
+    throw await apiErrorFromResponse(res, 'Request failed');
   }
   return (res.status === 204 ? undefined : await res.json()) as T;
 }

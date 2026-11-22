@@ -37,9 +37,9 @@ describe('xpForOutcome', () => {
   });
 });
 
-// Pas de pari sur un match commencé (2026-09-28) : une jambe posée en direct
-// gardait sa probabilité d'avant-match, donc un XP quasi garanti.
-describe('submitSlip — match déjà commencé', () => {
+// 2026-11-22 : les paris sur un match COMMENCÉ sont acceptés (décision du
+// user). Seul un match TERMINÉ reste refusé : son résultat est connu.
+describe('submitSlip — match commencé / terminé', () => {
   const leg = (gameId: string, selection = 'MTL to win') => ({
     marketType: 'moneyline', subjectId: 'mtl', subjectName: 'MTL', subjectLogo: '',
     selection, probability: 40, oddsLabel: '+150', gameId, selectionValue: 'mtl',
@@ -53,23 +53,23 @@ describe('submitSlip — match déjà commencé', () => {
     expect(query).toHaveBeenCalledTimes(1);
   });
 
-  it('refuse (409 GAME_STARTED) un match en cours, sans rien insérer', async () => {
+  it('accepte un match en cours', async () => {
     fetchGame.mockResolvedValue({ status: 'live', startTimeUTC: new Date(Date.now() - HOUR).toISOString() });
-    await expect(submitSlip('u1', [leg('g1')] as any)).rejects.toMatchObject({ status: 409, code: 'GAME_STARTED' });
-    expect(query).not.toHaveBeenCalled();
+    await expect(submitSlip('u1', [leg('g1')] as any)).resolves.toBe('slip-1');
+    expect(query).toHaveBeenCalledTimes(1);
   });
 
-  it("refuse dès l'heure prévue atteinte, même si la LNH dit encore « scheduled »", async () => {
+  it("accepte dès l'heure prévue atteinte", async () => {
     fetchGame.mockResolvedValue({ status: 'scheduled', startTimeUTC: new Date(Date.now() - 60_000).toISOString() });
-    await expect(submitSlip('u1', [leg('g1')] as any)).rejects.toMatchObject({ code: 'GAME_STARTED' });
+    await expect(submitSlip('u1', [leg('g1')] as any)).resolves.toBe('slip-1');
   });
 
-  it('refuse un coupon dont UNE seule jambe est commencée, et la nomme', async () => {
+  it('refuse (409 GAME_FINISHED) un coupon dont UNE jambe est terminée, et la nomme', async () => {
     fetchGame.mockImplementation(async (id: string) => id === 'g2'
       ? { status: 'final', startTimeUTC: new Date(Date.now() - 4 * HOUR).toISOString() }
       : { status: 'scheduled', startTimeUTC: new Date(Date.now() + HOUR).toISOString() });
     await expect(submitSlip('u1', [leg('g1'), leg('g2', 'TOR to win')] as any))
-      .rejects.toThrow(/TOR to win/);
+      .rejects.toMatchObject({ status: 409, code: 'GAME_FINISHED', message: expect.stringMatching(/TOR to win/) });
     expect(query).not.toHaveBeenCalled();
   });
 

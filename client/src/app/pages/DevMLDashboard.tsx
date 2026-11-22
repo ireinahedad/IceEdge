@@ -212,7 +212,7 @@ export function DevMLDashboard() {
   ];
 
   return (
-    <div className="min-h-screen bg-[#0A0E0C] text-white max-w-[1400px] mx-auto px-4 md:px-6 pb-16">
+    <div className="min-h-screen bg-[#0A0E0C] text-white max-w-[430px] md:max-w-5xl mx-auto w-full px-4 md:px-6 pb-16">
 
       {/* Header */}
       <div className="sticky top-0 bg-[#0A0E0C]/90 backdrop-blur-md border-b border-white/8 py-4 mb-5 z-10">

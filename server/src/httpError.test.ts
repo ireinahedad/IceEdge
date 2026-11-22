@@ -33,7 +33,7 @@ vi.mock('./logger', () => ({
 const captureException = vi.fn();
 vi.mock('@sentry/node', () => ({ captureException: (...args: unknown[]) => captureException(...args) }));
 
-import { errorStatus, errorBody, sendError } from './httpError';
+import { errorStatus, errorBody, sendError, publicError } from './httpError';
 
 const ORIGINAL_ENV = process.env.NODE_ENV;
 afterEach(() => { process.env.NODE_ENV = ORIGINAL_ENV; });
@@ -69,10 +69,65 @@ describe('errorStatus', () => {
 });
 
 describe('errorBody — la règle', () => {
-  it('4xx : le message part tel quel, il est écrit pour être lu', () => {
+  it('message marqué `expose` : il part tel quel, il est écrit pour être lu', () => {
     prod();
-    const err = Object.assign(new Error('Email or username already in use'), { status: 409 });
-    expect(errorBody(err)).toEqual({ error: 'Email or username already in use' });
+    expect(errorBody(publicError(409, 'Email or username already in use')))
+      .toEqual({ error: 'Email or username already in use' });
+    const legacy = Object.assign(new Error('Slip not found'), { status: 404, expose: true });
+    expect(errorBody(legacy)).toEqual({ error: 'Slip not found' });
+  });
+
+  /**
+   * Le cœur de la liste blanche : un 4xx SANS `expose` est presque toujours une
+   * erreur d'amont qui a recopié son statut, et son message décrit l'amont.
+   * Ce sont les cas réels relevés le 2026-11-22.
+   */
+  it('4xx non marqué : message générique, jamais celui de l\'erreur', () => {
+    prod();
+    const ml = Object.assign(
+      new Error('ML service 422: {"detail":[{"loc":["body","home_team"],"msg":"field required"}]}'),
+      { status: 422 },
+    );
+    expect(errorBody(ml)).toEqual({ error: 'Unprocessable request' });
+    const nhl = Object.assign(new Error('NHL stats API 404 for team summary'), { status: 404 });
+    expect(errorBody(nhl)).toEqual({ error: 'Not found' });
+    // jsonwebtoken, sous le repli 401 des middlewares d'authentification.
+    expect(errorBody(new Error('invalid signature'), { fallbackStatus: 401 })).toEqual({ error: 'Unauthorized' });
+  });
+
+  it('body-parser : `expose` vrai mais message technique → traduit par type', () => {
+    prod();
+    const err = Object.assign(new SyntaxError('Unexpected token } in JSON at position 10'), {
+      status: 400, expose: true, type: 'entity.parse.failed',
+    });
+    expect(errorBody(err)).toEqual({ error: 'Invalid JSON body' });
+  });
+
+  it('5xx marqué `expose` : un message d\'indisponibilité rédigé pour l\'utilisateur passe', () => {
+    prod();
+    expect(errorBody(publicError(503, 'NHL schedule unavailable', { code: 'schedule_unavailable' })))
+      .toEqual({ error: 'NHL schedule unavailable', code: 'schedule_unavailable' });
+  });
+
+  it('5xx : `requestId` joint pour le support, jamais sur un 4xx', () => {
+    prod();
+    expect(errorBody(new Error('boom'), { requestId: 'req-1' }))
+      .toEqual({ error: 'Internal server error', requestId: 'req-1' });
+    expect(errorBody(publicError(404, 'Slip not found'), { requestId: 'req-1' }))
+      .toEqual({ error: 'Slip not found' });
+  });
+
+  it('codes système, Postgres et undici ne traversent pas', () => {
+    prod();
+    expect(errorBody(Object.assign(new Error('x'), { code: 'ECONNREFUSED', errno: -111, syscall: 'connect' })))
+      .not.toHaveProperty('code');
+    expect(errorBody(Object.assign(new Error('x'), { code: 'ENOTFOUND' }))).not.toHaveProperty('code');
+    expect(errorBody(Object.assign(new Error('x'), { code: 'UND_ERR_CONNECT_TIMEOUT' }))).not.toHaveProperty('code');
+    expect(errorBody(Object.assign(new Error('x'), { code: '23505', severity: 'ERROR' }))).not.toHaveProperty('code');
+    expect(errorBody(Object.assign(new Error('x'), { code: '42P01' }))).not.toHaveProperty('code');
+    expect(errorBody(Object.assign(new Error('x'), { code: 'ERR_INVALID_ARG_TYPE' }))).not.toHaveProperty('code');
+    // …mais nos codes applicatifs, oui, même sur un 5xx.
+    expect(errorBody(Object.assign(new Error('x'), { status: 500, code: 'db_schema' }))).toMatchObject({ code: 'db_schema' });
   });
 
   it('5xx en production : le message est remplacé', () => {
@@ -96,7 +151,7 @@ describe('errorBody — la règle', () => {
 
   it('`code` traverse — le client teste dessus, et il ne décrit pas l\'infrastructure', () => {
     prod();
-    const err = Object.assign(new Error('Pro subscription required'), { status: 402, code: 'PRO_REQUIRED' });
+    const err = Object.assign(new Error('Pro subscription required'), { status: 402, code: 'PRO_REQUIRED', expose: true });
     expect(errorBody(err)).toEqual({ error: 'Pro subscription required', code: 'PRO_REQUIRED' });
   });
 
@@ -109,7 +164,7 @@ describe('errorBody — la règle', () => {
   it('les extras explicites sont joints', () => {
     prod();
     const err = Object.assign(new Error('Email not verified'), {
-      status: 403, code: 'EMAIL_NOT_VERIFIED',
+      status: 403, code: 'EMAIL_NOT_VERIFIED', expose: true,
     });
     expect(errorBody(err, { extra: { email: 'a@b.com' } })).toEqual({
       error: 'Email not verified', code: 'EMAIL_NOT_VERIFIED', email: 'a@b.com',

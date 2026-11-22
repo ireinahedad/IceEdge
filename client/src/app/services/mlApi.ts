@@ -8,6 +8,7 @@
  */
 import { env } from "../env";
 import { authedUrlFetch } from "./authService";
+import { apiErrorFromResponse } from './errors';
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 export interface MLFeatureImportance {
@@ -223,7 +224,7 @@ export interface GameLiveState<G = unknown, M = unknown> {
 }
 export async function fetchGameLive<G = unknown, M = unknown>(gameId: string): Promise<GameLiveState<G, M>> {
   const r = await authedUrlFetch(`${ML_BASE}/game/${encodeURIComponent(gameId)}/live`, { cache: "no-store" });
-  if (!r.ok) throw new Error(`live state ${r.status}`);
+  if (!r.ok) throw await apiErrorFromResponse(r, 'Live data unavailable');
   const body = await r.json() as { game?: G | null; markets?: GameLiveState<G, M>["markets"]; bundle?: unknown };
   return {
     game: body.game ?? null,

@@ -13,6 +13,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { nhlApiService } from '../services/nhlApiService';
+import { userErrorMessage, genericErrorMessage } from '../services/errors';
 import { nhlLogoUrl } from '../data/teamEmoji';
 
 // ─── Normalised shapes (what the UI components consume) ───────────────────────
@@ -334,7 +335,7 @@ export function useNHLData(): NHLData {
       })
       .catch((err) => {
         if (!alive) return;
-        setError(err?.message ?? 'Failed to load NHL data');
+        setError(userErrorMessage(err, genericErrorMessage()));
       })
       .finally(() => {
         if (alive) setLoading(false);

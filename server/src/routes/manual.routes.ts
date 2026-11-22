@@ -418,7 +418,7 @@ router.get('/news', async (req: Request, res: Response) => {
 router.post('/news', validateBody(manualNewsSchema), async (req: Request, res: Response) => {
   const url = normalizeManualUrl(req.body.url);
   if (!url) {
-    res.status(400).json({ error: 'lien refusé — https://x.com, bsky.app ou nhl.com seulement' });
+    res.status(400).json({ error: 'lien refusé — x.com, bsky.app ou nhl.com seulement' });
     return;
   }
   const id = await addManualNews({

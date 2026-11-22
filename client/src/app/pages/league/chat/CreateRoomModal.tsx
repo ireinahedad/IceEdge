@@ -4,6 +4,7 @@ import { profileApiService } from "../../../services/userService";
 import { useI18n } from "../../../i18n";
 import { AppButton } from "../../../components/AppButton";
 import type { ChatRoom } from "../../../types/user";
+import { userErrorMessage } from "../../../services/errors";
 
 // ─── Create room modal ────────────────────────────────────────────────────────
 
@@ -46,7 +47,7 @@ export function CreateRoomModal({ onClose, onCreate }: {
         onClose();
       }
     } catch (e: any) {
-      const message = e?.message ?? t("chat.createFailed");
+      const message = userErrorMessage(e, t("chat.createFailed"));
       setError(message);
       toast.error(message);
     } finally {

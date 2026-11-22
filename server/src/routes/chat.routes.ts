@@ -20,7 +20,7 @@ router.use(optionalAuthenticate);
 
 function uid(req: Request): string {
   const id = (req as any).user?.sub;
-  if (!id) throw Object.assign(new Error('Sign in to continue'), { status: 401 });
+  if (!id) throw Object.assign(new Error('Sign in to continue'), { expose: true, status: 401 });
   return id;
 }
 

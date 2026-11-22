@@ -7,6 +7,7 @@
 import { authedFetch } from './authService';
 import { trackEvent } from '../analytics';
 import type { SlipIntent } from '../../../../server/src/services/slipCommand';
+import { looksTechnical, UserFacingError } from './errors';
 
 /**
  * Les tâches que le proxy `/api/llm` accepte.
@@ -160,7 +161,7 @@ async function throwLLMError(res: Response): Promise<never> {
   // Appels IA offerts du jour épuisés (compte gratuit, Bet builder IA).
   if (res.status === 429 && body.error === 'free_parse_quota') {
     const err: LLMError = { type: 'free_parse_quota', message: 'free_parse_quota', limit: body.limit, resetsAt: body.resetsAt };
-    throw Object.assign(new Error(err.message), err);
+    throw Object.assign(new UserFacingError(err.message), err);
   }
   // Plafond mensuel atteint ET pas de clé personnelle pour prendre le relais.
   // Message distinct des autres 429 : ici, réessayer plus tard dans la minute
@@ -172,11 +173,11 @@ async function throwLLMError(res: Response): Promise<never> {
       limit: body.limit,
       resetsAt: body.resetsAt,
     };
-    throw Object.assign(new Error(err.message), err);
+    throw Object.assign(new UserFacingError(err.message), err);
   }
   if (res.status === 422 && body.error === 'no_api_key') {
     const err: LLMError = { type: 'no_api_key', message: body.message ?? 'Add your OpenAI API key in Settings.' };
-    throw Object.assign(new Error(err.message), err);
+    throw Object.assign(new UserFacingError(err.message), err);
   }
   // Clé OpenAI invalide. Reconnue par son CODE et non par un statut 401 : le
   // serveur rend désormais un 502 dans ce cas, précisément pour qu'un 401 de
@@ -186,10 +187,10 @@ async function throwLLMError(res: Response): Promise<never> {
   // d'une mauvaise clé OpenAI.
   if (body.code === 'invalid_api_key') {
     const err: LLMError = { type: 'openai_error', message: 'Invalid OpenAI API key. Check your key in Settings → AI Settings.' };
-    throw Object.assign(new Error(err.message), err);
+    throw Object.assign(new UserFacingError(err.message), err);
   }
-  const err: LLMError = { type: 'openai_error', message: body.error ?? `LLM error ${res.status}` };
-  throw Object.assign(new Error(err.message), err);
+  const err: LLMError = { type: 'openai_error', message: body.error && !looksTechnical(body.error) ? body.error : 'The AI analysis is unavailable right now.' };
+  throw Object.assign(new UserFacingError(err.message), err);
 }
 
 /**

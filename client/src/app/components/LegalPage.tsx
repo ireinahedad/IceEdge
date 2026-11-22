@@ -12,7 +12,7 @@ export function LegalPage({ title, children }: { title: string; children: ReactN
   const navigate = useNavigate();
   const { t } = useI18n();
   return (
-    <div className="flex flex-col min-h-screen text-white max-w-[430px] mx-auto px-5 pt-14 pb-16" style={{ background: "#0A0E0C" }}>
+    <div className="flex flex-col min-h-screen text-white max-w-[430px] md:max-w-5xl mx-auto w-full px-5 pt-14 pb-16" style={{ background: "#0A0E0C" }}>
       <div className="flex items-center gap-3 mb-6">
         <button onClick={() => navigate(-1)} className="tap-44 text-[#bfc8cc] text-lg">←</button>
         <button onClick={() => navigate("/")} aria-label={t("common.homeAria")}><IceedgeLogo size={28} wordmark={false} /></button>

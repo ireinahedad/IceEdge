@@ -8,6 +8,7 @@ import type { ChatRoom } from "../../../types/user";
 import { PickemSection } from "./PickemSection";
 
 import { Lock, Pin, Search } from "lucide-react";
+import { userErrorMessage } from "../../../services/errors";
 // ─── Room list ────────────────────────────────────────────────────────────────
 // Single page (no tabs): a "Public" section (all public rooms) and a "Private"
 // section (private rooms the user belongs to). Each section is collapsible.
@@ -62,7 +63,7 @@ export function RoomList({ rooms, onSelect, onCreateNew, onPinToggle, onJoined }
       const joined = await profileApiService.joinRoom(room.id);
       onJoined(joined);
     } catch (e: any) {
-      toast.error(e?.message ?? t("chat.joinFailed"));
+      toast.error(userErrorMessage(e, t("chat.joinFailed")));
     }
   }
 
@@ -88,7 +89,7 @@ export function RoomList({ rooms, onSelect, onCreateNew, onPinToggle, onJoined }
       setCodeResult(null);
       onJoined(room);
     } catch (e: any) {
-      const message = e?.message ?? t("chat.joinFailed");
+      const message = userErrorMessage(e, t("chat.joinFailed"));
       setCodeError(message);
       toast.error(message);
     } finally {

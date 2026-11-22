@@ -19,6 +19,7 @@ import { tokenStore } from './tokenStore';
 import { decodeJwtPayload } from './jwt';
 import { fetchWithTimeout, type TimedRequestInit } from './http';
 import { isIOS } from '../platform';
+import { apiErrorFromResponse } from './errors';
 
 const BASE = env.profileApiUrl;
 
@@ -348,8 +349,7 @@ export async function apiRegister(
     body: JSON.stringify({ email, username, password, first_name }),
   });
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: res.statusText }));
-    throw new Error(err.error ?? 'Registration failed');
+    throw await apiErrorFromResponse(res, 'Registration failed');
   }
   return res.json();
 }
@@ -363,8 +363,7 @@ export async function apiVerifyEmail(email: string, code: string): Promise<AuthR
     body: JSON.stringify({ email, code }),
   });
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: res.statusText }));
-    throw new Error(err.error ?? 'Verification failed');
+    throw await apiErrorFromResponse(res, 'Verification failed');
   }
   return res.json();
 }
@@ -395,8 +394,7 @@ export async function apiResetPassword(email: string, code: string, newPassword:
     body: JSON.stringify({ email, code, new_password: newPassword }),
   });
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: res.statusText }));
-    throw new Error(err.error ?? 'Reset failed');
+    throw await apiErrorFromResponse(res, 'Reset failed');
   }
 }
 
@@ -408,11 +406,11 @@ export async function apiLogin(email: string, password: string, remember = false
     body: JSON.stringify({ email, password, remember }),
   });
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: res.statusText }));
+    const err = await apiErrorFromResponse(res, 'Login failed');
     if (res.status === 403 && err.code === 'EMAIL_NOT_VERIFIED') {
-      throw new EmailNotVerifiedError(err.email ?? email);
+      throw new EmailNotVerifiedError(typeof err.body.email === 'string' ? err.body.email : email);
     }
-    throw new Error(err.error ?? 'Login failed');
+    throw err;
   }
   return res.json();
 }

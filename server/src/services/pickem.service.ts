@@ -40,7 +40,7 @@ const tallyCache = new TtlCache<Record<string, number>>(60_000, 500, 'pickem');
 const dayCache = new TtlCache<Record<string, Record<string, number>>>(60_000, 20, 'pickem-day');
 
 const httpError = (status: number, message: string, code?: string) =>
-  Object.assign(new Error(message), { status, ...(code ? { code } : {}) });
+  Object.assign(new Error(message), { status, expose: true, ...(code ? { code } : {}) });
 
 /** Le match, ou une erreur HTTP : 404 inconnu, 503 API LNH muette. */
 export async function loadPickemGame(gameId: string): Promise<PickemGame> {

@@ -176,8 +176,9 @@ const LOCKS_AT_CONCURRENCY = 6;
  *
  * ── Matchs déjà commencés (2026-09-28) ─────────────────────────────────────
  *
- * La même lecture dit aussi quels matchs ont COMMENCÉ, et `submitSlip` refuse
- * alors le coupon. Sans ça, une jambe posée en plein match gardait sa
+ * La même lecture dit aussi quels matchs ont COMMENCÉ. `submitSlip` refusait
+ * alors le coupon — refus RETIRÉ le 2026-11-22 (décision du user : on peut
+ * parier sur un match commencé) ; seul `cancelSlip` s'en sert encore. Sans ça, une jambe posée en plein match gardait sa
  * probabilité d'AVANT-match : « MTL gagne » à 40 % quand MTL mène 4-0 en 3e
  * rapportait (100 − 40) × 2 = 120 XP presque à coup sûr (`xpForOutcome`).
  * Décision du user : pas de pari en direct, et le refus vit ICI, au serveur,
@@ -200,11 +201,12 @@ function gameHasStarted(game: any, now: number): boolean {
   return Number.isFinite(ms) && ms <= now;
 }
 
-async function resolveLocksAt(legs: SlipLeg[]): Promise<{ locksAt: Date | null; startedGameIds: string[] }> {
+async function resolveLocksAt(legs: SlipLeg[]): Promise<{ locksAt: Date | null; startedGameIds: string[]; finishedGameIds: string[] }> {
   const gameIds = [...new Set(legs.map((l) => l.gameId).filter(Boolean) as string[])];
-  if (!gameIds.length) return { locksAt: null, startedGameIds: [] };
+  if (!gameIds.length) return { locksAt: null, startedGameIds: [], finishedGameIds: [] };
   const now = Date.now();
   const startedGameIds: string[] = [];
+  const finishedGameIds: string[] = [];
 
   // Objet plutôt que deux `let` : l'analyse de flot de TypeScript réduirait un
   // `let earliest: number | null = null` à `null` après la déclaration, sans
@@ -216,6 +218,7 @@ async function resolveLocksAt(legs: SlipLeg[]): Promise<{ locksAt: Date | null; 
     try {
       const game = await fetchGameById(id);
       if (gameHasStarted(game, now)) startedGameIds.push(id);
+      if (String(game?.status ?? '').toLowerCase() === 'final') finishedGameIds.push(id);
       const ms = game?.startTimeUTC ? new Date(game.startTimeUTC).getTime() : NaN;
       if (Number.isFinite(ms)) {
         acc.resolved++;
@@ -242,7 +245,7 @@ async function resolveLocksAt(legs: SlipLeg[]): Promise<{ locksAt: Date | null; 
 
   if (acc.earliest == null) {
     logger.warn({ gameIds }, '[slip] locks_at non résolu — le coupon restera masqué aux tiers jusqu\'à son règlement');
-    return { locksAt: null, startedGameIds };
+    return { locksAt: null, startedGameIds, finishedGameIds };
   }
   if (acc.resolved < gameIds.length) {
     logger.warn(
@@ -250,7 +253,7 @@ async function resolveLocksAt(legs: SlipLeg[]): Promise<{ locksAt: Date | null; 
       '[slip] locks_at partiel — verrou calculé sur les matchs résolus dans le budget (donc au plus tard, jamais au plus tôt)',
     );
   }
-  return { locksAt: new Date(acc.earliest), startedGameIds };
+  return { locksAt: new Date(acc.earliest), startedGameIds, finishedGameIds };
 }
 
 export async function submitSlip(
@@ -259,8 +262,8 @@ export async function submitSlip(
   sport:               string = 'hockey',
   combinedProbability: number | null = null,
 ) {
-  if (!legs.length) throw Object.assign(new Error('Slip must have at least one leg'), { status: 400 });
-  if (legs.length > 12) throw Object.assign(new Error('Max 12 legs per slip'), { status: 400 });
+  if (!legs.length) throw Object.assign(new Error('Slip must have at least one leg'), { expose: true, status: 400 });
+  if (legs.length > 12) throw Object.assign(new Error('Max 12 legs per slip'), { expose: true, status: 400 });
 
   const isParlay = legs.length > 1;
 
@@ -284,18 +287,21 @@ export async function submitSlip(
     legs.reduce((acc, l) => acc * (l.probability / 100), 1) * 100;
   const combined = Number.isFinite(rawCombined) ? Math.round(rawCombined) : null;
 
-  const { locksAt, startedGameIds } = await resolveLocksAt(legs);
+  const { locksAt, finishedGameIds } = await resolveLocksAt(legs);
 
-  // Pas de pari sur un match commencé — voir l'en-tête de `resolveLocksAt`.
-  // `code` traverse `sendError` : le client le traduit (`slip.gameStarted`).
-  if (startedGameIds.length) {
-    const started = new Set(startedGameIds);
+  // 2026-11-22 — décision du user : les paris sur un match COMMENCÉ sont
+  // acceptés (le refus `GAME_STARTED` du 2026-09-28 est retiré ; le client
+  // affiche un message). Reste refusé : un match TERMINÉ, dont le résultat est
+  // connu — le règlement le paierait aussitôt. `code` traverse `sendError` :
+  // le client le traduit (`slip.gameFinished`).
+  if (finishedGameIds.length) {
+    const finished = new Set(finishedGameIds);
     const names = legs
-      .filter((l) => l.gameId && started.has(l.gameId))
+      .filter((l) => l.gameId && finished.has(l.gameId))
       .map((l) => l.selection ?? l.marketType);
     throw Object.assign(
-      new Error(`Game already started: ${names.join(', ')}`),
-      { status: 409, code: 'GAME_STARTED' },
+      new Error(`Game already finished: ${names.join(', ')}`),
+      { expose: true, status: 409, code: 'GAME_FINISHED' },
     );
   }
 
@@ -347,9 +353,9 @@ export async function resolveSlip(
     [slipId],
   );
   const slip = slipRows[0];
-  if (!slip) throw Object.assign(new Error('Slip not found'), { status: 404 });
-  if (slip.user_id !== userId) throw Object.assign(new Error('Forbidden'), { status: 403 });
-  if (slip.outcome !== 'pending') throw Object.assign(new Error('Slip already resolved'), { status: 400 });
+  if (!slip) throw Object.assign(new Error('Slip not found'), { expose: true, status: 404 });
+  if (slip.user_id !== userId) throw Object.assign(new Error('Forbidden'), { expose: true, status: 403 });
+  if (slip.outcome !== 'pending') throw Object.assign(new Error('Slip already resolved'), { expose: true, status: 400 });
 
   // Risk-based XP: wins earn more when the bet was risky,
   // losses cost more when the bet was "safe".
@@ -362,7 +368,7 @@ export async function resolveSlip(
      WHERE id = $3 AND outcome = 'pending'`,
     [outcome, xpAwarded, slipId],
   );
-  if (!upd.rowCount) throw Object.assign(new Error('Slip already resolved'), { status: 400 });
+  if (!upd.rowCount) throw Object.assign(new Error('Slip already resolved'), { expose: true, status: 400 });
 
   const { newXp, newTier, tieredUp } = await applyXpDelta(userId, xpAwarded);
 
@@ -394,28 +400,28 @@ export async function cancelSlip(slipId: string, userId: string): Promise<void> 
     [slipId, userId],
   );
   const slip = rows[0];
-  if (!slip) throw Object.assign(new Error('Slip not found'), { status: 404 });
+  if (!slip) throw Object.assign(new Error('Slip not found'), { expose: true, status: 404 });
   if (slip.outcome !== 'pending') {
-    throw Object.assign(new Error('Only pending slips can be cancelled'), { status: 409, code: 'NOT_PENDING' });
+    throw Object.assign(new Error('Only pending slips can be cancelled'), { expose: true, status: 409, code: 'NOT_PENDING' });
   }
 
   const legs = Array.isArray(slip.legs) ? slip.legs : [];
   // Une sélection déjà décidée = un match joué : trop tard.
   if (legs.some((l: any) => l?.result)) {
-    throw Object.assign(new Error('A game in this slip has already started'), { status: 409, code: 'GAME_STARTED' });
+    throw Object.assign(new Error('A game in this slip has already started'), { expose: true, status: 409, code: 'GAME_STARTED' });
   }
 
   if (slip.locks_at && new Date(slip.locks_at).getTime() <= Date.now()) {
-    throw Object.assign(new Error('A game in this slip has already started'), { status: 409, code: 'GAME_STARTED' });
+    throw Object.assign(new Error('A game in this slip has already started'), { expose: true, status: 409, code: 'GAME_STARTED' });
   }
   // Re-vérifier auprès de l'API NHL : l'heure enregistrée peut manquer, ou un
   // match peut avoir été avancé depuis le verrouillage.
   const { locksAt, startedGameIds } = await resolveLocksAt(legs);
   if (startedGameIds.length || (locksAt && locksAt.getTime() <= Date.now())) {
-    throw Object.assign(new Error('A game in this slip has already started'), { status: 409, code: 'GAME_STARTED' });
+    throw Object.assign(new Error('A game in this slip has already started'), { expose: true, status: 409, code: 'GAME_STARTED' });
   }
   if (!slip.locks_at && !locksAt && legs.some((l) => l.gameId)) {
-    throw Object.assign(new Error('Could not verify game start times — try again'), { status: 503, code: 'UNVERIFIED' });
+    throw Object.assign(new Error('Could not verify game start times — try again'), { status: 503, code: 'UNVERIFIED', expose: true });
   }
 
   // Garde `outcome = 'pending'` : le règlement a pu passer entre-temps.
@@ -424,7 +430,7 @@ export async function cancelSlip(slipId: string, userId: string): Promise<void> 
     [slipId, userId],
   );
   if (!del.rowCount) {
-    throw Object.assign(new Error('Only pending slips can be cancelled'), { status: 409, code: 'NOT_PENDING' });
+    throw Object.assign(new Error('Only pending slips can be cancelled'), { expose: true, status: 409, code: 'NOT_PENDING' });
   }
 }
 
@@ -440,6 +446,6 @@ export async function getSlip(slipId: string, userId: string) {
      WHERE id = $1 AND user_id = $2`,
     [slipId, userId],
   );
-  if (!rows[0]) throw Object.assign(new Error('Slip not found'), { status: 404 });
+  if (!rows[0]) throw Object.assign(new Error('Slip not found'), { expose: true, status: 404 });
   return rows[0];
 }

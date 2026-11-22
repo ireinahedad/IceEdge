@@ -15,6 +15,7 @@ import type {
 import { weightsQuery } from './ruleWeightsService';
 import { env } from '../env';
 import { authedUrlFetch } from './authService';
+import { apiErrorFromResponse } from './errors';
 
 const BASE_URL = env.nhlApiUrl;
 
@@ -362,8 +363,9 @@ async function rawGet<T>(path: string, signal?: AbortSignal): Promise<T> {
     signal,
   });
   if (!res.ok) {
-    const msg = await res.text().catch(() => res.statusText);
-    throw new Error(`NHL API ${res.status}: ${msg}`);
+    // Avant : `NHL API ${status}: ${corps brut}` — une page HTML de Cloudflare
+    // ou de Railway finissait dans le message, donc parfois à l'écran.
+    throw await apiErrorFromResponse(res, 'NHL data unavailable');
   }
   return res.json() as Promise<T>;
 }
@@ -380,8 +382,9 @@ async function getFresh<T>(path: string): Promise<T> {
     headers: GET_HEADERS,
   });
   if (!res.ok) {
-    const msg = await res.text().catch(() => res.statusText);
-    throw new Error(`NHL API ${res.status}: ${msg}`);
+    // Avant : `NHL API ${status}: ${corps brut}` — une page HTML de Cloudflare
+    // ou de Railway finissait dans le message, donc parfois à l'écran.
+    throw await apiErrorFromResponse(res, 'NHL data unavailable');
   }
   if (res.headers.get('X-Stale-Response')) throw new Error('NHL API: réponse de repli (données non à jour)');
   return res.json() as Promise<T>;

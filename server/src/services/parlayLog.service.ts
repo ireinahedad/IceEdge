@@ -104,7 +104,7 @@ export interface FreezeResult {
 
 /** Erreur 4xx lisible par `sendError`. */
 function httpErr(status: number, message: string, code?: string): Error {
-  return Object.assign(new Error(message), { status, code });
+  return Object.assign(new Error(message), { status, code, expose: true });
 }
 
 /**

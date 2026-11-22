@@ -190,16 +190,16 @@ async function consumeCode(userId: string, code: string, purpose: CodePurpose): 
   const record = rows[0];
 
   if (!record || new Date(record.expires_at) < new Date()) {
-    throw Object.assign(new Error('Invalid or expired code'), { status: 400 });
+    throw Object.assign(new Error('Invalid or expired code'), { expose: true, status: 400 });
   }
   if (record.attempts >= MAX_CODE_ATTEMPTS) {
-    throw Object.assign(new Error('Too many attempts. Please request a new code.'), { status: 429 });
+    throw Object.assign(new Error('Too many attempts. Please request a new code.'), { expose: true, status: 429 });
   }
 
   const valid = await verifyCodeHash(code, record.code_hash);
   if (!valid) {
     await pool.query('UPDATE email_verification_codes SET attempts = attempts + 1 WHERE id = $1', [record.id]);
-    throw Object.assign(new Error('Invalid or expired code'), { status: 400 });
+    throw Object.assign(new Error('Invalid or expired code'), { expose: true, status: 400 });
   }
 
   await pool.query('UPDATE email_verification_codes SET consumed = TRUE WHERE id = $1', [record.id]);
@@ -226,7 +226,7 @@ export async function register(body: RegisterBody): Promise<PendingVerificationR
     [email.toLowerCase(), username.toLowerCase()],
   );
   if (existing.rowCount && existing.rowCount > 0) {
-    throw Object.assign(new Error('Email or username already in use'), { status: 409 });
+    throw Object.assign(new Error('Email or username already in use'), { expose: true, status: 409 });
   }
 
   const password_hash = await hashPassword(password);
@@ -279,7 +279,7 @@ export async function verifyEmail(email: string, code: string): Promise<AuthResp
     [email.toLowerCase()],
   );
   const user = userRows[0];
-  if (!user) throw Object.assign(new Error('Invalid or expired code'), { status: 400 });
+  if (!user) throw Object.assign(new Error('Invalid or expired code'), { expose: true, status: 400 });
 
   if (user.email_verified) {
     // Already verified — just log the user in.
@@ -337,7 +337,7 @@ export async function resetPassword(email: string, code: string, newPassword: st
     [email.toLowerCase()],
   );
   const user = rows[0];
-  if (!user) throw Object.assign(new Error('Invalid or expired code'), { status: 400 });
+  if (!user) throw Object.assign(new Error('Invalid or expired code'), { expose: true, status: 400 });
 
   await consumeCode(user.id, code, 'password_reset');
 
@@ -367,7 +367,7 @@ async function activeUserById(userId: string): Promise<UserRow> {
     'SELECT * FROM users WHERE id = $1 AND is_active = TRUE',
     [userId],
   );
-  if (!rows[0]) throw Object.assign(new Error('User not found'), { status: 404 });
+  if (!rows[0]) throw Object.assign(new Error('User not found'), { expose: true, status: 404 });
   return rows[0];
 }
 
@@ -399,11 +399,11 @@ export async function confirmIdentity(
 
   if (user.password_hash) {
     const ok = !!proof.password && await verifyPassword(proof.password, user.password_hash);
-    if (!ok) throw Object.assign(new Error('Incorrect password'), { status: 403, code: 'REAUTH_FAILED' });
+    if (!ok) throw Object.assign(new Error('Incorrect password'), { expose: true, status: 403, code: 'REAUTH_FAILED' });
     return;
   }
 
-  if (!proof.code) throw Object.assign(new Error('Confirmation code required'), { status: 403, code: 'REAUTH_FAILED' });
+  if (!proof.code) throw Object.assign(new Error('Confirmation code required'), { expose: true, status: 403, code: 'REAUTH_FAILED' });
   await consumeCode(user.id, proof.code, 'account_delete');
 }
 
@@ -418,12 +418,12 @@ export async function login(body: LoginBody): Promise<AuthResponse> {
   );
   const user = rows[0];
   if (!user || !user.password_hash) {
-    throw Object.assign(new Error('Invalid credentials'), { status: 401 });
+    throw Object.assign(new Error('Invalid credentials'), { expose: true, status: 401 });
   }
 
   const valid = await verifyPassword(password, user.password_hash);
   if (!valid) {
-    throw Object.assign(new Error('Invalid credentials'), { status: 401 });
+    throw Object.assign(new Error('Invalid credentials'), { expose: true, status: 401 });
   }
 
   // Block login until the email address has been confirmed (unless bypassed).
@@ -432,7 +432,7 @@ export async function login(body: LoginBody): Promise<AuthResponse> {
     await issueVerificationCode(user);
     throw Object.assign(
       new Error('Email not verified'),
-      { status: 403, code: 'EMAIL_NOT_VERIFIED', email: user.email },
+      { expose: true, status: 403, code: 'EMAIL_NOT_VERIFIED', email: user.email },
     );
   }
 
@@ -512,7 +512,7 @@ export async function loginWithGoogle(googleUser: GoogleUserInfo): Promise<AuthR
   if (googleUser.email_verified !== true) {
     throw Object.assign(
       new Error('Google account e-mail is not verified'),
-      { status: 403, code: GOOGLE_EMAIL_UNVERIFIED },
+      { expose: true, status: 403, code: GOOGLE_EMAIL_UNVERIFIED },
     );
   }
 
@@ -678,12 +678,12 @@ async function activeUser(userId: string): Promise<UserRow> {
     [userId],
   );
   const user = rows[0];
-  if (!user) throw Object.assign(new Error('User not found or inactive'), { status: 401 });
+  if (!user) throw Object.assign(new Error('User not found or inactive'), { expose: true, status: 401 });
   return user;
 }
 
 const invalidRefresh = () =>
-  Object.assign(new Error('Invalid or expired refresh token'), { status: 401 });
+  Object.assign(new Error('Invalid or expired refresh token'), { expose: true, status: 401 });
 
 export async function refreshTokens(rawToken: string): Promise<AuthTokens> {
   const hash = hashToken(rawToken);
@@ -781,6 +781,6 @@ export function verifyAccessToken(token: string): JwtPayload {
   try {
     return jwt.verify(token, jwtSecret!) as JwtPayload;
   } catch {
-    throw Object.assign(new Error('Invalid or expired access token'), { status: 401 });
+    throw Object.assign(new Error('Invalid or expired access token'), { expose: true, status: 401 });
   }
 }

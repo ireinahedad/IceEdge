@@ -30,7 +30,7 @@ export async function getUserById(id: string): Promise<UserPublic> {
   );
 
   if (!rows[0]) {
-    throw Object.assign(new Error('User not found'), { status: 404 });
+    throw Object.assign(new Error('User not found'), { expose: true, status: 404 });
   }
 
   return toPublicUser(rows[0]);
@@ -67,7 +67,7 @@ export async function updateUser(id: string, body: UpdateUserBody): Promise<User
   }
 
   if (fields.length === 0) {
-    throw Object.assign(new Error('No fields to update'), { status: 400 });
+    throw Object.assign(new Error('No fields to update'), { expose: true, status: 400 });
   }
 
   values.push(id); // last param = WHERE id = $N
@@ -78,7 +78,7 @@ export async function updateUser(id: string, body: UpdateUserBody): Promise<User
   );
 
   if (!rows[0]) {
-    throw Object.assign(new Error('User not found'), { status: 404 });
+    throw Object.assign(new Error('User not found'), { expose: true, status: 404 });
   }
 
   return toPublicUser(rows[0]);
@@ -96,12 +96,12 @@ export async function updatePassword(id: string, body: UpdatePasswordBody): Prom
 
   const user = rows[0];
   if (!user) {
-    throw Object.assign(new Error('User not found'), { status: 404 });
+    throw Object.assign(new Error('User not found'), { expose: true, status: 404 });
   }
 
   const valid = await verifyPassword(body.current_password, user.password_hash);
   if (!valid) {
-    throw Object.assign(new Error('Current password is incorrect'), { status: 400 });
+    throw Object.assign(new Error('Current password is incorrect'), { expose: true, status: 400 });
   }
 
   const newHash = await hashPassword(body.new_password);
@@ -141,10 +141,10 @@ export interface BlockedUser {
  */
 export async function blockUser(blockerId: string, blockedId: string): Promise<void> {
   if (!UUID_RE.test(blockedId)) {
-    throw Object.assign(new Error('User not found'), { status: 404 });
+    throw Object.assign(new Error('User not found'), { expose: true, status: 404 });
   }
   if (blockerId === blockedId) {
-    throw Object.assign(new Error('You cannot block yourself'), { status: 400 });
+    throw Object.assign(new Error('You cannot block yourself'), { expose: true, status: 400 });
   }
 
   const { rowCount } = await pool.query(
@@ -152,7 +152,7 @@ export async function blockUser(blockerId: string, blockedId: string): Promise<v
     [blockedId],
   );
   if (!rowCount) {
-    throw Object.assign(new Error('User not found'), { status: 404 });
+    throw Object.assign(new Error('User not found'), { expose: true, status: 404 });
   }
 
   await pool.query(

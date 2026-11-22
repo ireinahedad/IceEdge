@@ -32,6 +32,7 @@ import "./profile-settings.css";
 import { OverviewTab, ProfileHeader, Skeleton, Tab } from "./ProfileParts";
 import { SettingsTab } from "./SettingsTab";
 import "../../components/rink-theme.css";
+import { userErrorMessage } from "../../services/errors";
 
 
 // ── ProfilePage ───────────────────────────────────────────────────────────────
@@ -90,7 +91,7 @@ export function ProfilePage() {
       // (cf. `ensureFamilyWeightsHydrated`).
       applyServerFamilyWeights(p.ruleWeights);
     }).catch((e) => {
-      setError(e.message ?? "Could not load profile");
+      setError(userErrorMessage(e, "Could not load profile"));
     }).finally(() => setLoading(false));
     // `user?.id` et non `user` : AuthContext remplace l'objet quand il enrichit
     // le profil, ce qui rejouait `getProfile` + `getBettingStats` (audit du
@@ -120,7 +121,7 @@ export function ProfilePage() {
       // `alert()` était le SEUL de l'app : dialogue système non traduit, qui
       // affiche le nom de domaine en titre en WKWebView et gèle le fil. Le
       // reste de l'app signale déjà ses échecs par `sonner`.
-      toast.error(err.message ?? t("profile.avatarUploadFailed"));
+      toast.error(userErrorMessage(err, t("profile.avatarUploadFailed")));
     } finally {
       setAvatarUploading(false);
       e.target.value = "";

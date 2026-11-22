@@ -179,7 +179,7 @@ async function computeBundle(gameId: string): Promise<GameMlBundle> {
   const [groups, game] = await Promise.all([buildPrematchGameMarkets(gameId), fetchGameById(gameId)]);
   const home = String(game?.homeTeam?.abbreviation ?? '');
   const away = String(game?.awayTeam?.abbreviation ?? '');
-  if (!home || !away) throw Object.assign(new Error('Game not found'), { status: 404 });
+  if (!home || !away) throw Object.assign(new Error('Game not found'), { expose: true, status: 404 });
 
   // Une entrée par QUESTION distincte : « Goes to OT » et « égalité après la
   // 3e » posent la même, elle n'est pricée qu'une fois.
@@ -391,7 +391,7 @@ export async function getGameFeatures(gameId: string): Promise<GameFeatures> {
   const game = await fetchGameById(gameId);
   const home = String(game?.homeTeam?.abbreviation ?? '');
   const away = String(game?.awayTeam?.abbreviation ?? '');
-  if (!home || !away) throw Object.assign(new Error('Game not found'), { status: 404 });
+  if (!home || !away) throw Object.assign(new Error('Game not found'), { expose: true, status: 404 });
   const features = await buildGameFeatures(home, away, 'moneyline', undefined,
                                            { subjectIsHome: true, gameDate: game?.gameDate || undefined });
   featuresCache.set(gameId, features);

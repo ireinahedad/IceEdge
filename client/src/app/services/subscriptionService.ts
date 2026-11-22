@@ -3,6 +3,7 @@
  * Wraps /api/subscription/* endpoints (auth required).
  */
 import { authedFetch } from './authService';
+import { apiErrorFromResponse } from './errors';
 
 /**
  * Cadence de facturation.
@@ -49,7 +50,7 @@ export interface CheckoutResult {
 
 export async function apiGetSubscription(): Promise<SubscriptionStatus> {
   const res = await authedFetch('/subscription/me');
-  if (!res.ok) throw new Error('Failed to load subscription');
+  if (!res.ok) throw await apiErrorFromResponse(res, 'Failed to load subscription');
   return res.json();
 }
 
@@ -60,8 +61,7 @@ export async function apiStartCheckout(period: BillingPeriod = 'monthly'): Promi
     body: JSON.stringify({ period }),
   });
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: res.statusText }));
-    throw new Error(err.error ?? 'Checkout failed');
+    throw await apiErrorFromResponse(res, 'Checkout failed');
   }
   return res.json();
 }
@@ -69,8 +69,7 @@ export async function apiStartCheckout(period: BillingPeriod = 'monthly'): Promi
 export async function apiStartTrial(): Promise<SubscriptionStatus> {
   const res = await authedFetch('/subscription/trial', { method: 'POST' });
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: res.statusText }));
-    throw new Error(err.error ?? 'Trial failed');
+    throw await apiErrorFromResponse(res, 'Trial failed');
   }
   return res.json();
 }
@@ -82,8 +81,7 @@ export async function apiRedeemPromo(code: string): Promise<SubscriptionStatus> 
     body: JSON.stringify({ code }),
   });
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: res.statusText }));
-    throw new Error(err.error ?? 'Invalid promo code');
+    throw await apiErrorFromResponse(res, 'Invalid promo code');
   }
   const data = await res.json();
   return data.status;
@@ -91,6 +89,6 @@ export async function apiRedeemPromo(code: string): Promise<SubscriptionStatus> 
 
 export async function apiCancelSubscription(): Promise<SubscriptionStatus> {
   const res = await authedFetch('/subscription/cancel', { method: 'POST' });
-  if (!res.ok) throw new Error('Cancel failed');
+  if (!res.ok) throw await apiErrorFromResponse(res, 'Cancel failed');
   return res.json();
 }

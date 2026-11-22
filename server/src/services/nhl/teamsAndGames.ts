@@ -113,7 +113,7 @@ export async function fetchTeams(): Promise<any[]> {
 export async function fetchTeamByAbbr(abbr: string): Promise<any> {
   const all  = await fetchTeams();
   const team = all.find(t => t.abbreviation.toLowerCase() === abbr.toLowerCase());
-  if (!team) throw Object.assign(new Error('Team not found'), { status: 404 });
+  if (!team) throw Object.assign(new Error('Team not found'), { expose: true, status: 404 });
   return team;
 }
 
@@ -568,14 +568,14 @@ export async function fetchGameById(gameId: string): Promise<any> {
   if (USE_MOCK) {
     const g = (MOCK_GAMES_FULL as any[]).find((x) => x.id === gameId);
     if (g) return g;
-    throw Object.assign(new Error('Game not found'), { status: 404 });
+    throw Object.assign(new Error('Game not found'), { expose: true, status: 404 });
   }
 
   let data: any;
   try {
     data = await fetchLanding(gameId);
   } catch {
-    throw Object.assign(new Error('Game not found'), { status: 404 });
+    throw Object.assign(new Error('Game not found'), { expose: true, status: 404 });
   }
   return formatGame(data);
 }
@@ -625,7 +625,7 @@ export async function fetchGameDetail(gameId: string): Promise<any> {
     fetchNHL<any>(`v1/gamecenter/${gameId}/boxscore`),
   ]);
   if (landingRes.status === 'rejected') {
-    throw Object.assign(new Error('Game not found'), { status: 404 });
+    throw Object.assign(new Error('Game not found'), { expose: true, status: 404 });
   }
   const L = landingRes.value as any;
   const B = boxRes.status === 'fulfilled' ? (boxRes.value as any) : null;

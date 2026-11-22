@@ -69,7 +69,7 @@ export function DevIndexPage() {
 
   return (
     <div
-      className="flex flex-col min-h-screen text-white max-w-[900px] mx-auto px-5 pt-14 pb-16"
+      className="flex flex-col min-h-screen text-white max-w-[430px] md:max-w-5xl mx-auto w-full px-5 pt-14 pb-16"
       style={{ background: "#0A0E0C" }}
     >
       <div className="flex items-center gap-3 mb-2">

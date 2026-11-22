@@ -16,6 +16,7 @@ import {
   ProofChips, TrackRecordCard, TonightTeaser, LeaderTeaser, CompareTable, RiskReversal, Faq,
   StickyCta, SectionTitle, useAnyVisible,
 } from "./pro/ProSections";
+import { userErrorMessage } from "../services/errors";
 
 // APPLE_PLAN Phase 5 — l'achat iOS (StoreKit). `isIOS` est une constante de
 // build : sur le web, ni le composant ni le plugin Capacitor ne sont empaquetés.
@@ -75,7 +76,8 @@ function useBenefits(llmMonthlyQuota?: number): Benefit[] {
     // bet365 » retiré — le calendrier et les marchés sont gratuits, et les
     // cotes viennent de DraftKings. Remplacé par ce que Pro donne vraiment.
     { title: t("pro.b.parlays.t"),  desc: t("pro.b.parlays.d") },
-    { title: t("pro.b.scan.t"),     desc: t("pro.b.scan.d") },
+    // Scan masqué tant que VITE_SLIP_SCAN n'est pas « true » (features.slipScan).
+    ...(features.slipScan ? [{ title: t("pro.b.scan.t"), desc: t("pro.b.scan.d") }] : []),
     { title: t("pro.b.others.t"),   desc: t("pro.b.others.d") },
   ];
 }
@@ -172,7 +174,7 @@ export function ProPage() {
         if (result.status.isPro) navigate("/pro/success");
       }
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Error");
+      setError(userErrorMessage(err, t("error.generic")));
     } finally {
       setLoading(false);
     }
@@ -190,7 +192,7 @@ export function ProPage() {
       setSub(status);
       if (status.isPro) navigate("/pro/success");
     }
-    catch (err: unknown) { setError(err instanceof Error ? err.message : "Error"); }
+    catch (err: unknown) { setError(userErrorMessage(err, t("error.generic"))); }
     finally { setLoading(false); }
   }
 
@@ -205,7 +207,7 @@ export function ProPage() {
       setPromo("");
       if (status.isPro) navigate("/pro/success");
     } catch (err: unknown) {
-      setPromoError(err instanceof Error ? err.message : "Error");
+      setPromoError(userErrorMessage(err, t("error.generic")));
     } finally {
       setPromoBusy(false);
     }
@@ -257,7 +259,7 @@ export function ProPage() {
         : null;
 
   return (
-    <div className="flex flex-col min-h-screen text-white max-w-[430px] mx-auto px-5 pt-14 pb-28"
+    <div className="flex flex-col min-h-screen text-white max-w-[430px] md:max-w-5xl mx-auto w-full px-5 pt-14 pb-28"
       style={{ background: "#0A0E0C" }}>
 
       {/* Explicit back button — this page has no BottomNav, so it must never be a

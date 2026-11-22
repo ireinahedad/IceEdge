@@ -23,7 +23,7 @@ import {
 } from './format';
 
 const httpError = (status: number, message: string, code: string, extra: Record<string, unknown> = {}) =>
-  Object.assign(new Error(message), { status, code, ...extra });
+  Object.assign(new Error(message), { status, code, ...extra, expose: true });
 
 export { etDate };
 

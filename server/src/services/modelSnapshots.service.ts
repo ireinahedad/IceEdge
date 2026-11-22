@@ -201,7 +201,7 @@ export async function freezeMorning(date: string, now = Date.now()): Promise<Mor
  */
 export async function markMorningPublished(gameIds: string[], commit: string): Promise<number> {
   const ids = [...new Set(gameIds)].filter((id) => GAME_ID_RE.test(id));
-  if (!COMMIT_RE.test(commit)) throw Object.assign(new Error('commit must be a 40-character SHA'), { status: 400 });
+  if (!COMMIT_RE.test(commit)) throw Object.assign(new Error('commit must be a 40-character SHA'), { expose: true, status: 400 });
   if (ids.length === 0) return 0;
   const { rowCount } = await pool.query(
     `UPDATE model_snapshots SET proof_commit = $2

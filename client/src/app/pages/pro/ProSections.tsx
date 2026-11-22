@@ -28,6 +28,7 @@ import { accuracyRecord, ACCURACY_PAGE } from "../../data/accuracyRecord";
 import type { ApiBestBet } from "../../services/predictionApiService";
 import { marketName } from "../landing/BestBetsSection";
 import { authedFetch } from "../../services/authService";
+import { features } from "../../platform";
 
 export const ACCENT        = "#86d1ea";
 export const ACCENT_BG     = "rgba(134,209,234,0.12)";
@@ -305,7 +306,8 @@ export function CompareTable({ llmMonthlyQuota }: { llmMonthlyQuota?: number }) 
     { label: t("pro.cmp.others"),   free: false,                                   pro: true },
     { label: t("pro.cmp.ai"),       free: t("pro.cmp.aiFree"),
       pro: llmMonthlyQuota ? t("pro.cmp.aiPro", { n: llmMonthlyQuota }) : t("pro.cmp.aiProNoCount") },
-    { label: t("pro.cmp.scan"),     free: t("pro.cmp.scanFree", { n: FREE_SCANS_PER_DAY }), pro: t("pro.cmp.unlimited") },
+    // Scan masqué tant que VITE_SLIP_SCAN n'est pas « true » (features.slipScan).
+    ...(features.slipScan ? [{ label: t("pro.cmp.scan"), free: t("pro.cmp.scanFree", { n: FREE_SCANS_PER_DAY }), pro: t("pro.cmp.unlimited") }] : []),
   ];
 
   const cell = (c: Cell, pro: boolean) =>

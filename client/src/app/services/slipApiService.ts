@@ -1,4 +1,5 @@
 import { authedFetch } from './authService';
+import { apiErrorFromResponse } from './errors';
 
 export interface SlipLeg {
   marketType:  string;
@@ -54,10 +55,9 @@ export async function submitSlip(
     body: JSON.stringify({ legs, sport, combinedProbability }),
   });
   if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
     // `code` porté sur l'erreur : l'écran traduit les refus qu'il connaît
     // (`GAME_STARTED`) au lieu d'afficher le message anglais du serveur.
-    throw Object.assign(new Error(err.error ?? `Submit failed (${res.status})`), { code: err.code });
+    throw await apiErrorFromResponse(res, 'Submit failed');
   }
   return res.json();
 }
@@ -65,8 +65,7 @@ export async function submitSlip(
 export async function getMySlips(limit = 50): Promise<BetSlip[]> {
   const res = await authedFetch(`/slips?limit=${limit}`);
   if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.error ?? `Fetch failed (${res.status})`);
+    throw await apiErrorFromResponse(res, 'Fetch failed');
   }
   return res.json();
 }
@@ -75,8 +74,7 @@ export async function getMySlips(limit = 50): Promise<BetSlip[]> {
 export async function cancelSlip(slipId: string): Promise<void> {
   const res = await authedFetch(`/slips/${encodeURIComponent(slipId)}`, { method: 'DELETE' });
   if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw Object.assign(new Error(err.error ?? `Cancel failed (${res.status})`), { code: err.code });
+    throw await apiErrorFromResponse(res, 'Cancel failed');
   }
 }
 
@@ -94,8 +92,7 @@ export async function settleMySlips(): Promise<SettlementSummary> {
     body: JSON.stringify({}),
   });
   if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.error ?? `Settle failed (${res.status})`);
+    throw await apiErrorFromResponse(res, 'Settle failed');
   }
   return res.json() as Promise<SettlementSummary>;
 }

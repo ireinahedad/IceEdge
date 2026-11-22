@@ -48,7 +48,7 @@ export async function deleteAccount(userId: string): Promise<void> {
         FOR UPDATE OF u`,
       [userId],
     );
-    if (!rows[0]) throw Object.assign(new Error('User not found'), { status: 404 });
+    if (!rows[0]) throw Object.assign(new Error('User not found'), { expose: true, status: 404 });
     avatarUrls = [rows[0].userAvatar, rows[0].profileAvatar];
 
     const chat = await client.query('DELETE FROM chat_messages WHERE user_id = $1', [userId]);

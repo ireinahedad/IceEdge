@@ -22,6 +22,7 @@ import {
   AppleIapError, loadAppleProducts, manageAppleSubscription, purchaseApplePro,
   restoreApplePurchases, type StoreProduct,
 } from "../services/appleIap";
+import { userErrorMessage } from "../services/errors";
 
 const ACCENT  = "#86d1ea";
 const SURFACE = "#131A12";
@@ -67,7 +68,9 @@ export default function AppleProSection({
     loadAppleProducts()
       .then((p) => { setProducts(p); if (!p.monthly && p.yearly) setPeriod("yearly"); if (!p.monthly && !p.yearly) setLoadFailed("empty"); })
       .catch((err: unknown) => {
-        setLoadErrorDetail(err instanceof Error ? err.message : typeof err === "string" ? err : null);
+        // Le texte brut de StoreKit n'est montré qu'en dev ; il part toujours à la console.
+        console.warn("[AppleIAP] loadAppleProducts", err);
+        setLoadErrorDetail(import.meta.env.DEV ? (err instanceof Error ? err.message : typeof err === "string" ? err : null) : null);
         setLoadFailed("error");
       });
   }, []);
@@ -84,7 +87,7 @@ export default function AppleProSection({
       if (err.code === "APPLE_OTHER_ACCOUNT") return t("pro.apple.otherAccount");
       return t("pro.apple.verifyFailed");
     }
-    return err instanceof Error ? err.message : "Error";
+    return userErrorMessage(err, t("error.generic"));
   }
 
   function accepted(s: SubscriptionStatus) {

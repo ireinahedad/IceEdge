@@ -18,8 +18,21 @@ export const logger = pino({
   level: process.env.LOG_LEVEL || (isProd ? 'info' : 'debug'),
   // Pretty output in dev only; prod stays as raw JSON for log aggregators.
   transport: isProd ? undefined : { target: 'pino-pretty', options: { colorize: true, translateTime: 'SYS:HH:MM:ss' } },
-  // Never log credentials.
-  redact: { paths: ['req.headers.authorization', 'req.headers.cookie', 'res.headers["set-cookie"]'], remove: true },
+  // Never log credentials. Les en-têtes de secret partagé (cron GitHub
+  // Actions, fil de nouvelles NHL-posting, clés d'API) et tout champ nommé
+  // comme un secret, à un ou deux niveaux de profondeur dans l'objet
+  // journalisé (`{ body: { password } }`, `{ err: { config: { headers } } }`).
+  redact: {
+    paths: [
+      'req.headers.authorization', 'req.headers.cookie', 'res.headers["set-cookie"]',
+      'req.headers["x-cron-secret"]', 'req.headers["x-news-key"]', 'req.headers["x-api-key"]',
+      'req.headers["x-widget-token"]', 'req.headers["x-ml-token"]', 'req.headers["x-payment"]',
+      '*.password', '*.new_password', '*.token', '*.accessToken', '*.refreshToken',
+      '*.apiKey', '*.api_key', '*.openai_key', '*.secret', '*.authorization',
+      '*.*.password', '*.*.token', '*.*.apiKey', '*.*.api_key', '*.*.authorization',
+    ],
+    censor: '[redacted]',
+  },
 });
 
 export const httpLogger = pinoHttp({

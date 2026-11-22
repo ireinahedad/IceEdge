@@ -24,6 +24,7 @@ import { profileApiService } from "../services/userService";
 import type { ModerationQueueItem } from "../types/user";
 
 import { CheckCircle2 } from "lucide-react";
+import { userErrorMessage } from "../services/errors";
 const REASON_STYLE: Record<string, string> = {
   spam:       "bg-white/5 text-white/60 border-white/10",
   harassment: "bg-orange-500/15 text-orange-400 border-orange-500/30",
@@ -59,7 +60,7 @@ export function ModerationQueuePage() {
       const { reports } = await profileApiService.getModerationQueue();
       setItems(reports);
     } catch (e: any) {
-      setError(e?.message ?? "Could not load the moderation queue");
+      setError(userErrorMessage(e, "Could not load the moderation queue"));
     } finally {
       setLoading(false);
     }
@@ -82,14 +83,14 @@ export function ModerationQueuePage() {
             : `Dismissed · ${res.reportsUpdated} report(s) closed, message restored`,
       );
     } catch (e: any) {
-      toast.error(e?.message ?? "Could not record the decision");
+      toast.error(userErrorMessage(e, "Could not record the decision"));
     } finally {
       setActing(null);
     }
   }
 
   return (
-    <div className="flex flex-col min-h-screen text-white max-w-[900px] mx-auto px-5 pt-14 pb-16" style={{ background: "#0A0E0C" }}>
+    <div className="flex flex-col min-h-screen text-white max-w-[430px] md:max-w-5xl mx-auto w-full px-5 pt-14 pb-16" style={{ background: "#0A0E0C" }}>
       <div className="flex items-center gap-3 mb-2">
         <button onClick={() => navigate(-1)} className="tap-44 text-[#bfc8cc] text-lg">←</button>
         <h1 className="text-white text-base font-bold flex-1">Moderation queue</h1>

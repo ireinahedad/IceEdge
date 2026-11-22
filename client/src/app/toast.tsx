@@ -12,6 +12,7 @@
  * rejoués par `ToasterHost` une fois monté.
  */
 import { lazy, Suspense, useEffect, useState } from "react";
+import { looksTechnical, userErrorMessage, genericErrorMessage } from "./services/errors";
 
 type Kind = "success" | "error" | "info" | "warning";
 type Call = { kind: Kind; args: unknown[] };
@@ -27,8 +28,26 @@ function want() {
   listeners.forEach((l) => l());
 }
 
+/**
+ * Dernier filet : un toast d'erreur ou d'avertissement dont le texte ressemble
+ * à un détail technique (URL, pile, SQL, `Failed to fetch`…) est remplacé par
+ * le message générique. Les écrans passent normalement par
+ * `userErrorMessage` (services/errors.ts) ; ceci couvre ceux qui l'oublient.
+ */
+function sanitize(kind: Kind, args: unknown[]): unknown[] {
+  if (kind !== "error" && kind !== "warning") return args;
+  const [first, ...rest] = args;
+  if (first instanceof Error) return [userErrorMessage(first, genericErrorMessage()), ...rest];
+  if (typeof first === "string" && looksTechnical(first)) {
+    if (import.meta.env.DEV) console.warn("[toast] message technique masqué :", first);
+    return [genericErrorMessage(), ...rest];
+  }
+  return args;
+}
+
 function push(kind: Kind) {
-  return (...args: unknown[]) => {
+  return (...raw: unknown[]) => {
+    const args = sanitize(kind, raw);
     const call = { kind, args };
     if (deliver) deliver(call);
     else { queue.push(call); want(); }

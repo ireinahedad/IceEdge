@@ -26,6 +26,7 @@ import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tool
 import { RefreshCw, ChevronDown, ChevronRight } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { profileApiService, type BestBetLogRow, type BestBetsProfitResponse } from "../services/userService";
+import { userErrorMessage } from "../services/errors";
 
 // ─── Réglages ────────────────────────────────────────────────────────────────
 
@@ -118,7 +119,7 @@ export function BestBetsProfitPage() {
     try {
       setData(await profileApiService.getBestBetsProfit(from, etDay(1)));
     } catch (e: any) {
-      setError(e?.message ?? "Impossible de charger le journal des best bets");
+      setError(userErrorMessage(e, "Impossible de charger le journal des best bets"));
     } finally {
       setLoading(false);
     }
@@ -186,7 +187,7 @@ export function BestBetsProfitPage() {
   const decided = total.wins + total.losses;
 
   return (
-    <div className="flex flex-col min-h-screen text-white max-w-[900px] mx-auto px-4 sm:px-5 pt-14 pb-16" style={{ background: "#0A0E0C" }}>
+    <div className="flex flex-col min-h-screen text-white max-w-[430px] md:max-w-5xl mx-auto w-full px-4 sm:px-5 pt-14 pb-16" style={{ background: "#0A0E0C" }}>
       {/* En-tête */}
       <div className="flex items-center gap-3 mb-1">
         <button onClick={() => navigate(-1)} className="tap-44 text-[#bfc8cc] text-lg" aria-label="Retour">←</button>

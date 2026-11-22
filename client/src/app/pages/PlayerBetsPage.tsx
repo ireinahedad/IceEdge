@@ -13,6 +13,7 @@ import type { PlayerSummary, PublicSlip, PublicSlipLeg } from "../types/user";
 import { outcomeKey } from "../services/slipOutcome";
 
 import { Ban, Check, X, Clock, Lock, EyeOff } from "lucide-react";
+import { userErrorMessage } from "../services/errors";
 const ACCENT = "#86d1ea";
 const WIN    = "#4ade80";
 const LOSS   = "#f87171";
@@ -259,7 +260,7 @@ export function PlayerBetsPage() {
           if (err.status === 403) return setState({ kind: "hidden" });
           if (err.status === 404) return setState({ kind: "missing" });
         }
-        setState({ kind: "error", message: err instanceof Error ? err.message : String(err) });
+        setState({ kind: "error", message: userErrorMessage(err, t("error.generic")) });
       });
 
     return () => { cancelled = true; };
@@ -292,7 +293,7 @@ export function PlayerBetsPage() {
       });
       toast.success(t("block.done", { name: state.summary.displayName }));
     } catch (e: any) {
-      toast.error(e?.message ?? t("block.failed"));
+      toast.error(userErrorMessage(e, t("block.failed")));
     } finally { setBlocking(false); }
   }
 
@@ -303,7 +304,7 @@ export function PlayerBetsPage() {
       await unblock(userId);
       toast.success(t("block.unblockDone", { name: title }));
     } catch (e: any) {
-      toast.error(e?.message ?? t("block.unblockFailed"));
+      toast.error(userErrorMessage(e, t("block.unblockFailed")));
     } finally { setBlocking(false); }
   }
 
@@ -319,7 +320,7 @@ export function PlayerBetsPage() {
         </div>
       </div>
 
-      <div className="px-4 pt-4 max-w-[430px] w-full mx-auto">
+      <div className="px-4 pt-4 max-w-[430px] md:max-w-5xl w-full mx-auto">
         {state.kind === "loading" && (
           <div className="flex flex-col gap-2">
             <div className="h-16 rounded-2xl bg-white/5 animate-pulse" />

@@ -47,7 +47,7 @@ function config() {
 }
 
 function reject(message: string, status = 400, code = 'APPLE_IAP_REJECTED'): never {
-  throw Object.assign(new Error(message), { status, code });
+  throw Object.assign(new Error(message), { status, code, expose: true });
 }
 
 /** Vérifie que la transaction est bien un de NOS abonnements, dans un environnement accepté. */

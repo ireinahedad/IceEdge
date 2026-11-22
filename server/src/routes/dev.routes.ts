@@ -119,7 +119,9 @@ router.post('/ml-test', async (req: Request, res: Response) => {
 
     res.json({ type, result, tested_at: new Date().toISOString() });
   } catch (err: any) {
-    res.status(503).json({ error: err.message ?? 'ML test failed' });
+    // Le vrai message reste visible en dev (sendError) ; en production, même
+    // derrière ENABLE_DEV_ROUTES, il part au journal et pas dans la réponse.
+    sendError(res, err, { fallbackStatus: 503, fallbackMessage: 'ML test failed', context: '[dev/ml-test]' });
   }
 });
 

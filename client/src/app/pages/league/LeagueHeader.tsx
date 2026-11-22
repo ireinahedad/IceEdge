@@ -21,8 +21,8 @@ export function LeagueHeader({
   const accent = theme.accent;
 
   const tabs = [
-    { key: "chat",        label: lang === "fr" ? "Chat" : "Chat" },
     { key: "leaderboard", label: t("league.rankings") },
+    { key: "chat",        label: lang === "fr" ? "Chat" : "Chat" },
   ];
 
   return (
@@ -66,7 +66,7 @@ export function LeagueHeader({
           classement, où il a la place d'être un vrai jumbotron. */}
       <div
         className="puck-tabs mx-4 mb-4"
-        style={{ "--puck-count": tabs.length, "--puck-index": tab === "chat" ? 0 : 1 } as React.CSSProperties}
+        style={{ "--puck-count": tabs.length, "--puck-index": tab === "leaderboard" ? 0 : 1 } as React.CSSProperties}
       >
         <span className="puck-tabs-thumb" aria-hidden />
         {tabs.map((tb) => (

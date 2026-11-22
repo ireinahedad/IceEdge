@@ -159,15 +159,15 @@ export async function uploadAvatar(userId: string, dataUrl: string): Promise<str
   if (!isAvatarStorageConfigured) return null;
 
   const parsed = parseDataUri(dataUrl);
-  if (!parsed) throw Object.assign(new Error('Invalid image data'), { status: 400 });
+  if (!parsed) throw Object.assign(new Error('Invalid image data'), { expose: true, status: 400 });
   if (parsed.bytes.length > MAX_BYTES) {
-    throw Object.assign(new Error('Image too large'), { status: 400 });
+    throw Object.assign(new Error('Image too large'), { expose: true, status: 400 });
   }
 
   // Le type réel prime sur le type déclaré, et doit figurer dans la liste blanche.
   const sniffed = sniffType(parsed.bytes);
   if (!sniffed || sniffed !== parsed.mime || !ALLOWED_TYPES.has(sniffed)) {
-    throw Object.assign(new Error('Unsupported image format'), { status: 400 });
+    throw Object.assign(new Error('Unsupported image format'), { expose: true, status: 400 });
   }
 
   // Clé dérivée de l'userId (issu du JWT) + suffixe aléatoire. Le suffixe change

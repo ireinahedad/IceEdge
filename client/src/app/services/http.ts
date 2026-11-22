@@ -50,10 +50,14 @@ const DEFAULT_TIMEOUT_MS = 15_000;
  */
 class RequestTimeoutError extends Error {
   readonly timeoutMs: number;
+  /** L'URL reste disponible pour la console et Sentry, mais hors du message :
+   *  un message finit toujours par être affiché quelque part. */
+  readonly url: string;
   constructor(timeoutMs: number, url: string) {
-    super(`Request timed out after ${timeoutMs} ms: ${url}`);
+    super(`Request timed out after ${timeoutMs} ms`);
     this.name = 'RequestTimeoutError';
     this.timeoutMs = timeoutMs;
+    this.url = url;
   }
 }
 
