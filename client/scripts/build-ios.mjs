@@ -86,11 +86,12 @@ for (const name of readdirSync(OUT)) {
 // no Google sign-in on iOS) and minus what a meta tag cannot carry.
 const CSP = [
   "default-src 'self'",
-  "script-src 'self'",
+  "script-src 'self' https:",
   "style-src 'self' 'unsafe-inline'",
   "font-src 'self' data:",
   "img-src 'self' data: blob: https:",
   "connect-src 'self' https: wss:",
+  "worker-src 'self' blob:",
   "object-src 'none'",
   "base-uri 'self'",
   "form-action 'self'",

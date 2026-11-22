@@ -17,6 +17,7 @@ import {
   StickyCta, SectionTitle, useAnyVisible,
 } from "./pro/ProSections";
 import { userErrorMessage } from "../services/errors";
+import { usePostHog } from "@posthog/react";
 
 // APPLE_PLAN Phase 5 — l'achat iOS (StoreKit). `isIOS` est une constante de
 // build : sur le web, ni le composant ni le plugin Capacitor ne sont empaquetés.
@@ -125,6 +126,7 @@ export function ProPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { t, lang } = useI18n();
+  const posthog = usePostHog();
   const backTo = useProBackTarget();
   useEffect(() => { trackEvent("pro_page_view"); }, []);
 
@@ -168,6 +170,7 @@ export function ProPage() {
     try {
       const result = await apiStartCheckout(period);
       if (result.url) {
+        posthog?.capture("pro_checkout_started", { billing_period: period });
         window.location.href = result.url;         // Stripe Checkout
       } else if (result.status) {
         setSub(result.status);                     // dev activation
@@ -189,6 +192,7 @@ export function ProPage() {
     setLoading(true);
     try {
       const status = await apiStartTrial();
+      posthog?.capture("pro_trial_started");
       setSub(status);
       if (status.isPro) navigate("/pro/success");
     }

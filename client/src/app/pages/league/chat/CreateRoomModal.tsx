@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { usePostHog } from "@posthog/react";
 import { toast } from "../../../toast";
 import { profileApiService } from "../../../services/userService";
 import { useI18n } from "../../../i18n";
@@ -16,6 +17,7 @@ export function CreateRoomModal({ onClose, onCreate }: {
   onCreate: (room: ChatRoom) => void;
 }) {
   const { t } = useI18n();
+  const posthog = usePostHog();
   const [name, setName] = useState("");
   const [desc, setDesc] = useState("");
   const [isPrivate, setIsPrivate] = useState(false);
@@ -39,6 +41,7 @@ export function CreateRoomModal({ onClose, onCreate }: {
         isPrivate,
         color,
       });
+      posthog?.capture("chat_room_created", { is_private: room.isPrivate });
       if (room.isPrivate && room.joinCode) {
         // Show the join code before closing so the creator can share it
         setCreatedRoom(room);

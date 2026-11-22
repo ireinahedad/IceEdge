@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { usePostHog } from "@posthog/react";
 import { useNavigate } from "react-router";
 import { toast } from "../../../toast";
 import { MessageBubble } from "./MessageBubble";
@@ -56,6 +57,7 @@ export function RoomChat({ room, currentUserId, me, onBack, onUpdate, onLeft, on
   onPinToggle: (room: ChatRoom) => void;
 }) {
   const { t } = useI18n();
+  const posthog = usePostHog();
   const navigate = useNavigate();
   const { requireAuth } = useAuthGate();
   const { isBlocked, ensureLoaded, block } = useBlocks();
@@ -258,6 +260,10 @@ export function RoomChat({ room, currentUserId, me, onBack, onUpdate, onLeft, on
         replyTo: replyTo ? { username: replyTo.username, text: replyTo.text } : undefined,
       });
       confirmMessage(tempId, confirmed);
+      posthog?.capture("chat_message_sent", {
+        message_tag: sentTag ?? "none",
+        is_private_room: room.isPrivate,
+      });
       onUpdate({ ...room, lastMessage: text, lastMessageAt: confirmed.sentAt, unread: 0 });
     } catch (e: any) {
       /**

@@ -1,6 +1,8 @@
 import { createRoot } from "react-dom/client";
+import posthog from "posthog-js";
+import { PostHogErrorBoundary, PostHogProvider } from "@posthog/react";
 import { startSentry, captureException, captureMessage } from "./app/sentry";
-import { envProblems, assertEnv } from "./app/env";
+import { env, envProblems, assertEnv } from "./app/env";
 import { features } from "./app/platform";
 import App from "./app/App";
 import { primeGet, gamesRangePath } from "./app/services/nhlApiService";
@@ -8,6 +10,24 @@ import { fetchHockeyOdds } from "./app/services/gameOdds";
 import { homeWeek } from "./app/data/gameDay";
 import { tokenStore } from "./app/services/tokenStore";
 import "./styles/index.css";
+
+const posthogToken = env.posthogProjectToken;
+const posthogHost = env.posthogHost;
+
+if (posthogToken && posthogHost) {
+  posthog.init(posthogToken, {
+    api_host: posthogHost,
+    logs: {
+      serviceName: "iceedge-client",
+      environment: import.meta.env.MODE,
+    },
+  });
+} else if (import.meta.env.DEV) {
+  const missingVariable = posthogToken
+    ? "VITE_PUBLIC_POSTHOG_HOST"
+    : "VITE_PUBLIC_POSTHOG_PROJECT_TOKEN";
+  console.error(new Error(`${missingVariable} variable required by PostHog is missing or un-configured, this causes events to be silently missed. This error stops appearing once ${missingVariable} is configured`));
+}
 
 // Sentry : chargé après le premier rendu (QA P4, LCP) — voir app/sentry.ts.
 startSentry();
@@ -18,6 +38,11 @@ startSentry();
 for (const problem of envProblems) {
   captureMessage(`[env] ${problem.message}`, "error");
 }
+
+// This dedicated SDK logger is used only for records introduced by this setup.
+// Existing console output remains local to the client.
+const posthogAppLogger = posthog.logger;
+const clientRuntime = import.meta.env.VITE_TARGET === "ios" ? "ios" : "web";
 
 const rootEl = document.getElementById("root")!;
 
@@ -81,6 +106,7 @@ try {
   // module that throws while being evaluated cannot be caught by its importer,
   // and the user would get the white page this whole item exists to remove.
   assertEnv();
+  posthogAppLogger.info("client_boot_validated", { runtime: clientRuntime });
 
   // APPLE_PLAN 3.9 — iOS shell glue (external links). Not in the web bundle.
   // Inline literal (not `isIOS`) so Rollup drops the branch — and the chunk — from the web build.
@@ -109,7 +135,14 @@ try {
     }, () => { /* pas de jeton lisible : pas de préchargement */ });
   }
 
-  createRoot(rootEl).render(<App />);
+  createRoot(rootEl).render(
+    <PostHogProvider client={posthog}>
+      <PostHogErrorBoundary>
+        <App />
+      </PostHogErrorBoundary>
+    </PostHogProvider>,
+  );
+  posthogAppLogger.info("client_render_scheduled", { runtime: clientRuntime });
 
   // DRAFTKINGS_AFFILIATE_PLAN Phase 2 (2026-11-09) — Vercel Web Analytics: a
   // bot-free visitor count for the affiliate application. Same-origin script
@@ -126,7 +159,9 @@ try {
   // APNs, so the iOS build must not try to register one.
   if (features.serviceWorker && "serviceWorker" in navigator) {
     window.addEventListener("load", () => {
-      navigator.serviceWorker.register("/sw.js").catch((err) => {
+      navigator.serviceWorker.register("/sw.js").then(() => {
+        posthogAppLogger.info("service_worker_registered", { runtime: clientRuntime });
+      }).catch((err) => {
         console.warn("[SW] registration failed:", err);
       });
     });

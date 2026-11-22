@@ -1,4 +1,5 @@
-import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import posthog from 'posthog-js';
 import {
   AuthUser, AuthResult, PendingVerification,
   apiLogin, apiRegister, apiLogout, apiLogoutAll, apiVerifyEmail,
@@ -7,6 +8,7 @@ import {
 import { tokenStore, onSessionCleared } from '../services/tokenStore';
 import { decodeJwtPayload } from '../services/jwt';
 import { profileApiService } from '../services/userService';
+import { env } from '../env';
 
 interface AuthContextValue {
   user:        AuthUser | null;
@@ -48,6 +50,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user,    setUser]    = useState<AuthUser | null>(null);
   const [token,   setToken]   = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const identifiedUserId = useRef<string | null>(null);
+
+  /**
+   * The browser SDK persists this identity, so establish it only at actual
+   * session boundaries. This also keeps PostHog error reports on the same
+   * person as events without requiring every call site to attach a user ID.
+   */
+  const identifyPostHogUser = useCallback((nextUser: AuthUser) => {
+    if (!env.posthogProjectToken || !env.posthogHost) return;
+    if (identifiedUserId.current === nextUser.id) return;
+
+    // A direct account switch must not join the next account to the prior one.
+    if (identifiedUserId.current) posthog.reset();
+
+    posthog.identify(nextUser.id, {
+      email: nextUser.email,
+      role: nextUser.role,
+      ...(nextUser.username ? { username: nextUser.username } : {}),
+    });
+    identifiedUserId.current = nextUser.id;
+  }, []);
+
+  const resetPostHogUser = useCallback(() => {
+    if (!identifiedUserId.current) return;
+    posthog.reset();
+    identifiedUserId.current = null;
+  }, []);
 
   // Rehydrate from the token store on mount. Async since R3.6: the native
   // store is promise-based, and `loading` already covers the gap — the router
@@ -83,8 +112,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           // Le jeton ne porte que sub/email/role. `username: ''` et l'absence
           // d'`avatar_url` sont donc un état PROVISOIRE — l'écran complet
           // arrive par `hydrateProfile()` juste en dessous.
+          const rehydratedUser = { id: payload.sub, email: payload.email, username: '', first_name: null, last_name: null, role: payload.role ?? 'user' };
+          identifyPostHogUser(rehydratedUser);
           setToken(stored);
-          setUser({ id: payload.sub, email: payload.email, username: '', first_name: null, last_name: null, role: payload.role ?? 'user' });
+          setUser(rehydratedUser);
         } else {
           await tokenStore.clear();
         }
@@ -93,7 +124,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     })();
 
     return () => { cancelled = true; };
-  }, []);
+  }, [identifyPostHogUser]);
 
   /**
    * Compléter l'utilisateur réhydraté avec son profil serveur.
@@ -140,17 +171,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
    * navigation from here, so nobody gets bounced off /stats.
    */
   useEffect(() => onSessionCleared(() => {
+    resetPostHogUser();
     setUser(null);
     setToken(null);
-  }), []);
+  }), [resetPostHogUser]);
 
   const setSession = useCallback((result: AuthResult) => {
     // On web the refresh token is not in this payload — it is in the httpOnly
     // cookie, and the store drops the argument. Native gets it here.
     void tokenStore.setTokens(result.tokens.access_token, result.tokens.refresh_token);
+    identifyPostHogUser(result.user);
     setToken(result.tokens.access_token);
     setUser(result.user);
-  }, []);
+  }, [identifyPostHogUser]);
 
   const updateUser = useCallback((patch: Partial<Pick<AuthUser, 'username' | 'avatar_url'>>) => {
     setUser((u) => {
@@ -181,15 +214,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const logout = useCallback(async () => {
     await apiLogout();
+    resetPostHogUser();
     setUser(null);
     setToken(null);
-  }, []);
+  }, [resetPostHogUser]);
 
   const logoutAll = useCallback(async () => {
     await apiLogoutAll();
+    resetPostHogUser();
     setUser(null);
     setToken(null);
-  }, []);
+  }, [resetPostHogUser]);
 
   // Valeur mémoïsée : sans ça, chaque rendu du provider donnait un objet neuf à
   // tous les `useAuth()` de l'application.

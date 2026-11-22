@@ -17,6 +17,7 @@
 
 import { useEffect, useState } from "react";
 import { Check } from "lucide-react";
+import { usePostHog } from "@posthog/react";
 import { useI18n } from "../../i18n";
 import { useAuth } from "../../context/AuthContext";
 import { useAuthGate } from "../../context/AuthGateContext";
@@ -31,6 +32,7 @@ export function MatchPickem({ gameId, home, away }: Props) {
   const { t } = useI18n();
   const { user } = useAuth();
   const { requireAuth } = useAuthGate();
+  const posthog = usePostHog();
   const [state, setState] = useState<PickemState | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -53,6 +55,7 @@ export function MatchPickem({ gameId, home, away }: Props) {
     setError(null);
     try {
       setState(await castPickem(gameId, team));
+      posthog?.capture("pickem_vote_cast");
     } catch (e) {
       const code = e instanceof PickemError ? e.code : undefined;
       if (code === "GAME_STARTED") setState({ ...state, locked: true });

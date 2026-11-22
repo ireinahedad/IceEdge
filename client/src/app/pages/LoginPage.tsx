@@ -9,6 +9,7 @@ import { useI18n } from "../i18n";
 import { features } from "../platform";
 import { ResponsibleGamblingNote } from "../components/ResponsibleGamblingNote";
 import { userErrorMessage } from "../services/errors";
+import { usePostHog } from "@posthog/react";
 
 type Mode = "login" | "register";
 
@@ -24,6 +25,7 @@ export function LoginPage() {
   const returnTo  = new URLSearchParams(location.search).get("returnTo") ?? "/";
   const { login, register, verifyEmail } = useAuth();
   const { t } = useI18n();
+  const posthog = usePostHog();
 
   const [mode,        setMode]        = useState<Mode>("login");
   const [step,        setStep]        = useState<"form" | "verify" | "forgot" | "reset">("form");
@@ -78,6 +80,7 @@ export function LoginPage() {
     try {
       if (mode === "login") {
         await login(email, password, remember);
+        posthog?.capture("user_logged_in", { auth_method: "email_password" });
         navigate(returnTo, { replace: true });
       } else {
         if (password !== confirmPwd) {
@@ -86,6 +89,9 @@ export function LoginPage() {
           return;
         }
         const result = await register(email, username, password, firstName || undefined);
+        posthog?.capture("user_registered", {
+          verification_required: !("tokens" in result),
+        });
         if ('tokens' in result) {
           // Verification disabled on the server → logged in right away.
           navigate(returnTo, { replace: true });
@@ -116,6 +122,7 @@ export function LoginPage() {
     setLoading(true);
     try {
       await verifyEmail(email, code.trim());
+      posthog?.capture("email_verified");
       navigate(returnTo, { replace: true });
     } catch (err: unknown) {
       setError(userErrorMessage(err, t("login.error")));

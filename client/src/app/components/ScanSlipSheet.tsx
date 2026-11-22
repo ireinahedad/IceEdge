@@ -29,6 +29,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router";
 import { Camera, X, Check, Share2 } from "lucide-react";
+import { usePostHog } from "@posthog/react";
 import { scanSlip, type ScanGroup, type ScanLeg, type ScanLegState, type ScanCandidate, type SlipScanResult } from "../../../../server/src/services/slipScan";
 import { priceVerdict, ticketModelPct, ticketPaidDecimal, weakestLeg, type PriceVerdict } from "../../../../server/src/services/slipScanValue";
 import { combineParlayLegs } from "../../../../server/src/services/parlay";
@@ -174,6 +175,7 @@ function noteText(n: Note, t: T): string {
 export function ScanSlipSheet({ onClose }: { onClose: () => void }) {
   const { t, lang } = useI18n();
   const { addLeg, removeLeg, hasLeg } = useBet();
+  const posthog = usePostHog();
   const { user } = useAuth();
   const { ctx: baseCtx, data: baseData, loading, error } = useSlipCommandData();
   // Le contexte de base ne connaît que les meneurs de la ligue (~60 joueurs) : pour un ticket,
@@ -367,6 +369,10 @@ export function ScanSlipSheet({ onClose }: { onClose: () => void }) {
       const ticket = groups.length > 1 && tPct != null && tPaid ? priceVerdict(tPct, tPaid, scan.oddsFormat) : null;
       const weakest = weakestLeg([...built.entries()].map(([key, l]) => ({ key, pct: l.probability })));
       setAnalysis({ built, failed, groups: gs, ticket, weakest });
+      posthog?.capture("slip_scan_analyzed", {
+        priced_leg_count: built.size,
+        group_count: groups.length,
+      });
       setPhase("analysed");
       getScanUsage().then(setUsage).catch(() => undefined);
     } finally {

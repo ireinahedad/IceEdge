@@ -118,6 +118,9 @@ export const env = {
 
   /** Optional — a missing analytics DSN must never become an outage. */
   sentryDsn: optional(import.meta.env.VITE_SENTRY_DSN),
+  /** Optional browser analytics configuration; missing values leave PostHog uninitialized. */
+  posthogProjectToken: optional(import.meta.env.VITE_PUBLIC_POSTHOG_PROJECT_TOKEN),
+  posthogHost: optional(import.meta.env.VITE_PUBLIC_POSTHOG_HOST),
   /** Optional public affiliate codes; the links work untracked without them. */
   /** APPLE_PLAN 2.2 — never inlined into the iOS bundle. */
   bet365AffiliateCode: import.meta.env.VITE_TARGET === "ios" ? undefined : optional(import.meta.env.VITE_BET365_AFFILIATE_CODE),

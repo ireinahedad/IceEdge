@@ -4,6 +4,7 @@
  * The server uses the authenticated user's stored OpenAI key — no key needed here.
  */
 
+import posthog from 'posthog-js';
 import { authedFetch } from './authService';
 import { trackEvent } from '../analytics';
 import type { SlipIntent } from '../../../../server/src/services/slipCommand';
@@ -32,6 +33,44 @@ export type LLMTaskType = 'explain_bet' | 'ask_followup' | 'parse_bet_command';
  * ⚠️ À garder AU-DESSUS de `LLM_FETCH_TIMEOUT_MS` si cette variable change.
  */
 const LLM_TIMEOUT_MS = 45_000;
+
+type AIGeneration = { traceId: string; sessionId: string | null; startedAt: number };
+
+/**
+ * The proxy does not expose a durable conversation id. The browser session is
+ * therefore the conversation scope, while every request gets its own trace.
+ * Capture remains best-effort: PostHog must never delay or fail the LLM path.
+ */
+function startAIGeneration(): AIGeneration {
+  return {
+    traceId: crypto.randomUUID(),
+    sessionId: posthog.get_session_id() || null,
+    startedAt: performance.now(),
+  };
+}
+
+function captureAIGeneration(
+  generation: AIGeneration,
+  prompt: string,
+  output?: string,
+  error?: unknown,
+) {
+  try {
+    posthog.capture('$ai_generation', {
+      $ai_trace_id: generation.traceId,
+      $ai_session_id: generation.sessionId,
+      $ai_span_name: 'llm_proxy_request',
+      $ai_provider: 'openai',
+      // The proxy does not return the selected model, so do not guess it here.
+      $ai_input: [{ role: 'user', content: prompt }],
+      ...(output ? { $ai_output_choices: [{ role: 'assistant', content: output }] } : {}),
+      $ai_latency: (performance.now() - generation.startedAt) / 1_000,
+      ...(error ? { $ai_is_error: true, $ai_error: error instanceof Error ? error.name : 'request_failed' } : {}),
+    });
+  } catch {
+    // Analytics is best-effort and must not affect the user's AI request.
+  }
+}
 
 export interface LLMError {
   type: 'no_api_key' | 'openai_error' | 'network' | 'unknown' | 'monthly_quota' | 'free_parse_quota';
@@ -203,35 +242,43 @@ async function askLLMDetailed(
   opts: { taskType: LLMTaskType; locale: 'fr' | 'en'; model?: string; bet?: BetPayload }
 ): Promise<LLMAnswer> {
   trackEvent(`ai_${opts.taskType}`);
-  const res = await authedFetch('/llm', {
-    method: 'POST',
-    timeoutMs: LLM_TIMEOUT_MS,
-    body: JSON.stringify({
-      prompt,
-      taskType: opts.taskType,
-      locale: opts.locale,
-      ...(opts.bet ? { bet: opts.bet } : {}),
-      /**
-       * Aucun modèle par défaut ici, et c'est volontaire.
-       *
-       * Le champ portait `'gpt-4o-mini'` en dur — un identifiant qui a disparu
-       * du catalogue OpenAI sans que personne ne le remarque, parce qu'un
-       * bundle client déployé continue de l'envoyer pendant des mois. Le serveur
-       * connaît le bon modèle pour chaque chemin (`DEFAULT_PRO_MODEL` /
-       * `DEFAULT_FREE_MODEL`) et le chemin Pro IGNORE de toute façon ce champ.
-       * Le laisser au serveur, c'est un seul endroit à corriger le jour où la
-       * gamme change encore — et elle changera.
-       *
-       * `opts.model` reste transmis s'il est fourni : c'est la porte de sortie
-       * d'un utilisateur Free qui veut un autre modèle sur SA clé.
-       */
-      ...(opts?.model ? { model: opts.model } : {}),
-    }),
-  });
+  const generation = startAIGeneration();
+  try {
+    const res = await authedFetch('/llm', {
+      method: 'POST',
+      timeoutMs: LLM_TIMEOUT_MS,
+      body: JSON.stringify({
+        prompt,
+        taskType: opts.taskType,
+        locale: opts.locale,
+        ...(opts.bet ? { bet: opts.bet } : {}),
+        /**
+         * Aucun modèle par défaut ici, et c'est volontaire.
+         *
+         * Le champ portait `'gpt-4o-mini'` en dur — un identifiant qui a disparu
+         * du catalogue OpenAI sans que personne ne le remarque, parce qu'un
+         * bundle client déployé continue de l'envoyer pendant des mois. Le serveur
+         * connaît le bon modèle pour chaque chemin (`DEFAULT_PRO_MODEL` /
+         * `DEFAULT_FREE_MODEL`) et le chemin Pro IGNORE de toute façon ce champ.
+         * Le laisser au serveur, c'est un seul endroit à corriger le jour où la
+         * gamme change encore — et elle changera.
+         *
+         * `opts.model` reste transmis s'il est fourni : c'est la porte de sortie
+         * d'un utilisateur Free qui veut un autre modèle sur SA clé.
+         */
+        ...(opts?.model ? { model: opts.model } : {}),
+      }),
+    });
 
-  if (!res.ok) await throwLLMError(res);
+    if (!res.ok) await throwLLMError(res);
 
-  return await res.json() as LLMAnswer;
+    const answer = await res.json() as LLMAnswer;
+    captureAIGeneration(generation, prompt, answer.text);
+    return answer;
+  } catch (error) {
+    captureAIGeneration(generation, prompt, undefined, error);
+    throw error;
+  }
 }
 
 /** « Analyse IA » d'un pari : réponse complète (analyse structurée comprise). */
@@ -267,11 +314,19 @@ export type ParseCommandResult =
  * et repasse chaque intention par `validateIntent` avant de répondre.
  */
 export async function askParseCommand(text: string, locale: 'fr' | 'en'): Promise<ParseCommandResult> {
-  const res = await authedFetch('/llm', {
-    method: 'POST',
-    timeoutMs: LLM_TIMEOUT_MS,
-    body: JSON.stringify({ prompt: text, taskType: 'parse_bet_command', locale }),
-  });
-  if (!res.ok) await throwLLMError(res);
-  return await res.json() as ParseCommandResult;
+  const generation = startAIGeneration();
+  try {
+    const res = await authedFetch('/llm', {
+      method: 'POST',
+      timeoutMs: LLM_TIMEOUT_MS,
+      body: JSON.stringify({ prompt: text, taskType: 'parse_bet_command', locale }),
+    });
+    if (!res.ok) await throwLLMError(res);
+    const result = await res.json() as ParseCommandResult;
+    captureAIGeneration(generation, text, JSON.stringify(result));
+    return result;
+  } catch (error) {
+    captureAIGeneration(generation, text, undefined, error);
+    throw error;
+  }
 }

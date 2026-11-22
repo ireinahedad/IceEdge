@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useCallback, useEffect, useMemo } from "react";
+import { usePostHog } from "@posthog/react";
 // Même module que la route serveur, importé tel quel : voir l'en-tête de parlay.ts.
 import { trackEvent } from "../analytics";
 import { combineParlayLegs } from "../../../../server/src/services/parlay";
@@ -179,6 +180,7 @@ function analyseSlip(legs: BetLeg[]) {
 export function BetProvider({ children }: { children: React.ReactNode }) {
   // Initialiseur paresseux : la relecture n'a lieu qu'au premier rendu.
   const [legs, setLegs] = useState<BetLeg[]>(loadSlip);
+  const posthog = usePostHog();
 
   // Valeur LOCALE, immédiate, hors ligne. Voir `combineLegs`.
   const localProbability = useMemo(() => combineLegs(legs), [legs]);
@@ -268,11 +270,10 @@ export function BetProvider({ children }: { children: React.ReactNode }) {
       console.error("[BetContext] jambe refusée : pas de gameId, elle ne pourrait jamais être réglée", leg);
       return;
     }
-    setLegs((prev) => {
-      if (prev.some((l) => l.id === leg.id)) return prev;
-      return [...prev, leg];
-    });
-  }, []);
+    if (legs.some((currentLeg) => currentLeg.id === leg.id)) return;
+    posthog?.capture("slip_leg_added", { market_type: leg.marketType });
+    setLegs((prev) => [...prev, leg]);
+  }, [legs, posthog]);
 
   const removeLeg = useCallback((id: string) => {
     setLegs((prev) => prev.filter((l) => l.id !== id));
