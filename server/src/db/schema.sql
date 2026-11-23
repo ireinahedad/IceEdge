@@ -204,7 +204,7 @@ CREATE TABLE IF NOT EXISTS user_profiles (
   display_name      VARCHAR(100),
   avatar            VARCHAR(20),
   avatar_url        TEXT,
-  favorite_team     VARCHAR(5),
+  favorite_team     VARCHAR(40),
   bio               TEXT,
   is_public         BOOLEAN      DEFAULT TRUE,
   tier              user_tier    DEFAULT 'rookie',
