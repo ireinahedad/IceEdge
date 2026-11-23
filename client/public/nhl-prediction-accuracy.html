@@ -77,18 +77,18 @@
         <caption>ArakIce home win probability vs. actual result, 4,304 out-of-sample NHL games (Feb 26, 2023 to Apr 16, 2026)</caption>
         <thead><tr><th>Model said</th><th class="num">Games</th><th class="num">Average prediction</th><th class="num">Home team actually won</th></tr></thead>
         <tbody>
-          <tr><td>20–30%</td><td class="num">12</td><td class="num">28.1%</td><td class="num">16.7%</td></tr>
-          <tr><td>30–40%</td><td class="num">285</td><td class="num">37.2%</td><td class="num">33.3%</td></tr>
-          <tr><td>40–50%</td><td class="num">1,250</td><td class="num">45.5%</td><td class="num">44.7%</td></tr>
-          <tr><td>50–60%</td><td class="num">1,277</td><td class="num">55.1%</td><td class="num">54.2%</td></tr>
-          <tr><td>60–70%</td><td class="num">1,140</td><td class="num">64.6%</td><td class="num">61.6%</td></tr>
-          <tr><td>70–80%</td><td class="num">333</td><td class="num">73.0%</td><td class="num">80.2%</td></tr>
-          <tr><td>80–90%</td><td class="num">7</td><td class="num">81.1%</td><td class="num">100.0%</td></tr>
+          <tr><td>20 to 30%</td><td class="num">12</td><td class="num">28.1%</td><td class="num">16.7%</td></tr>
+          <tr><td>30 to 40%</td><td class="num">285</td><td class="num">37.2%</td><td class="num">33.3%</td></tr>
+          <tr><td>40 to 50%</td><td class="num">1,250</td><td class="num">45.5%</td><td class="num">44.7%</td></tr>
+          <tr><td>50 to 60%</td><td class="num">1,277</td><td class="num">55.1%</td><td class="num">54.2%</td></tr>
+          <tr><td>60 to 70%</td><td class="num">1,140</td><td class="num">64.6%</td><td class="num">61.6%</td></tr>
+          <tr><td>70 to 80%</td><td class="num">333</td><td class="num">73.0%</td><td class="num">80.2%</td></tr>
+          <tr><td>80 to 90%</td><td class="num">7</td><td class="num">81.1%</td><td class="num">100.0%</td></tr>
         </tbody>
       </table>
     </div>
 
-    <p>Read it row by row. When the model gave the home team between 40% and 60%, which covers most games, it was off by less than one point. We also publish where it is weaker: in the 60–70% range it was slightly overconfident (64.6% predicted, 61.6% observed), and in the 70–80% range it was underconfident (73.0% predicted, 80.2% observed), meaning its strongest favourites won even more often than it said. The 20–30% and 80–90% rows contain too few games to draw conclusions.</p>
+    <p>Read it row by row. When the model gave the home team between 40% and 60%, which covers most games, it was off by less than one point. We also publish where it is weaker: in the 60 to 70% range it was slightly overconfident (64.6% predicted, 61.6% observed), and in the 70 to 80% range it was underconfident (73.0% predicted, 80.2% observed), meaning its strongest favourites won even more often than it said. The 20 to 30% and 80 to 90% rows contain too few games to draw conclusions.</p>
 
     <div class="cta-box">
       <p class="cta-title">See tonight's probabilities</p>
@@ -105,7 +105,7 @@
     <h2>How the test was run</h2>
     <p>The model was trained on earlier NHL seasons, then asked to predict every game from February 26, 2023 onward without ever seeing their results. Each prediction uses only information available before the game. The probabilities graded here come from the model alone; they are not blended with sportsbook odds, so the accuracy reflects what the model learned, not what the market already knew.</p>
     <p>The model behind these numbers predicts each team's goals from expected goals, shot quality, rest, back-to-backs, travel, injuries, the starting goaltender and team strength ratings, and derives the win probability from the projected score. The full method is explained on <a href="https://arakice.com/nhl-ai-predictions">NHL AI Predictions</a>.</p>
-    <p><em>Data as of September 27, 2026. Live results from the 2026–27 season will be added to this page as games are played.</em></p>
+    <p><em>Data as of September 27, 2026. Live results from this season will be added to this page as games are played.</em></p>
 
     <h2>Frequently asked questions</h2>
     <div class="faq">

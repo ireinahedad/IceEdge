@@ -212,7 +212,7 @@ function teamPage(t, ctx) {
     const p = teamProb(preds, g, t.abbr);
     const href = matchHref(g);
     const label = `${where(g)} ${o ? o.common : g.home === t.abbr ? g.away : g.home}`;
-    return `          <tr><td>${esc(dayLabel(g.date))}</td><td>${href ? `<a href="${href}">${esc(label)}</a>` : esc(label)}</td><td>${esc(faceoff(g.startTimeUTC))}</td><td class="num">${p != null ? pct(p) : "—"}</td></tr>`;
+    return `          <tr><td>${esc(dayLabel(g.date))}</td><td>${href ? `<a href="${href}">${esc(label)}</a>` : esc(label)}</td><td>${esc(faceoff(g.startTimeUTC))}</td><td class="num">${p != null ? pct(p) : "Posted game day"}</td></tr>`;
   }).join("\n");
 
   const recentRows = recent.map((g) => {
@@ -221,8 +221,8 @@ function teamPage(t, ctx) {
     const p = teamProb(preds, g, t.abbr);
     const href = matchHref(g);
     const label = `${where(g)} ${o ? o.common : ""}`;
-    const verdict = p == null || Math.round(p * 100) === 50 ? "—" : (r.won === (p > 0.5) ? "Model's pick won" : "Upset");
-    return `          <tr><td>${esc(dayLabel(g.date))}</td><td>${href ? `<a href="${href}">${esc(label)}</a>` : esc(label)}</td><td>${esc(r.text)}</td><td class="num">${p != null ? pct(p) : "—"}</td><td>${esc(verdict)}</td></tr>`;
+    const verdict = p == null ? "No pick on record" : Math.round(p * 100) === 50 ? "Coin flip" : (r.won === (p > 0.5) ? "Model's pick won" : "Upset");
+    return `          <tr><td>${esc(dayLabel(g.date))}</td><td>${href ? `<a href="${href}">${esc(label)}</a>` : esc(label)}</td><td>${esc(r.text)}</td><td class="num">${p != null ? pct(p) : "Not on record"}</td><td>${esc(verdict)}</td></tr>`;
   }).join("\n");
 
   const proof = [...upcoming, ...recent].map((g) => preds.get(g.id)?.proofUrl).find(Boolean);
@@ -294,7 +294,7 @@ ${recentRows}
           </tbody>
         </table>
       </div>
-      <p class="src">Win chances are arakiceML's pre-game probabilities for the ${esc(t.common)}, overtime and shootout included, recorded each morning and committed to ArakIce's public prediction record before puck drop.${proof ? ` <a href="${proof}" rel="nofollow">See a timestamped file</a>.` : ""} "—" means the game predates the public record. One game says little; the <a href="${SITE}/nhl-prediction-accuracy">accuracy page</a> covers thousands.</p>` : ""}
+      <p class="src">Win chances are arakiceML's pre-game probabilities for the ${esc(t.common)}, overtime and shootout included, recorded each morning and committed to ArakIce's public prediction record before puck drop.${proof ? ` <a href="${proof}" rel="nofollow">See a timestamped file</a>.` : ""} "Not on record" means the game predates the public record. One game says little; the <a href="${SITE}/nhl-prediction-accuracy">accuracy page</a> covers thousands.</p>` : ""}
     <div class="cta-box">
       <p class="cta-title">${esc(`${t.common} edges and player props`)}</p>
       <p>${esc(`The win probability is free here. In the app, ArakIce compares it to the sportsbook line, flags where the value is, and projects props for every ${t.common} player.`)}</p>
@@ -328,7 +328,7 @@ function ordinal(n) {
 
 function hubPage(list, today) {
   const rows = list.map(({ t, next, nextP, opp }) =>
-    `          <tr><td><a href="${SITE}/team/${t.slug}">${esc(t.name)}</a></td><td>${esc(`${t.wins}-${t.losses}-${t.otl}`)}</td><td class="num">${t.points}</td><td>${esc(t.last10)}</td><td>${next && opp ? esc(`${next.home === t.abbr ? "vs" : "at"} ${opp.common}, ${dayLabel(next.date)}`) : "—"}</td><td class="num">${nextP != null ? pct(nextP) : "—"}</td></tr>`).join("\n");
+    `          <tr><td><a href="${SITE}/team/${t.slug}">${esc(t.name)}</a></td><td>${esc(`${t.wins}-${t.losses}-${t.otl}`)}</td><td class="num">${t.points}</td><td>${esc(t.last10)}</td><td>${next && opp ? esc(`${next.home === t.abbr ? "vs" : "at"} ${opp.common}, ${dayLabel(next.date)}`) : "No game scheduled"}</td><td class="num">${nextP != null ? pct(nextP) : "Posted game day"}</td></tr>`).join("\n");
   const jsonld = {
     "@context": "https://schema.org", "@type": "CollectionPage",
     name: "NHL teams: records, next games and model predictions", url: `${SITE}/nhl-teams`, inLanguage: "en-CA",
@@ -346,7 +346,7 @@ ${rows}
           </tbody>
         </table>
       </div>
-      <p class="src">Standings and schedule from the NHL public API. Win chances from ArakIce's public prediction record; "—" until the morning of the game.</p>
+      <p class="src">Standings and schedule from the NHL public API. Win chances from ArakIce's public prediction record, posted the morning of each game.</p>
       <section class="related">
         <h2>Explore more</h2>
         <ul>

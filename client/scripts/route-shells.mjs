@@ -97,7 +97,7 @@ const ROUTES = [
     title: "NHL Stats Charts | Teams, Games and Players | ArakIce",
     desc: "The entry point to ArakIce's NHL charts: compare all 32 teams, browse results and upcoming games, or follow the league's scoring leaders.",
     heading: "NHL Stats Charts",
-    blurb: "Compare teams, browse games and follow the league's leaders — or step into a single club.",
+    blurb: "Compare teams, browse games and follow the league's leaders, or step into a single club.",
   },
   {
     // Nested path: written to dist/stats/chart/all-teams.html

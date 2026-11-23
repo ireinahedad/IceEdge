@@ -1,0 +1,196 @@
+{
+  "_comment": [
+    "Notes écrites à la main, rendues par playerPage() sous les cartes de stats.",
+    "Une note par slug de props-allowlist.json. Les chiffres de la page viennent de",
+    "l'API NHL ; ici, seulement le contexte qui ne s'y trouve pas : rôle, échange,",
+    "blessure, contrat. Chaque affirmation doit avoir sa source dans `sources`.",
+    "RÈGLE : aucun tiret ni trait d'union dans le texte (règle du site).",
+    "Une note de plus de 45 jours (NOTES_MAX_DAYS) n'est plus publiée : la réécrire.",
+    "Écrites le 2026-11-23 pour les pages qui avaient des impressions Search Console",
+    "(export du 2026-11-22) mais avaient été supprimées en septembre."
+  ],
+  "players": {
+    "cale-makar": {
+      "asOf": "2026-11-23",
+      "heading": "What is moving Makar's props right now",
+      "paragraphs": [
+        "Makar left the November 12 game in Ottawa with a lower body injury, the same night Nathan MacKinnon was hurt, and Colorado put his recovery at about two weeks. Until he is back there is no Makar prop to price, and the first games after his return deserve caution: teams often ease a returning defenseman back in, and his shot and point rates live on his minutes.",
+        "Healthy, he runs the Avalanche power play and is one of the few defensemen whose points line is set like a forward's. MacKinnon is expected to be out longer than Makar, which cuts both ways: more of the offense has to run through the blue line, but the forward he most often sets up is missing. His role is not in question, since Colorado signed him to an eight year extension that runs through 2035. Only his health is."
+      ],
+      "sources": [
+        { "label": "The Hockey News", "url": "https://thehockeynews.com/nhl/colorado-avalanche/latest-news/avalanche-superstars-nathan-mackinnon-cale-makar-both-ruled-out-against-montreal" },
+        { "label": "Daily Faceoff", "url": "https://dailyfaceoff.com/news/colorado-avalanche-nathan-mackinnon-cale-makar-exit-game-lower-body-injury-nhl-news" },
+        { "label": "NHL.com", "url": "https://www.nhl.com/avalanche/news/avalanche-signs-makar-to-eight-year-extension" }
+      ]
+    },
+    "logan-cooley": {
+      "asOf": "2026-11-23",
+      "heading": "Cooley's breakout, and the catch",
+      "paragraphs": [
+        "Cooley is in the first year of the eight year, 80 million dollar extension he signed with Utah, and he has started like the breakout NHL.com asked about before the season, including a hat trick in Montreal with two goals on the power play. He scored at least 20 goals in each of his first three seasons, 24 of them in only 54 games last year.",
+        "The prop risk is availability. An upper body injury kept him out of consecutive games in November, and Utah called him day to day pending further evaluation. When he plays, his power play role is what drives the points line. His shot volume has been modest next to his goal total, which is why the shots table below can disagree with the goals line."
+      ],
+      "sources": [
+        { "label": "ESPN", "url": "https://www.espn.com/nhl/story/_/id/46769882/mammoth-sign-logan-cooley-8-year-80m-extension" },
+        { "label": "CBS Sports", "url": "https://www.cbssports.com/nhl/players/28895737/logan-cooley/fantasy/" },
+        { "label": "NHL.com", "url": "https://www.nhl.com/news/topic/32-in-32/utah-mammoth-three-questions-for-2026-27-season-32-in-32" }
+      ]
+    },
+    "matvei-michkov": {
+      "asOf": "2026-11-23",
+      "heading": "Goals, minutes and the trade noise",
+      "paragraphs": [
+        "Michkov leads the Flyers in goals, yet a November usage check found him sixth among Philadelphia forwards in average ice time. That gap is the prop story: a winger finishing at this rate on fewer minutes than a top line usually gets. If his minutes rise, his shots line is too low. If they stay where they are, goal rates like his tend to cool.",
+        "There is noise around him too. On November 10, reports said he would welcome a fresh start elsewhere as a pending restricted free agent. ESPN reported the Flyers had received no formal trade request, and general manager Danny Brière called the report not correct. A trade would change his linemates, his power play unit and every number on this page, so check the roster before betting his props."
+      ],
+      "sources": [
+        { "label": "Northeast Times", "url": "https://northeasttimes.com/?p=166319" },
+        { "label": "ESPN via 6abc", "url": "https://6abc.com/post/sources-flyers-have-not-received-formal-trade-request-matvei-michkov/20031788/" },
+        { "label": "Daily Faceoff", "url": "https://www.dailyfaceoff.com/news/philadelphia-flyers-matvei-michkov-wants-new-start-elsewhere-trade-request-nhl-rumors" }
+      ]
+    },
+    "jesper-wallstedt": {
+      "asOf": "2026-11-23",
+      "heading": "Why Wallstedt's saves line exists every night",
+      "paragraphs": [
+        "Wallstedt took the Minnesota net in last spring's playoffs and kept it. With Filip Gustavsson out after offseason hip surgery, the Wild started him in every game to open the season. For a saves prop that matters more than his save percentage: the number of starts decides how often the line is posted at all.",
+        "Watch the crease as Gustavsson returns. A tandem turns a nightly saves bet into a question of who starts, and confirmed starters often arrive only hours before puck drop. Wallstedt is also in the final year of his two year, 2.2 million dollar contract."
+      ],
+      "sources": [
+        { "label": "Daily Faceoff", "url": "https://www.dailyfaceoff.com/players/news/jesper-wallstedt/31763" },
+        { "label": "The Hockey News", "url": "https://thehockeynews.com/nhl/minnesota-wild/latest-news/10-1-26-wild-vs-predators-goaltending-matchup/" },
+        { "label": "NHL.com", "url": "https://www.nhl.com/wild/news/minnesota-wild-signs-goaltender-jesper-wallstedtto-two-year-contract-extension-100724" }
+      ]
+    },
+    "lukas-dostal": {
+      "asOf": "2026-11-23",
+      "heading": "A starter on a busy night",
+      "paragraphs": [
+        "Dostal is Anaheim's clear number one, signed through 2030 on a five year, 32.5 million dollar extension, with Ville Husso behind him. His starts are not in doubt. The team in front of him is: over the last two seasons his save percentage sat at .903 and then .888, and the start of this season has not changed that picture.",
+        "For a saves prop, a leaky defense is not all bad news. Heavy shot volume pushes the saves count up even on nights the Ducks lose. The real risk is an early hook: a goalie pulled after a bad first period falls far short of any saves line, which is why the table below counts starts only."
+      ],
+      "sources": [
+        { "label": "InGoal Magazine", "url": "https://ingoalmag.com/goaltenders/lukas-dostal/" },
+        { "label": "ESPN", "url": "https://africa.espn.com/nhl/story/_/id/45764306/ducks-goalie-lukas-dostal-reach-5-year-contract-extension" },
+        { "label": "ESPN player page", "url": "https://www.espn.ph/nhl/player/news/_/id/4588165" }
+      ]
+    },
+    "colton-parayko": {
+      "asOf": "2026-11-23",
+      "heading": "Parayko's role has changed, so should his line",
+      "paragraphs": [
+        "Parayko set the Blues record for games played by a defenseman at the October home opener, eleven years to the day after his NHL debut. His role has moved with age: St. Louis now lists him on a second pair with Theo Lindstein rather than giving him the top minutes, and his power play time has almost disappeared.",
+        "That makes him a shots and blocks defenseman more than a points one. He scored four goals last season after sixteen the year before, which shows how much of his old scoring came from minutes he no longer gets. Price his points line off his current usage, not his reputation."
+      ],
+      "sources": [
+        { "label": "NHL.com preview", "url": "https://www.nhl.com/blues/news/preview-blues-vs-sharks-100826" },
+        { "label": "NHL.com season preview", "url": "https://www.nhl.com/news/st-louis-blues-season-preview-2026-27" },
+        { "label": "RotoWire", "url": "https://www.rotowire.com/hockey/player/colton-parayko--4739" }
+      ]
+    },
+    "nick-paul": {
+      "asOf": "2026-11-23",
+      "heading": "Paul in Toronto",
+      "paragraphs": [
+        "Toronto acquired Paul from Tampa Bay on July 1 for goalie Dennis Hildeby and two draft picks, bringing a Mississauga native home after years of hurting the Leafs, including both Tampa goals in Game 7 of the 2022 first round. He came in with a healthy wrist after an injury hit season of 15 points in 51 games.",
+        "His usage is why his props are worth a look. The Hockey News reported he has skated with Kirill Marchenko and William Nylander, and he plays on Toronto's top penalty kill unit. A grinder on a skilled line usually gets more shots than his scoring history suggests, while penalty kill time does little for a points line. Of his props, shots is the more natural one."
+      ],
+      "sources": [
+        { "label": "NHL.com", "url": "https://www.nhl.com/news/topic/trade-coverage/nick-paul-traded-to-toronto-maple-leafs-by-tampa-bay-lightning" },
+        { "label": "The Hockey News", "url": "https://thehockeynews.com/news/latest-news/how-maple-leafs-nick-paul-has-emerged-as-one-of-gm-john-chaykas-best-additions" },
+        { "label": "RotoWire", "url": "https://www.rotowire.com/hockey/player/nicholas-paul-4494" }
+      ]
+    },
+    "connor-dewar": {
+      "asOf": "2026-11-23",
+      "heading": "A fourth line role, priced as one",
+      "paragraphs": [
+        "Dewar set career highs in games, goals and points last season on Pittsburgh's fourth line with Blake Lizotte and Noel Acciari, then signed a two year extension at 2.25 million a season. He also scored twice in the first round series against Philadelphia.",
+        "He earns his minutes killing penalties, not on the power play, and that caps his points ceiling. For props, the profile usually means low shot lines and points that arrive in bunches, shorthanded chances included. Treat a hot week as variance unless his line or role changes."
+      ],
+      "sources": [
+        { "label": "TribLIVE", "url": "https://triblive.com/sports/penguins-forward-connor-dewar-found-a-fit-but-will-he-stay/" },
+        { "label": "TSN", "url": "https://www.tsn.ca/nhl/article/penguins-extend-dewar-to-two-year-45-million-deal/" },
+        { "label": "TribLIVE", "url": "https://community.triblive.com/news/4052240" }
+      ]
+    },
+    "garnet-hathaway": {
+      "asOf": "2026-11-23",
+      "heading": "Hathaway in Florida",
+      "paragraphs": [
+        "Florida acquired Hathaway from Philadelphia in June, with the Flyers keeping half of his 2.4 million cap hit, to replace A.J. Greer as the physical presence on the fourth line. He was born in Naples, Florida, and is in the last year of his contract.",
+        "His game is hits, not points. Points are rare for a fourth line enforcer, and the game log below shows how rare. Shots are the prop that follows his ice time, and that rarely moves unless Florida's lineup changes around him."
+      ],
+      "sources": [
+        { "label": "NHL.com", "url": "https://www.nhl.com/panthers/news/i-won-t-take-it-for-granted-hathaway-energized-by-opportunity-with-panthers" },
+        { "label": "The Hockey News", "url": "https://thehockeynews.com/nhl/florida-panthers/latest-news/panthers-acquire-physical-nhl-winger-from-the-flyers" },
+        { "label": "WPTV", "url": "https://www.wptv.com/sports/hockey/panthers/new-panthers-forward-garnet-hathaway-eager-to-be-part-of-teams-winning-culture" }
+      ]
+    },
+    "trevor-van-riemsdyk": {
+      "asOf": "2026-11-23",
+      "heading": "Why the sample is so small",
+      "paragraphs": [
+        "Pittsburgh signed van Riemsdyk on July 1 to a two year deal worth 4 million a season, after six seasons in Washington, to fix a defense that gave up too many chances. He was hurt against Columbus in October, went on injured reserve, and rejoined line rushes at practice on November 13, paired with Ilya Solovyov.",
+        "A veteran defensive defenseman coming back from injury usually plays limited minutes at first, with penalty kill duty, and that keeps his shots and points lines low. The rates in the table below come from only a handful of games and should be read that way."
+      ],
+      "sources": [
+        { "label": "NHL.com", "url": "https://www.nhl.com/penguins/news/penguins-sign-defenseman-trevor-van-riemsdyk-to-a-two-year-contract" },
+        { "label": "The Hockey News", "url": "https://thehockeynews.com/nhl/pittsburgh-penguins/latest-news/penguins-place-defenseman-on-injured-reserve" },
+        { "label": "The Hockey News", "url": "https://thehockeynews.com/nhl/pittsburgh-penguins/latest-news/penguins-defenseman-trevor-van-riemsdyk-returns-to-team-practice" }
+      ]
+    },
+    "jack-drury": {
+      "asOf": "2026-11-23",
+      "heading": "Drury in Nashville",
+      "paragraphs": [
+        "Nashville sent Fedor Svechkov and Zachary L'Heureux to Colorado for Drury, Chase Bradley and a 2029 third round pick in June, then signed him to a five year, 22.5 million dollar contract. He is valued as a faceoff and defensive center, and arrived off a career high 10 goals in 82 games.",
+        "That role caps his props. A bottom six center who takes defensive zone draws gets few shots and little power play time, so his shot lines sit low and a points over needs a soft matchup. His first Predators goal came against St. Louis in October."
+      ],
+      "sources": [
+        { "label": "CBS Sports", "url": "https://mauth.cbssports.com/nhl/players/26799639/jack-drury/" },
+        { "label": "The Hockey News", "url": "https://thehockeynews.com/nhl/nashville-predators/latest-news/nashville-predators-sign-jack-drury-to-5-year-22-5-million-contract" },
+        { "label": "RotoWire", "url": "https://www.rotowire.com/hockey/player/jack-drury-5722" }
+      ]
+    },
+    "joel-kiviranta": {
+      "asOf": "2026-11-23",
+      "heading": "Kiviranta back in Dallas",
+      "paragraphs": [
+        "Kiviranta returned to Dallas on a one year, 1 million dollar deal in July, after three seasons in Colorado. His last season there was broken up by injuries, with nine points in 51 games, though he won Olympic bronze with Finland in February.",
+        "Stars fans remember his Game 7 hat trick in 2020, but his props are about role, not memory. He has not dressed for every Dallas game this season, so the first check on any night is whether he plays at all. When he does, low ice time keeps his shots line near the minimum."
+      ],
+      "sources": [
+        { "label": "NHL.com", "url": "https://www.nhl.com/stars/news/2026-27-player-profile-joel-kiviranta-081926" },
+        { "label": "NHL.com", "url": "https://www.nhl.com/news/joel-kiviranta-signs-one-year-contract-with-dallas-stars" },
+        { "label": "Wikipedia", "url": "https://en.wikipedia.org/wiki/Joel_Kiviranta" }
+      ]
+    },
+    "will-borgen": {
+      "asOf": "2026-11-23",
+      "heading": "Borgen's minutes in Boston",
+      "paragraphs": [
+        "Boston traded a 2027 second round pick and a conditional 2028 third to the Rangers for Borgen on July 1, to fix the right side of its defense. He has settled onto a second pair with Nikita Zadorov that the Boston Globe called an unexpected shutdown pairing, and through 18 games he ranked third on the team in total ice time.",
+        "He is not a scorer: five goals last season matched his career high. That makes his points line a long shot and his shots line a function of minutes. More ice time than he had in New York lifts his shot volume a little without changing what kind of player he is."
+      ],
+      "sources": [
+        { "label": "Boston.com", "url": "https://www.boston.com/sports/boston-bruins/2026/11/10/will-borgen-boston-bruins-nhl-hockey-defense-marco-sturm/" },
+        { "label": "Boston Globe", "url": "https://www.bostonglobe.com/2026/11/14/sports/bruins-will-borgen-nikita-zadorov/" },
+        { "label": "RotoWire", "url": "https://www.rotowire.com/hockey/player/will-borgen-4948" }
+      ]
+    },
+    "kyle-capobianco": {
+      "asOf": "2026-11-23",
+      "heading": "Five games is not a sample",
+      "paragraphs": [
+        "Capobianco signed a new two year deal with Dallas in June and opened the season as the seventh defenseman, drawing in mostly on the third pair beside Tyler Myers.",
+        "He left the October 27 game against New Jersey with a lower body injury and was ruled out for about four weeks, so his season so far is five games. That is too few for the hit rates below to mean much: they describe a short stretch, not a player. When he returns, the first question is whether Dallas dresses seven defensemen."
+      ],
+      "sources": [
+        { "label": "NHL.com", "url": "https://www.nhl.com/stars/news/2026-27-player-profile-kyle-capobianco-090926" },
+        { "label": "Daily Faceoff", "url": "https://dailyfaceoff.com/news/dallas-stars-kyle-capobianco-exits-game-new-jersey-devils-lower-body-injury" },
+        { "label": "Daily Faceoff", "url": "https://www.dailyfaceoff.com/news/kyle-capobianco-sam-steel-dallas-stars-four-weeks-lower-body-injury-return-undisclosed" }
+      ]
+    }
+  }
+}

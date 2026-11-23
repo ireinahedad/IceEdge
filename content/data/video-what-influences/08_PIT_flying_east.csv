@@ -1,0 +1,5 @@
+label,games,win_pct,expected_pct
+Flying east,117,70.1,55.6
+All other games,1287,54.6,54.7
+"Flying east, before 2016",45,68.9,56.9
+"Flying east, 2016 and after",72,70.8,54.8

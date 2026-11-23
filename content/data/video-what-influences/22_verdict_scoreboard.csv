@@ -1,0 +1,7 @@
+order,belief,verdict,true,outlier
+1,Home ice matters,TENDENCY,True,NYR
+2,Jet lag hurts,OUTLIER,False,PIT
+3,Back-to-backs hurt,TENDENCY,True,"DAL, WSH"
+4,More rest = better,OUTLIER,False,EDM
+5,Shot quality beats shot volume,TENDENCY,True,
+6,Hot streaks continue,OUTLIER,False,"TOR, NYR"

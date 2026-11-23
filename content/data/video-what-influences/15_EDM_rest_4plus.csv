@@ -1,0 +1,5 @@
+label,games,win_pct,expected_pct
+4+ days off,115,33.0,48.1
+Normal rest,1293,47.6,47.2
+"4+ days off, since 2015",73,38.4,51.1
+"4+ days off, before 2015",42,23.8,42.7

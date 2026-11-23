@@ -1,0 +1,5 @@
+label,games,win_pct,expected_pct
+After 5+ wins,1663,55.4,55.8
+After 3+ wins,5781,53.0,53.7
+After 3+ losses,5787,46.9,46.1
+After 5+ losses,1694,43.2,43.5

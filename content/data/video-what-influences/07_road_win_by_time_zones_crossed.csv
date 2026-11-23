@@ -1,0 +1,8 @@
+label,zones_crossed,games,win_pct,expected_pct
+-3 zones,-3,370,51.4,46.0
+-2 zones,-2,681,47.3,46.1
+-1 zones,-1,3021,46.2,45.2
+0 zones,0,13674,45.1,45.7
++1 zones,1,2803,47.0,46.3
++2 zones,2,769,42.3,44.3
++3 zones,3,333,50.8,45.9

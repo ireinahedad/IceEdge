@@ -54,7 +54,7 @@ const shortDate = (day) => new Date(`${day}T12:00:00Z`).toLocaleDateString("en-U
 
 /** « 58.3% (7 of 12) », ou « — » sans match. */
 export function cell(rate) {
-  if (!rate || !rate.games || rate.pct === null || rate.pct === undefined) return "—";
+  if (!rate || !rate.games || rate.pct === null || rate.pct === undefined) return "No games yet";
   return `${Number(rate.pct).toFixed(1)}% (${fmtInt(rate.wins)}/${fmtInt(rate.games)})`;
 }
 
@@ -69,7 +69,7 @@ export function renderSection(data) {
   const t = data.total;
   const weeks = data.weeks.filter((w) => w.games > 0);
   const rows = weeks.map((w) =>
-    `          <tr><td>${esc(shortDate(w.weekStart))} – ${esc(shortDate(w.weekEnd))}</td><td class="num">${fmtInt(w.games)}</td>` +
+    `          <tr><td>${esc(shortDate(w.weekStart))} to ${esc(shortDate(w.weekEnd))}</td><td class="num">${fmtInt(w.games)}</td>` +
     `<td class="num">${cell(w.model)}</td><td class="num">${cell(w.crowd)}</td><td class="num">${cell(w.strongCrowd)}</td></tr>`,
   ).join("\n");
   const totalRow =
@@ -78,7 +78,7 @@ export function renderSection(data) {
   const through = t.until ? longDate(t.until) : "";
   return `${START}
     <section id="model-vs-users">
-    <h2>2026–27 season: the model vs. ArakIce users</h2>
+    <h2>This season: the model vs. ArakIce users</h2>
     <p>Since October 24, 2026, ArakIce users can pick the winner of every NHL game before puck drop. The model's pick is recorded in the hour before each game and never changed afterwards, so it gets no help from hindsight. Over the ${fmtInt(t.games)} games users voted on (${fmtInt(data.settledPicks)} settled picks, between ${esc(monthDay(t.since))} and ${esc(through)}), the arakiceML model picked the winner <strong>${pctText(t.model)}</strong> of the time and the users' majority pick <strong>${pctText(t.crowd)}</strong>. When at least 80% of users agreed on a team, that team won <strong>${pctText(t.strongCrowd)}</strong> of the time.</p>
 
     <div class="h2h-wrap">

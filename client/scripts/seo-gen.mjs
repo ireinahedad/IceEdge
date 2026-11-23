@@ -125,6 +125,35 @@ async function loadPropsAllowlist() {
   }
 }
 
+// ── Notes écrites à la main, par joueur ──────────────────────────────────────
+// Le gabarit ne produit que des chiffres, et Google a refusé 417 pages sur 786
+// du même moule. Une note recherchée (rôle, échange, blessure, contrat) est ce
+// qui rend une page unique. Fichier FACULTATIF (absent => pages sans note), mais
+// un JSON invalide jette : une faute de frappe ne doit pas effacer les notes
+// sans bruit. Une note plus vieille que NOTES_MAX_DAYS n'est plus publiée :
+// une blessure de novembre servie en février serait fausse.
+const NOTES_PATH = process.env.PROPS_NOTES || path.join(__dirname, "props-notes.json");
+const NOTES_MAX_DAYS = Number(process.env.NOTES_MAX_DAYS || 45);
+
+async function loadPropsNotes() {
+  let raw;
+  try { raw = await fs.readFile(NOTES_PATH, "utf-8"); } catch { return {}; }
+  let all;
+  try { all = JSON.parse(raw).players || {}; }
+  catch (e) { throw new Error(`notes des props illisibles (${NOTES_PATH}) : ${e.message}`); }
+  const out = {};
+  for (const [slug, n] of Object.entries(all)) {
+    const t = Date.parse(`${n?.asOf}T12:00:00Z`);
+    const ok = /^\d{4}-\d{2}-\d{2}$/.test(n?.asOf || "") && Number.isFinite(t)
+      && Array.isArray(n.paragraphs) && n.paragraphs.length
+      && (n.sources || []).every((x) => /^https:\/\//.test(x?.url || ""));
+    if (!ok) { console.warn(`  ⚠️  note mal formée ignorée : ${slug}`); continue; }
+    if ((Date.now() - t) / 864e5 > NOTES_MAX_DAYS) { console.warn(`  ⚠️  note périmée ignorée : ${slug} (${n.asOf}), à réécrire`); continue; }
+    out[slug] = n;
+  }
+  return out;
+}
+
 // ── Head to head history ─────────────────────────────────────────────────────
 // Les pages d'affiche ne servaient qu'un explicatif générique : Google en a
 // refusé 417 sur 786 du même moule côté joueurs, et les pages d'affiche
@@ -446,7 +475,7 @@ function playerPage(p) {
   const gp = Number(s.gamesPlayed || 0);
   const rows = logRows(p);
   const { rates, pool } = lineRates(rows, isGoalie);
-  const f1 = (x) => (x == null ? "—" : x.toFixed(1));
+  const f1 = (x, none = "n/a") => (x == null ? none : x.toFixed(1));
   const rate = (r) => `${r.n} of ${r.of} ${isGoalie ? "starts" : "games"} (${r.pct}%)`;
   const find = (label, line) => rates.find((r) => r.label === label && r.line === line);
 
@@ -460,7 +489,7 @@ function playerPage(p) {
       const r25 = find("Saves", 25.5);
       answer = `${p.name} has made ${f1(avg(sv))} saves per start across ${pool.length} starts this season, and has gone over 25.5 saves in ${rate(r25)}. Over his last ${last10.length} starts he is averaging ${f1(avg(last10))}.`;
       splits = [["Saves per start, season", f1(avg(sv))], [`Saves per start, last ${last10.length}`, f1(avg(last10))],
-        ["At home", f1(avg(svHome))], ["On the road", f1(avg(svRoad))]];
+        ["At home", f1(avg(svHome), "No home starts yet")], ["On the road", f1(avg(svRoad), "No road starts yet")]];
     } else {
       const sh = rows.map((r) => r.shots), last10 = rows.slice(0, 10).map((r) => r.shots);
       const shHome = rows.filter((r) => r.home).map((r) => r.shots), shRoad = rows.filter((r) => !r.home).map((r) => r.shots);
@@ -470,7 +499,7 @@ function playerPage(p) {
       const trendTxt = Math.abs(trend) < 0.2 ? "in line with his season rate" : trend > 0 ? `up from ${f1(avg(sh))} on the season` : `down from ${f1(avg(sh))} on the season`;
       answer = `${p.name} has gone over 2.5 shots on goal in ${rate(r25)} this season, recorded a point in ${rate(rp)} and scored in ${rate(rg)}. Over his last ${last10.length} games he is averaging ${f1(avg(last10))} shots, ${trendTxt}.`;
       splits = [["Shots per game, season", f1(avg(sh))], [`Shots per game, last ${last10.length}`, f1(avg(last10))],
-        ["Shots per game at home", f1(avg(shHome))], ["Shots per game on the road", f1(avg(shRoad))],
+        ["Shots per game at home", f1(avg(shHome), "No home games yet")], ["Shots per game on the road", f1(avg(shRoad), "No road games yet")],
         ...(toi != null ? [["Ice time per game", `${Math.floor(toi)}:${String(Math.round((toi % 1) * 60)).padStart(2, "0")}`]] : [])];
     }
   }
@@ -493,6 +522,10 @@ ${rates.map((r) => `          <tr><td>${esc(r.label)}</td><td class="num">${r.li
       </div>
       <p class="src">${isGoalie ? `Starts only (${pool.length}), this regular season.` : `All ${rows.length} games this regular season.`} A hit rate is history, not a projection: it ignores the opponent, rest and goaltending, which is what the model adds.</p>` : "";
 
+  const notesHtml = p.notes ? `      <h2>${esc(p.notes.heading || `${p.name} this season`)}</h2>
+${p.notes.paragraphs.map((t) => `      <p>${esc(t)}</p>`).join("\n")}
+      <p class="src">Written ${esc(niceDate(p.notes.asOf))}${(p.notes.sources || []).length ? `. Sources: ${p.notes.sources.map((x) => `<a href="${esc(x.url)}" rel="nofollow noopener">${esc(x.label)}</a>`).join(", ")}` : ""}.</p>` : "";
+
   const splitsHtml = splits.length ? `      <h2>Splits</h2>
       <div class="h2h-wrap">
         <table class="h2h">
@@ -511,8 +544,9 @@ ${splits.map(([k, v]) => `          <tr><td>${esc(k)}</td><td class="num">${esc(
 ${last5.map((r) => {
     const opp = `${r.home ? "vs" : "@"} ${r.opp}`;
     const cells = isGoalie
-      ? [shortGameDate(r.date), opp, r.decision || "—", r.sa ?? "—", r.saves ?? "—", r.ga ?? "—"]
-      : [shortGameDate(r.date), opp, r.goals, r.assists, r.points, r.shots, r.toi != null ? `${Math.floor(r.toi)}:${String(Math.round((r.toi % 1) * 60)).padStart(2, "0")}` : "—"];
+      ? [shortGameDate(r.date), opp, // Pas de décision = entré en relève (ou sorti sans décision) : on le dit.
+      r.decision || (r.started ? "No decision" : "Relief"), r.sa ?? "n/a", r.saves ?? "n/a", r.ga ?? "n/a"]
+      : [shortGameDate(r.date), opp, r.goals, r.assists, r.points, r.shots, r.toi != null ? `${Math.floor(r.toi)}:${String(Math.round((r.toi % 1) * 60)).padStart(2, "0")}` : "n/a"];
     return `          <tr>${cells.map((c, i) => `<td${i > 1 ? ' class="num"' : ""}>${esc(c)}</td>`).join("")}</tr>`;
   }).join("\n")}
           </tbody>
@@ -549,6 +583,7 @@ ${gp ? `      <h2>${esc(p.name)}'s season at a glance</h2>
       <div class="stats-row">
 ${cardsHtml}
       </div>` : ""}
+${notesHtml}
 ${ratesTable}
 ${splitsHtml}
 ${last5Html}
@@ -1042,6 +1077,15 @@ async function syncPropsRedirects(allow, keep) {
       permanent: false,
     });
   }
+  // La 301 permanente exclut la liste blanche ENTIÈRE (pages écrites ET
+  // garées) : sans quoi un slug ajouté à la liste reste redirigé et sa page
+  // n'est jamais servie. Elle était tenue à la main ; elle suit maintenant la
+  // liste, qui est la seule source.
+  const perm = redirects.find((r) => r.source?.startsWith("/props/:slug((?!") && r.permanent !== false);
+  if (!perm) throw new Error("vercel.json : redirection 301 /props/ introuvable, rien n'est modifié");
+  const bad = [...allow].filter((sl) => !/^[a-z0-9-]+$/.test(sl));
+  if (bad.length) throw new Error(`slug(s) invalide(s) dans la liste blanche : ${bad.join(", ")}`);
+  perm.source = `/props/:slug((?!(?:${[...allow].sort().join("|")})$)[^/]+)`;
   cfg.redirects = redirects;
   await fs.writeFile(VERCEL_JSON, JSON.stringify(cfg, null, 2) + "\n", "utf-8");
   console.log(`  vercel.json : ${parked.length} page(s) joueur en redirection temporaire`);
@@ -1078,6 +1122,12 @@ async function main() {
     // normal en début de saison), ou échangé, retraité, renommé.
     console.warn(`  ⚠️  ${missing.length} joueur(s) de la liste sans page (moins de ${MIN_GP} matchs cette saison, ou introuvable) : ${missing.join(", ")}`);
   }
+
+  const notes = await loadPropsNotes();
+  for (const p of players) if (notes[p.slug]) p.notes = notes[p.slug];
+  const unused = Object.keys(notes).filter((sl) => !players.some((p) => p.slug === sl));
+  console.log(`  ${players.filter((p) => p.notes).length} player page(s) with a written note`);
+  if (unused.length) console.warn(`  ⚠️  note(s) sans page ce passage : ${unused.join(", ")}`);
 
   const dynamicLocs = [];
 

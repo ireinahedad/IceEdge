@@ -1,0 +1,4 @@
+label,games,win_pct,expected_pct
+Flying east,117,41.9,50.0
+All other games,588,60.4,56.9
+All road games,351,52.1,51.6

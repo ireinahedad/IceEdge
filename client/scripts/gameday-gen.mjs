@@ -183,6 +183,7 @@ const L = {
     slateH: (d) => `arakiceML predictions for ${d}`,
     slateCols: ["Game", "Puck drop", "Model favourite", "Win chance"],
     slateEven: "Coin flip",
+    slateNotYet: "Posted game day",
     slateNote: "Pre-game win probabilities, overtime and shootout included, recorded in the morning and committed to ArakIce's public prediction record before the first puck drop.",
     slateProof: "See the timestamped file",
     slatePending: "The model's numbers for this slate are published in the morning, Eastern time, before the first game.",
@@ -258,6 +259,7 @@ const L = {
     slateH: (d) => `Les pronostics d'arakiceML du ${d}`,
     slateCols: ["Match", "Mise au jeu", "Favori du modèle", "Chances de victoire"],
     slateEven: "Pile ou face",
+    slateNotYet: "Publié le matin du match",
     slateNote: "Probabilités de victoire d'avant-match, prolongation et tirs de barrage compris, enregistrées le matin et commitées dans le bilan public d'ArakIce avant la première mise au jeu.",
     slateProof: "Voir le fichier horodaté",
     slatePending: "Les chiffres du modèle pour ce programme sont publiés le matin, heure de l'Est, avant le premier match.",
@@ -885,10 +887,10 @@ function gamePage({ lang, game, a, b, series, ra, rb, final, sameDay, pred }) {
     </div>`;
   const body = `    <section class="hero">
       <p class="eyebrow">${esc(eyebrow)}</p>
-      <h1>${esc(an)} ${esc(T.vs)} ${esc(bn)} — ${esc(dLong)}</h1>
+      <h1>${esc(an)} ${esc(T.vs)} ${esc(bn)}, ${esc(dLong)}</h1>
       <div class="matchup-teams">
         <div class="team"><img src="${nhlLogo(a.abbr)}" alt="${esc(an)}" width="72" height="72" /><div class="abbr">${esc(a.abbr)}</div></div>
-        <div class="vs">${esc(isFinal && final.awayScore != null ? `${final.awayScore} – ${final.homeScore}` : T.vs)}</div>
+        <div class="vs">${esc(isFinal && final.awayScore != null ? `${final.awayScore} : ${final.homeScore}` : T.vs)}</div>
         <div class="team"><img src="${nhlLogo(b.abbr)}" alt="${esc(bn)}" width="72" height="72" /><div class="abbr">${esc(b.abbr)}</div></div>
       </div>
     </section>
@@ -937,7 +939,7 @@ function slateTable(lang, date, games) {
   const pct = (n) => (lang === "fr" ? `${n} %` : `${n}%`);
   const rows = games.map((g) => {
     const href = `${SITE}${pagePath(lang, g.date, g.slug)}`;
-    let fav = "—", p = "—";
+    let fav = T.slateNotYet, p = "";
     if (g.pred) {
       const homeP = Math.round(g.pred.homeWin * 100);
       if (homeP === 50) { fav = T.slateEven; p = pct(50); }
@@ -966,7 +968,7 @@ function hubPage({ lang, date, games, dated = false }) {
   const canonical = T.hubPath + sfx;
   const alternates = { en: L.en.hubPath + sfx, "fr-ca": L.fr.hubPath + sfx, "x-default": L.en.hubPath + sfx };
   const items = games.map((g) =>
-    `          <li><a href="${SITE}${pagePath(lang, g.date, g.slug)}">${esc(g.awayName)} ${esc(T.vs)} ${esc(g.homeName)}</a>${g.time ? ` — ${esc(g.time)}` : ""}</li>`).join("\n");
+    `          <li><a href="${SITE}${pagePath(lang, g.date, g.slug)}">${esc(g.awayName)} ${esc(T.vs)} ${esc(g.homeName)}</a>${g.time ? `, ${esc(g.time)}` : ""}</li>`).join("\n");
   const jsonld = {
     "@context": "https://schema.org",
     "@type": "CollectionPage",

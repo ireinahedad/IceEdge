@@ -1,0 +1,6 @@
+label,days,games,win_pct,expected_pct
+1 day (back-to-back),1,7287,44.9,48.5
+2 days,2,24080,50.8,50.3
+3 days,3,7988,52.1,50.4
+4 days,4,1998,51.3,50.1
+5+ days,5,1949,49.4,50.4
