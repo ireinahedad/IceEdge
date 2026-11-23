@@ -921,6 +921,11 @@ ${others ? `        <h3>${esc(T.other)}</h3>\n        <ul>\n${others}\n        <
   return layout({
     title, desc, canonicalPath: canonical, jsonld, body,
     lang, alternates, ogLocale: T.ogLocale,
+    // Match passé : la page reste en ligne pour les liens, mais sort de
+    // l'index et du sitemap (décision du user 2026-11-23). Search Console
+    // montrait 0 page de match indexée sur 692 : elles enterraient les pages
+    // joueur et confrontation qui, elles, rankent.
+    ...(game.date < etToday() ? { robots: "noindex, follow" } : {}),
   });
 }
 
@@ -1002,6 +1007,7 @@ ${games.length ? `        <ul>\n${items}\n        </ul>` : `        <p>${esc(T.h
     title: T.hubTitle(dShort),
     desc: games.some((g) => g.pred) ? fit(DESC_MAX, T.hubDescPred(games.length, dShort), T.hubDesc(games.length, dShort)) : T.hubDesc(games.length, dShort),
     canonicalPath: canonical, jsonld, body,
+    ...(dated && date < etToday() ? { robots: "noindex, follow" } : {}),
     lang, alternates, ogLocale: T.ogLocale,
   });
 }
@@ -1027,6 +1033,11 @@ async function writeGamesSitemap(outDir) {
   };
   await walk(path.join(outDir, "match"), "/match");
   await walk(path.join(outDir, "fr", "match"), "/fr/match");
+  // Seuls aujourd'hui et les jours à venir vont au sitemap : un match passé
+  // est en noindex (voir la page de match). Les pages restent sur le disque.
+  const today = etToday();
+  const kept = locs.filter((u) => { const m = u.loc.match(/\/(\d{4}-\d{2}-\d{2})(\/|$)/); return !m || m[1] >= today; });
+  locs.length = 0; locs.push(...kept);
   locs.sort((x, y) => x.loc.localeCompare(y.loc));
   const rows = locs.map((u) =>
     `  <url>\n    <loc>${SITE}${u.loc}</loc>\n    <lastmod>${u.lastmod}</lastmod>\n  </url>`).join("\n");

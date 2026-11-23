@@ -329,7 +329,7 @@ const CHROME = {
 // (`"en"`, aucune alternative) la sortie est identique à l'octet près à ce que
 // ce fichier produisait avant — c'est la condition pour ne pas rejouer une
 // réindexation complète des pages qui rankent déjà.
-function layout({ title, desc, canonicalPath, jsonld, body, extraHead = "", disclaimer = true, lang = "en", alternates = null, ogLocale = null }) {
+function layout({ title, desc, canonicalPath, jsonld, body, extraHead = "", disclaimer = true, lang = "en", alternates = null, ogLocale = null, robots = "index, follow, max-image-preview:large" }) {
   const url = SITE + canonicalPath;
   const T = CHROME[lang] || CHROME.en;
   // hreflang : Google exige la réciprocité (chaque version pointe vers toutes
@@ -349,7 +349,7 @@ function layout({ title, desc, canonicalPath, jsonld, body, extraHead = "", disc
   <title>${esc(title)}</title>
   <meta name="description" content="${esc(desc)}" />
   <link rel="canonical" href="${url}" />
-${hreflang}  <meta name="robots" content="index, follow, max-image-preview:large" />
+${hreflang}  <meta name="robots" content="${robots}" />
   <meta property="og:type" content="website" />
   <meta property="og:site_name" content="ArakIce" />${ogLocale ? `\n  <meta property="og:locale" content="${esc(ogLocale)}" />` : ""}
   <meta property="og:title" content="${esc(title)}" />
