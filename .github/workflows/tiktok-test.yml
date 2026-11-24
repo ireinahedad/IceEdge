@@ -1,0 +1,72 @@
+name: TikTok — essai
+
+# Envoie la vidéo TikTok d'un jour (déjà sur R2) en brouillon dans la boîte de
+# réception TikTok. Sert à l'essai et à la vidéo de démonstration pour la revue
+# TikTok, sans relancer la chaîne du jour. Le nouveau jeton est rangé ensuite
+# (TikTok le remplace à chaque usage), comme dans content-parlays.yml.
+
+on:
+  workflow_dispatch:
+    inputs:
+      date:
+        description: "Jour NHL YYYY-MM-DD de la vidéo (vide = aujourd'hui, heure de New York)"
+        required: false
+        default: ""
+
+concurrency:
+  group: content-parlays   # jamais en même temps que le run du jour : même jeton
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: server
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+
+      - name: Récupérer la vidéo
+        env:
+          R2_PUBLIC_URL: ${{ secrets.R2_PUBLIC_URL }}
+          INPUT_DATE: ${{ github.event.inputs.date }}
+        run: |
+          D="$INPUT_DATE"
+          [ -z "$D" ] && D=$(TZ=America/New_York date +%F)
+          echo "$D" | grep -Eq '^[0-9]{4}-[0-9]{2}-[0-9]{2}$' || { echo "date invalide : $D"; exit 1; }
+          curl -fsSL "${R2_PUBLIC_URL%/}/parlays/$D-parlays-pick.mp4" -o "$RUNNER_TEMP/tiktok.mp4" \
+            || { echo "::error::Pas de vidéo TikTok sur R2 pour le $D (le run du jour l'a-t-il produite ?)"; exit 1; }
+          ls -lh "$RUNNER_TEMP/tiktok.mp4"
+
+      - name: Installer les dépendances
+        run: npm ci --no-audit --no-fund --ignore-scripts
+
+      - name: Envoyer en brouillon
+        env:
+          TIKTOK_CLIENT_KEY:    ${{ vars.TIKTOK_CLIENT_KEY }}
+          TIKTOK_CLIENT_SECRET: ${{ secrets.TIKTOK_CLIENT_SECRET }}
+          TIKTOK_REFRESH_TOKEN: ${{ secrets.TIKTOK_REFRESH_TOKEN }}
+          TIKTOK_REFRESH_OUT:   ${{ runner.temp }}/tiktok-refresh
+        run: npx ts-node scripts/tiktok-test.ts --file="$RUNNER_TEMP/tiktok.mp4"
+
+      - name: Ranger le jeton TikTok
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.SECRETS_PAT }}
+          TOKEN_FILE: ${{ runner.temp }}/tiktok-refresh
+        run: |
+          [ -s "$TOKEN_FILE" ] || exit 0
+          if [ -z "$GH_TOKEN" ]; then
+            echo "::error::Nouveau jeton TikTok reçu mais SECRETS_PAT absent : impossible de le ranger. Relancer node scripts/tiktok-auth.mjs."
+            exit 1
+          fi
+          gh secret set TIKTOK_REFRESH_TOKEN --repo "$GITHUB_REPOSITORY" < "$TOKEN_FILE"
+          rm -f "$TOKEN_FILE"
+          echo "Secret TIKTOK_REFRESH_TOKEN mis à jour."
