@@ -23,7 +23,12 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 
 // La clé client n'est pas un secret (elle apparaît dans le lien de connexion).
-const CLIENT_KEY = process.env.TIKTOK_CLIENT_KEY?.trim() || 'aw2issrtgxkchr8b';
+// Clé du mode SANDBOX (2026-11-24) : tant que l'app n'est pas approuvée, seuls
+// les comptes « target users » du sandbox peuvent se connecter. Après
+// approbation, passer à la clé de production (aw2issrtgxkchr8b), ici ET dans la
+// variable GitHub TIKTOK_CLIENT_KEY, puis relancer ce script : un jeton obtenu
+// avec la clé sandbox ne marche pas avec la clé de production.
+const CLIENT_KEY = process.env.TIKTOK_CLIENT_KEY?.trim() || 'sbawi7g2aox3p9qk0l';
 const REDIRECT_URI = process.env.TIKTOK_REDIRECT_URI?.trim() || 'https://arakice.com/tiktok-callback';
 const SCOPES = (process.env.TIKTOK_SCOPES?.trim() || 'user.info.basic,video.upload');
 const STATE_FILE = path.join(os.tmpdir(), 'arakice-tiktok-state.txt');
