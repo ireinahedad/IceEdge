@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="robots" content="noindex, nofollow" />
+  <meta name="referrer" content="no-referrer" />
+  <title>TikTok connection | ArakIce</title>
+  <link rel="icon" type="image/png" sizes="96x96" href="/arakice-icon-96.png" />
+  <link rel="stylesheet" href="/seo.css" />
+</head>
+<body>
+  <main class="container" style="max-width:720px;padding:48px 20px">
+    <h1>TikTok connection</h1>
+    <p id="tk-status">Reading the response from TikTok…</p>
+    <div id="tk-ok" hidden>
+      <p>TikTok authorized ArakIce. Paste this command in the terminal where you started the connection, inside the <code>server</code> folder:</p>
+      <pre id="tk-cmd" style="white-space:pre-wrap;word-break:break-all;background:#0f1722;color:#e8eef6;padding:16px;border-radius:10px"></pre>
+      <p><button id="tk-copy" class="btn" type="button">Copy command</button></p>
+      <p style="color:#6b7785">The code works once and expires within minutes. ArakIce only uses this connection to send its own daily video to this account's TikTok inbox as a draft; nothing is posted without you.</p>
+    </div>
+    <p id="tk-err" hidden style="color:#c0392b"></p>
+  </main>
+  <script src="/tiktok-callback.js" defer></script>
+</body>
+</html>

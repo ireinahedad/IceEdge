@@ -121,6 +121,12 @@ jobs:
           PARLAYS_INSTAGRAM:      ${{ vars.PARLAYS_INSTAGRAM }}
           INSTAGRAM_ACCESS_TOKEN: ${{ secrets.INSTAGRAM_ACCESS_TOKEN }}
           INSTAGRAM_USER_ID:      ${{ secrets.INSTAGRAM_USER_ID }}
+          # TikTok (2026-11-24) : brouillon dans la boîte de réception de l'app.
+          # Inactif tant que les trois valeurs ne sont pas posées ; le courriel reste dans tous les cas.
+          TIKTOK_CLIENT_KEY:      ${{ vars.TIKTOK_CLIENT_KEY }}
+          TIKTOK_CLIENT_SECRET:   ${{ secrets.TIKTOK_CLIENT_SECRET }}
+          TIKTOK_REFRESH_TOKEN:   ${{ secrets.TIKTOK_REFRESH_TOKEN }}
+          TIKTOK_REFRESH_OUT:     ${{ runner.temp }}/tiktok-refresh
           DUE_DATE: ${{ steps.due.outputs.date }}
           DRY_RUN: ${{ github.event.inputs.dry_run }}
         run: |
@@ -128,6 +134,24 @@ jobs:
           [ -n "$DUE_DATE" ] && ARGS="$ARGS --date=$DUE_DATE"
           [ "$DRY_RUN" = "true" ] && ARGS="$ARGS --dry-run"
           npx ts-node scripts/parlays-daily.ts $ARGS
+
+      # TikTok remplace le jeton de rafraîchissement à chaque usage : le nouveau
+      # doit être rangé, même si le run a échoué après le rafraîchissement.
+      # Même mécanique que instagram-token.yml (secret SECRETS_PAT).
+      - name: Ranger le jeton TikTok
+        if: always() && steps.due.outputs.due == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.SECRETS_PAT }}
+          TOKEN_FILE: ${{ runner.temp }}/tiktok-refresh
+        run: |
+          [ -s "$TOKEN_FILE" ] || exit 0
+          if [ -z "$GH_TOKEN" ]; then
+            echo "::error::Nouveau jeton TikTok reçu mais SECRETS_PAT absent : impossible de le ranger. Relancer node scripts/tiktok-auth.mjs."
+            exit 1
+          fi
+          gh secret set TIKTOK_REFRESH_TOKEN --repo "$GITHUB_REPOSITORY" < "$TOKEN_FILE"
+          rm -f "$TOKEN_FILE"
+          echo "Secret TIKTOK_REFRESH_TOKEN mis à jour."
 
       # La vidéo reste téléchargeable 7 jours depuis la page du run — utile pour
       # un essai à blanc, ou si le courriel n'est pas arrivé.

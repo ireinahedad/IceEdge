@@ -128,3 +128,6 @@ mcp/mcp-publisher.exe
 # Notes locales pour decembre 2026 (calendrier sans Claude) — jamais dans le depot public
 CALENDRIER_SANS_CLAUDE.html
 NOTES_JANVIER.md
+
+# TikTok : jeton écrit par scripts/tiktok-auth.mjs quand gh est absent
+tiktok-refresh-token.txt

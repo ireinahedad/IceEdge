@@ -20,6 +20,11 @@
  *      Short « pick » est envoyé en privé et PROGRAMMÉ (`publishAt`) pour sortir
  *      2 h avant le 1er match ; le gel ayant lieu à 06:00 UTC (14 h à Bali).
  *   4. TIKTOK — mp4 sur R2 + courriel à NOTIFY_EMAIL, puis drapeau `tiktok_<mode>`.
+ *      Depuis le 2026-11-24, si TIKTOK_CLIENT_KEY / _SECRET / _REFRESH_TOKEN sont
+ *      posés, la vidéo part AUSSI en brouillon dans la boîte de réception TikTok
+ *      (scripts/lib/tiktok.ts) ; le courriel reste (légende, Reddit, X) et sert
+ *      de repli si l'envoi échoue. Le nouveau jeton est écrit dans
+ *      $TIKTOK_REFRESH_OUT pour que le workflow le range.
  *   5. INSTAGRAM (pick, si la variable PARLAYS_INSTAGRAM vaut « on ») — version
  *      1080×1920 AVEC musique sur R2, conteneur Reel créé chez Meta, et file
  *      d'attente `instagram/<date>.json` sur R2. La publication elle-même a lieu
@@ -44,6 +49,7 @@ import {
   uploadYoutube, uploadR2, sendTiktokMail, putR2Json, getR2Json, createInstagramReel,
   type Privacy, type InstagramQueue,
 } from './lib/parlayPublish';
+import { tiktokConfigured, refreshTiktok, uploadTiktokInbox, tiktokStatus } from './lib/tiktok';
 
 const SERVER_DIR = path.resolve(__dirname, '..');
 const OUTPUT_ROOT = path.resolve(SERVER_DIR, '..', 'content', 'output');
@@ -241,8 +247,23 @@ async function main() {
   }
   const youtubeUrl = `https://youtube.com/shorts/${youtubeId}`;
 
-  // 4. TikTok : mp4 sur R2 + courriel.
+  // 4. TikTok : brouillon dans l'app (si configuré), mp4 sur R2 + courriel.
   if (!tkDone) {
+    let inbox: string | null = null;
+    if (tiktokConfigured()) {
+      try {
+        const t = await refreshTiktok();
+        // Rangé AVANT l'envoi : le jeton précédent ne vaut plus rien, même si l'envoi échoue ensuite.
+        if (process.env.TIKTOK_REFRESH_OUT) await fs.writeFile(process.env.TIKTOK_REFRESH_OUT, t.refreshToken, { encoding: 'utf8', mode: 0o600 });
+        const publishId = await uploadTiktokInbox(v.tiktok, t.accessToken);
+        await new Promise((r) => setTimeout(r, 5000));
+        inbox = `Brouillon envoyé dans ta boîte de réception TikTok (${await tiktokStatus(publishId, t.accessToken)}) : ouvre TikTok, ajoute un son, colle la légende et publie.`;
+        summary(`- TikTok : brouillon envoyé dans l'app (${publishId})`);
+      } catch (e: any) {
+        inbox = `Envoi automatique vers TikTok impossible (${e.message}) : télécharge la vidéo ci-dessous.`;
+        summary(`- TikTok : envoi automatique échoué, repli sur le courriel (${e.message})`);
+      }
+    }
     const videoUrl = await uploadR2(v.tiktok, `parlays/${key}.mp4`);
     await sendTiktokMail({
       subject: `${trial ? '[ESSAI] ' : ''}TikTok · ${mode === 'pick' ? "Tonight's parlays" : 'Parlay results'} · ${date}`,
@@ -254,9 +275,9 @@ async function main() {
         { label: 'Reddit — commentaire dans le fil quotidien NHL (aucun lien : ils sont interdits)', text: post.text_reddit },
         { label: 'X', text: post.text_x },
       ],
-      note: publishAt
+      note: [inbox ?? '', publishAt
         ? `Le Short YouTube sort à ${baliTime(publishAt)} (heure de Bali) : midi heure de l'Est, ou 2 h avant le 1er match s'il est plus tôt. Tu peux programmer TikTok à la même heure dans l'app. Vidéo muette : ajoute un son TikTok.`
-        : 'Vidéo muette : ajoute un son TikTok.',
+        : 'Vidéo muette : ajoute un son TikTok.'].filter(Boolean).join(' '),
     });
     await api(`/content/parlays/${date}/posted`, { method: 'POST', secret: true, body: JSON.stringify({ kind: `tiktok_${mode}` }) });
     summary(`- TikTok : courriel envoyé (vidéo : ${videoUrl})`);
