@@ -44,8 +44,9 @@ Video format per segment: **the belief → the league chart → the verdict → 
 ## 5. Long road trips wear you down: NOT PROVEN
 - Game 4+ of a road trip: 44.1% vs 46.0% (p = 0.10, not conclusive).
 - "Getaway game" (last game before flying home): **45.6% vs 45.0%**, no effect on wins.
-- Nuance: skaters do score 5.8% fewer points in getaway games (league-wide skater study, ice time unchanged),
-  but it doesn't show up in the standings. (That skater stat is not opponent-adjusted.)
+- Correction (2026-11-24): the earlier "skaters score 5.8% fewer points in getaway games" was a home/road effect.
+  Compared with other road games, getaway games show no drop (−0.2%). Players DO score 4.4% less on a road
+  back-to-back with the same ice time (see the players video research).
 
 ## 6. The "trap game" after coming home: FALSE
 - First home game after a 3+ game road trip: **55.5% vs 54.1%** at home otherwise. No trap.

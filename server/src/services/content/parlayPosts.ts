@@ -30,14 +30,29 @@ export const DISCLAIMER = '18+ (21+ US). Not betting advice. Gamble responsibly.
 
 const SITE = 'https://arakice.com';
 
+/**
+ * Crédit Uppbeat (plan gratuit) de la piste `content/assets/music/parlays.mp3`.
+ * OBLIGATOIRE dans la description YouTube : c'est ce texte, avec le code de
+ * licence, qui évite la réclamation Content ID. Changer de piste = changer ce
+ * crédit en même temps (2026-11-24 : 'Soft & Beautiful', de 1:44 à la fin).
+ */
+export const MUSIC_CREDIT = [
+  "Music: 'Soft & Beautiful' by Dope Cat on #Uppbeat https://uppbeat.io/c/dope-cat",
+  'License code: 4YZOCUUGY6HLR6K1',
+].join('\n');
+/** Seuls domaines permis dans une description YouTube : le site, et le lien de crédit musical. */
+const YT_LINK_OK = /https?:\/\/(?!arakice\.com|uppbeat\.io\/c\/)/i;
+
 /** Durées, en secondes. */
+// 2026-11-24 : allongées. À 9-12 s, 48 % des spectateurs balayaient avant
+// d'avoir pu lire un combiné (YouTube Studio, 28 jours). Cible 15-20 s.
 const D = {
-  intro:     2.2,
-  cardBase:  1.6,   // en-tête du combiné + probabilité…
-  cardLeg:   0.6,   // … plus une jambe, lue d'un coup d'œil
-  cardMax:   5.0,
-  record:    2.8,
-  cta:       2.4,
+  intro:     3.0,
+  cardBase:  2.4,   // en-tête du combiné + probabilité…
+  cardLeg:   0.9,   // … plus une jambe, le temps de la lire
+  cardMax:   6.0,
+  record:    2.6,
+  cta:       2.6,
 };
 const round1 = (n: number) => Math.round(n * 10) / 10;
 
@@ -89,20 +104,35 @@ export function lastNightLine(yesterday: LoggedParlay[] | null | undefined): str
   return `Last night: ${won} of ${decided.length} hit`;
 }
 
-/** Le Short « pick » sort 2 h avant le 1er match… */
+/** Le Short « pick » sort à midi (heure de l'Est), ou 2 h avant le 1er match si c'est plus tôt… */
 export const YOUTUBE_LEAD_MS = 2 * 3_600_000;
+
+/**
+ * Midi à New York le jour (heure de l'Est) de l'instant `t`, en ms UTC.
+ * 2026-11-24 : 69 % des vues viennent de la recherche (« nhl picks today »),
+ * et on cherche les pronostics du jour avant les matchs, pas à la mise au jeu.
+ */
+export function noonET(t: number): number {
+  const day = new Date(t).toLocaleDateString('en-CA', { timeZone: 'America/New_York' });   // AAAA-MM-JJ
+  let guess = Date.parse(`${day}T17:00:00Z`);   // midi HNE ; corrigé ci-dessous pour l'heure d'été
+  const h = Number(new Date(guess).toLocaleString('en-US', { hour: 'numeric', hourCycle: 'h23', timeZone: 'America/New_York' }));
+  guess -= (h - 12) * 3_600_000;
+  return guess;
+}
 /** …si cette heure est encore à au moins 15 min ; sinon il sort tout de suite. */
 export const YOUTUBE_MIN_DELAY_MS = 15 * 60_000;
 
 /**
- * Heure de sortie programmée du Short (ISO), ou null = publier tout de suite.
+ * Heure de sortie programmée du Short (ISO), ou null = publier tout de suite :
+ * midi ET, ou 2 h avant le 1er match si celui-ci est avant 14 h ET.
  * Gel à 14 h à Bali depuis le 2026-10-26 (2 h du matin à New York) : sans
  * programmation, le Short sortirait en pleine nuit nord-américaine.
  */
 export function youtubePublishAt(firstStarts: Array<string | null | undefined>, now: number): string | null {
   const times = firstStarts.map((s) => Date.parse(s ?? '')).filter(Number.isFinite);
   if (!times.length) return null;
-  const at = Math.min(...times) - YOUTUBE_LEAD_MS;
+  const first = Math.min(...times);
+  const at = Math.min(first - YOUTUBE_LEAD_MS, noonET(first));
   return at - now >= YOUTUBE_MIN_DELAY_MS ? new Date(at).toISOString() : null;
 }
 
@@ -160,6 +190,13 @@ function cardSeconds(legs: number): number {
   return round1(Math.min(D.cardMax, D.cardBase + D.cardLeg * legs));
 }
 
+/** La jambe la plus probable du soir (pour l'accroche), ou null. */
+export function topLeg(parlays: LoggedParlay[]): BestBet | null {
+  let best: BestBet | null = null;
+  for (const p of parlays) for (const l of p.legs) if (Number.isFinite(l.score) && (!best || l.score > best.score)) best = l;
+  return best;
+}
+
 export function buildParlayPost(
   mode: ParlayMode, date: string, parlays: LoggedParlay[], record: ParlayRecord | null,
   yesterday: LoggedParlay[] | null = null,
@@ -172,13 +209,17 @@ export function buildParlayPost(
   let n = 1;
 
   if (mode === 'pick') {
+    // L'ouverture accroche : le pari le plus probable du soir, chiffré. Le
+    // bilan (pertes comprises) n'est pas retiré, il passe sur son propre plan
+    // juste avant la carte de fin : on reste honnête sans ouvrir dessus.
+    const top = topLeg(parlays);
     slides.push({
       n: n++, template: 'parlay_pick', kind: 'intro', duration: D.intro, text: '',
       intro: {
-        title: "Tonight's NHL parlays", weekday: day.weekday, date: day.long,
-        line: `${parlays.length} parlay${parlays.length > 1 ? 's' : ''} · arakiceML model`,
-        record: rec ? `Record ${rec}` : null,
-        last,
+        title: 'NHL picks today', weekday: day.weekday, date: day.long,
+        line: top ? `Top pick: ${top.label} · ${pct(top.score)}` : `${parlays.length} parlay${parlays.length > 1 ? 's' : ''} · arakiceML model`,
+        record: null,
+        last: null,
       },
     });
   } else {
@@ -208,14 +249,14 @@ export function buildParlayPost(
     });
   }
 
-  if (mode === 'result' && rec) {
+  if (rec) {
     slides.push({
-      n: n++, template: 'parlay_result', kind: 'record', duration: D.record, text: '',
+      n: n++, template: mode === 'pick' ? 'parlay_pick' : 'parlay_result', kind: 'record', duration: D.record, text: '',
       record: {
         pct: `${Math.round(record!.winPct!)}%`,
         line: `${record!.won}-${record!.lost}`,
         since: record!.since ? `since ${dayParts(record!.since).short}` : '',
-        note: 'Every published parlay counts, losses included.',
+        note: [last ? `${last}.` : '', 'Every published parlay counts, losses included.'].filter(Boolean).join(' '),
       },
     });
   }
@@ -226,7 +267,7 @@ export function buildParlayPost(
   return {
     candidate_id: `${date}-parlays-${mode}`,
     variant: 'short',
-    duration_target: [10, 20],
+    duration_target: [12, 25],
     subject: mode === 'pick' ? `NHL parlays · ${day.short}` : `Results · ${day.short}`,
     slides,
     ...caps,
@@ -236,7 +277,7 @@ export function buildParlayPost(
 
 // ─── Légendes ────────────────────────────────────────────────────────────────
 
-const HASHTAGS = ['#NHL', '#hockey', '#NHLPicks', '#Parlay'];
+const HASHTAGS = ['#NHL', '#hockey', '#NHLPicks', '#NHLPredictions', '#Parlay'];
 
 function utm(source: 'youtube' | 'tiktok' | 'x', date: string): string {
   return `${SITE}/match/${date}?utm_source=${source}&utm_medium=social&utm_campaign=parlays`;
@@ -289,10 +330,15 @@ function captions(mode: ParlayMode, date: string, parlays: LoggedParlay[], rec: 
 
   if (mode === 'pick') {
     const lead = `Tonight's ${parlays.length} free NHL parlays from the arakiceML model, ${day.short}.`;
+    // Titre et 1re ligne calqués sur ce que les gens tapent (YouTube Studio,
+    // 2026-11-24) : « nhl picks today » 20 %, « pronostico nhl hoy » 5 %,
+    // « nhl predictions today » 3 %. Le titre ne disait que « Parlays ».
+    const ytLead = `NHL picks today, ${day.weekday} ${day.short}: the arakiceML model's ${parlays.length} best parlay${parlays.length > 1 ? 's' : ''} and predictions.`;
+    const ytEs = `Pronóstico NHL hoy (${day.short}): ${parlays.length} parlay${parlays.length > 1 ? 's' : ''} del modelo arakiceML.`;
     return {
-      youtube_title: `Tonight's NHL Parlays — ${day.short} #Shorts`,
-      youtube_description: [lead, '', ...lines, '', recordTxt,
-        `Every leg, matchup and model probability: ${utm('youtube', date)}`, '', DISCLAIMER, '', `#Shorts ${tags}`]
+      youtube_title: `NHL Picks Today (${day.short}): Best Parlay${parlays.length > 1 ? 's' : ''} and Predictions #Shorts`,
+      youtube_description: [ytLead, ytEs, '', ...lines, '', recordTxt,
+        `Every leg, matchup and model probability: ${utm('youtube', date)}`, '', DISCLAIMER, '', MUSIC_CREDIT, '', `#Shorts ${tags}`]
         .filter((l, i, a) => !(l === '' && a[i - 1] === '')).join('\n').trim(),
       caption_tiktok: [lead, recordTxt, 'Full breakdown at arakice.com', DISCLAIMER].filter(Boolean).join(' '),
       caption_instagram: [lead, '', ...lines, '', 'Full breakdown at arakice.com', DISCLAIMER].join('\n'),
@@ -306,7 +352,7 @@ function captions(mode: ParlayMode, date: string, parlays: LoggedParlay[], rec: 
   return {
     youtube_title: `NHL Parlay Results — ${day.short} #Shorts`,
     youtube_description: [lead, '', ...lines, '', recordTxt, 'Every published parlay stays on the record, losses included.',
-      `Tonight's parlays: ${utm('youtube', date)}`, '', DISCLAIMER, '', `#Shorts ${tags}`]
+      `Tonight's parlays: ${utm('youtube', date)}`, '', DISCLAIMER, '', MUSIC_CREDIT, '', `#Shorts ${tags}`]
       .filter((l, i, a) => !(l === '' && a[i - 1] === '')).join('\n').trim(),
     caption_tiktok: [lead, recordTxt, "Tonight's parlays at arakice.com", DISCLAIMER].filter(Boolean).join(' '),
     caption_instagram: [lead, '', ...lines, '', recordTxt, "Tonight's parlays at arakice.com", DISCLAIMER].join('\n'),
@@ -350,7 +396,8 @@ export function parlayComplianceProblems(post: ParlayPost): string[] {
   }
   if (post.youtube_title.length > 100) problems.push('youtube_title : plus de 100 caractères');
   if (post.youtube_description.length > 5000) problems.push('youtube_description : plus de 5 000 caractères');
-  if (/https?:\/\/(?!arakice\.com)/i.test(post.youtube_description)) problems.push('youtube_description : lien hors arakice.com');
+  if (YT_LINK_OK.test(post.youtube_description)) problems.push('youtube_description : lien hors arakice.com');
+  if (!post.youtube_description.includes(MUSIC_CREDIT)) problems.push('youtube_description : crédit musical Uppbeat absent');
   if (/https?:\/\/(?!arakice\.com)/i.test(post.text_x)) problems.push('text_x : lien hors arakice.com');
   if (/https?:\/\/|arakice\.com/i.test(post.text_reddit)) problems.push('text_reddit : lien interdit (règles Reddit)');
   return problems;

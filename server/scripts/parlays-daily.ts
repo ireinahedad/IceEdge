@@ -255,7 +255,7 @@ async function main() {
         { label: 'X', text: post.text_x },
       ],
       note: publishAt
-        ? `Le Short YouTube sort à ${baliTime(publishAt)} (heure de Bali), 2 h avant le 1er match. Tu peux programmer TikTok à la même heure dans l'app. Vidéo muette : ajoute un son TikTok.`
+        ? `Le Short YouTube sort à ${baliTime(publishAt)} (heure de Bali) : midi heure de l'Est, ou 2 h avant le 1er match s'il est plus tôt. Tu peux programmer TikTok à la même heure dans l'app. Vidéo muette : ajoute un son TikTok.`
         : 'Vidéo muette : ajoute un son TikTok.',
     });
     await api(`/content/parlays/${date}/posted`, { method: 'POST', secret: true, body: JSON.stringify({ kind: `tiktok_${mode}` }) });

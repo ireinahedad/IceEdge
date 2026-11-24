@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   buildParlayPost, parlayComplianceProblems, recordLine, etTime, pct, DISCLAIMER,
-  lastNightLine, youtubePublishAt,
+  lastNightLine, youtubePublishAt, noonET, topLeg, MUSIC_CREDIT,
 } from './parlayPosts';
 
 /** Les deux vidéos des combinés : plans, légendes, garde-fous (MARKETING_PLAN Phase C). */
@@ -40,14 +40,22 @@ describe('formats', () => {
 describe('buildParlayPost — pick', () => {
   const post = buildParlayPost('pick', '2026-10-22', [parlay(1), parlay(2)], record);
 
-  it('ouverture, un plan par combiné, carte de fin — 10 à 20 s', () => {
+  it('accroche, un plan par combiné, bilan, carte de fin — 15 à 20 s', () => {
     expect(post.candidate_id).toBe('2026-10-22-parlays-pick');
-    expect(post.slides.map((s) => s.kind)).toEqual(['intro', 'card', 'card', 'cta']);
+    expect(post.slides.map((s) => s.kind)).toEqual(['intro', 'card', 'card', 'record', 'cta']);
     expect(post.slides.every((s) => s.template === 'parlay_pick')).toBe(true);
     const total = post.slides.reduce((a, s) => a + s.duration, 0);
-    expect(total).toBeGreaterThanOrEqual(10);
+    expect(total).toBeGreaterThanOrEqual(15);
     expect(total).toBeLessThanOrEqual(20);
-    expect(post.slides[0].intro.record).toBe('Record 4-3 (57%) since Oct 14');
+    expect(post.slides[0].intro.title).toBe('NHL picks today');
+    expect(post.slides[0].intro.line).toBe('Top pick: BOS to win · 65%');
+    expect(post.slides[0].intro.record).toBeNull();
+    expect(post.slides[3].record).toMatchObject({ pct: '57%', line: '4-3', since: 'since Oct 14' });
+  });
+
+  it('topLeg : la jambe la plus probable, null sans jambe chiffrée', () => {
+    expect(topLeg([parlay(1)])!.label).toBe('BOS to win');
+    expect(topLeg([parlay(1, { legs: [] })])).toBeNull();
   });
 
   it('une jambe montre ce que l’API a gelé : libellé, match, heure, probabilité', () => {
@@ -61,14 +69,17 @@ describe('buildParlayPost — pick', () => {
     expect(post.caption_tiktok).toContain(DISCLAIMER);
     expect(post.youtube_description).toContain('utm_source=youtube');
     expect(post.youtube_description).toContain('https://arakice.com/match/2026-10-22');
-    expect(post.youtube_title).toBe("Tonight's NHL Parlays — Oct 22 #Shorts");
-    expect(post.hashtags).toEqual(['#NHL', '#hockey', '#NHLPicks', '#Parlay']);
+    expect(post.youtube_title).toBe('NHL Picks Today (Oct 22): Best Parlays and Predictions #Shorts');
+    expect(post.youtube_description.startsWith('NHL picks today, Thursday Oct 22:')).toBe(true);
+    expect(post.youtube_description).toContain('Pronóstico NHL hoy (Oct 22)');
+    expect(post.youtube_description).toContain("Music: 'Soft & Beautiful' by Dope Cat on #Uppbeat https://uppbeat.io/c/dope-cat\nLicense code: 4YZOCUUGY6HLR6K1");
+    expect(post.hashtags).toEqual(['#NHL', '#hockey', '#NHLPicks', '#NHLPredictions', '#Parlay']);
     expect(parlayComplianceProblems(post)).toEqual([]);
   });
 
   it('avant le premier résultat : pas de bilan inventé', () => {
     const p = buildParlayPost('pick', '2026-10-22', [parlay(1)], { ...record, won: 0, lost: 0, winPct: null });
-    expect(p.slides[0].intro.record).toBeNull();
+    expect(p.slides.some((s) => s.kind === 'record')).toBe(false);
     expect(p.caption_tiktok).not.toContain('Record');
   });
 });
@@ -111,6 +122,15 @@ describe('parlayComplianceProblems', () => {
     expect(parlayComplianceProblems(p)).toEqual([]);
   });
 
+  it('crédit Uppbeat : obligatoire, et son lien est le seul lien externe permis', () => {
+    const p = buildParlayPost('pick', '2026-10-22', [parlay(1)], record);
+    expect(parlayComplianceProblems(p)).toEqual([]);
+    expect(parlayComplianceProblems({ ...p, youtube_description: p.youtube_description.replace(MUSIC_CREDIT, '') }))
+      .toContain('youtube_description : crédit musical Uppbeat absent');
+    expect(parlayComplianceProblems({ ...p, youtube_description: `${p.youtube_description}\nhttps://uppbeat.io/promo` }))
+      .toContain('youtube_description : lien hors arakice.com');
+  });
+
   it('refuse un lien hors arakice.com dans la description', () => {
     expect(parlayComplianceProblems({ ...base, youtube_description: `${base.youtube_description} https://example.com` }))
       .toContain('youtube_description : lien hors arakice.com');
@@ -133,10 +153,10 @@ describe('vidéo du jour seule (2026-10-26) : « Last night » et Short programm
     expect(lastNightLine([parlay(1, { status: 'void' })])).toBeNull();
   });
 
-  it('la ligne passe sur l’ouverture et dans les légendes ; jamais en mode résultat', () => {
+  it('la ligne passe sur le plan du bilan et dans les légendes ; jamais en mode résultat', () => {
     const y = [parlay(1, { status: 'won' }), parlay(2, { status: 'lost' })];
     const post = buildParlayPost('pick', '2026-10-22', [parlay(1)], record, y);
-    expect(post.slides[0].intro.last).toBe('Last night: 1 of 2 hit');
+    expect(post.slides.find((s) => s.kind === 'record').record.note).toBe('Last night: 1 of 2 hit. Every published parlay counts, losses included.');
     expect(post.caption_tiktok).toContain('Last night: 1 of 2 hit. Record: 4-3 (57%) since Oct 14.');
     expect(post.youtube_description).toContain('Last night: 1 of 2 hit.');
     expect(parlayComplianceProblems(post)).toEqual([]);
@@ -145,10 +165,17 @@ describe('vidéo du jour seule (2026-10-26) : « Last night » et Short programm
     expect(res.slides[0].intro.last).toBeUndefined();
   });
 
-  it('youtubePublishAt : 1er match − 2 h, sinon tout de suite', () => {
+  it('noonET : midi à New York, heure d’été comme d’hiver', () => {
+    expect(new Date(noonET(Date.parse('2026-10-27T23:00:00Z'))).toISOString()).toBe('2026-10-27T16:00:00.000Z');   // HAE
+    expect(new Date(noonET(Date.parse('2026-11-24T00:30:00Z'))).toISOString()).toBe('2026-11-23T17:00:00.000Z');   // HNE, 19 h 30 ET le 23
+  });
+
+  it('youtubePublishAt : midi ET, ou 1er match − 2 h si plus tôt, sinon tout de suite', () => {
     const now = Date.parse('2026-10-27T06:05:00Z');   // 14 h 05 à Bali
-    expect(youtubePublishAt(['2026-10-27T23:00:00Z', '2026-10-27T23:30:00Z'], now)).toBe('2026-10-27T21:00:00.000Z');
-    expect(youtubePublishAt(['2026-10-27T23:30:00Z', null, '2026-10-27T23:00:00Z'], now)).toBe('2026-10-27T21:00:00.000Z');
+    expect(youtubePublishAt(['2026-10-27T23:00:00Z', '2026-10-27T23:30:00Z'], now)).toBe('2026-10-27T16:00:00.000Z');
+    expect(youtubePublishAt(['2026-10-27T23:30:00Z', null, '2026-10-27T23:00:00Z'], now)).toBe('2026-10-27T16:00:00.000Z');
+    // Match à 13 h ET : 2 h avant (11 h ET) passe avant midi.
+    expect(youtubePublishAt(['2026-10-27T17:00:00Z'], now)).toBe('2026-10-27T15:00:00.000Z');
     expect(youtubePublishAt([null], now)).toBeNull();
     // Rattrapage tardif : moins de 15 min avant l'heure prévue → tout de suite.
     expect(youtubePublishAt(['2026-10-27T23:00:00Z'], Date.parse('2026-10-27T20:50:00Z'))).toBeNull();
