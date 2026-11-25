@@ -1,10 +1,11 @@
-import { createBrowserRouter, isRouteErrorResponse, Navigate, Outlet, useLocation, useNavigate, useRouteError } from "react-router";
+import { createBrowserRouter, isRouteErrorResponse, Navigate, Outlet, useLocation, useRouteError } from "react-router";
 import { lazy, Suspense, useEffect, useState, type ReactNode } from "react";
 import { ErrorScreen, reportError } from "./components/ErrorScreen";
 import { useAuth } from "./context/AuthContext";
 import { AuthGateProvider } from "./context/AuthGateContext";
 import { TrialStatusNotice } from "./components/TrialStatusNotice";
 import { trackEvent } from "./analytics";
+import { introSeen, markIntroSeen } from "./introSeen";
 import { features } from "./platform";
 import { primeGet, gamePredictionsPath, primeMatchContext } from "./services/nhlApiService";
 import { fetchGameMlBundle } from "./services/mlApi";
@@ -127,10 +128,16 @@ function withSuspense(node: ReactNode) {
 }
 
 /**
- * Garde des pages réservées aux comptes. Depuis le 2026-11-20 (demande du
- * user), TOUT le contenu d'ArakIce en fait partie : stats, calendrier,
- * prédictions, bet builder, ligue… Restent publics : `/` (la patinoire pour
- * les visiteurs), /login, /pro (l'offre), les pages légales et la 404.
+ * Garde des pages réservées aux comptes : Pari (/bet), Communauté (/league),
+ * Profil, la page d'un joueur, /pro/success et les outils /dev.
+ *
+ * Historique : du 2026-11-20 au 2026-11-25, TOUT le contenu exigeait un compte ;
+ * la fréquentation a chuté (Vercel), le mur a été levé le 2026-11-25 (demande
+ * du user). Le reste (accueil, Stats, calendrier, pages de match, graphiques)
+ * se consulte sans compte ; les ACTIONS qui en exigent un (voter au pick'em,
+ * analyse IA…) ouvrent la fenêtre AuthGate au clic. Les onglets Pari,
+ * Communauté et Profil de la barre du bas l'ouvrent aussi pour un visiteur
+ * (BottomNav) : cette garde ne sert qu'aux URL tapées ou partagées.
  * Un visiteur est renvoyé vers /login avec `returnTo`, et y revient après.
  */
 function Protected({ children }: { children: ReactNode }) {
@@ -147,20 +154,31 @@ function Protected({ children }: { children: ReactNode }) {
 /**
  * `/` — page d'accueil des visiteurs (IntroLanding).
  *
- * Non connecté → toujours la patinoire ; « Voir ArakIce » mène à /login
- * (2026-11-20, demande du user : plus de contenu sans compte). Connecté →
- * les matchs de ce soir. Pendant la réhydratation de la session (quelques ms,
- * lecture du jeton local), on ne montre ni l'une ni l'autre pour éviter un
- * éclair.
+ * Non connecté → la patinoire et « Voir ArakIce ». Le clic ouvre l'accueil
+ * habituel (les matchs de ce soir) et le retient pour la SESSION de l'onglet
+ * (`introSeen`). Connecté → toujours les matchs, jamais la patinoire. Pendant
+ * la réhydratation de la session (quelques ms, lecture du jeton local), on ne
+ * montre ni l'une ni l'autre pour éviter un éclair.
+ *
+ * 2026-11-20 → 2026-11-25, « Voir ArakIce » menait à /login (mur levé depuis).
  */
 function HomeRoute() {
   const { user, loading } = useAuth();
-  const navigate = useNavigate();
+  const [entered, setEntered] = useState(introSeen);
   if (loading) return <PageFallback />;
-  if (!user) {
-    // `landing_enter_click` : mesure du mur de connexion du 2026-11-20 (combien
-    // de visiteurs de la patinoire vont jusqu'à /login).
-    return withSuspense(<IntroLanding onEnter={() => { trackEvent("landing_enter_click"); navigate("/login"); }} />);
+  if (!user && !entered) {
+    return withSuspense(
+      <IntroLanding
+        onEnter={() => {
+          // `landing_enter_click` : combien de visiteurs de la patinoire entrent
+          // dans l'app (mesure gardée depuis le mur du 2026-11-20).
+          trackEvent("landing_enter_click");
+          markIntroSeen();
+          window.scrollTo(0, 0);
+          setEntered(true);
+        }}
+      />,
+    );
   }
   return withSuspense(<HockeyLanding />);
 }
@@ -218,13 +236,13 @@ export const router = createBrowserRouter([
       { path: "/privacy",                            element: withSuspense(<PrivacyPage />)                  },
       { path: "/support",                            element: withSuspense(<SupportPage />)                  },
 
-      // Contenu de l'app — réservé aux comptes connectés (2026-11-20, demande du
-      // user). Avant, tout le plan de base se consultait sans compte. `/` reste
-      // public mais n'affiche que la patinoire (IntroLanding) aux visiteurs.
+      // Consultation libre — tout le contenu se lit sans compte (mur du
+      // 2026-11-20 levé le 2026-11-25, demande du user). Les actions qui
+      // exigent un compte, dans ces pages, passent par AuthGate.
       { path: "/",                                   element: <HomeRoute />                                  },
-      { path: "/stats",                              element: withSuspense(<Protected><StatsPage /></Protected>) },
-      { path: "/schedule",                           element: withSuspense(<Protected><SchedulePage /></Protected>) },
-      { path: "/stats/prediction/:type/:id",         element: withSuspense(<Protected><PredictionPage /></Protected>), loader: primeMatchPage,
+      { path: "/stats",                              element: withSuspense(<StatsPage />) },
+      { path: "/schedule",                           element: withSuspense(<SchedulePage />) },
+      { path: "/stats/prediction/:type/:id",         element: withSuspense(<PredictionPage />), loader: primeMatchPage,
         // Pas de nouvel amorçage quand seuls les paramètres d'URL changent (onglet,
         // marché ouvert) : la page ne relit rien, l'appel serait perdu.
         shouldRevalidate: ({ currentParams, nextParams }) => currentParams.id !== nextParams.id || currentParams.type !== nextParams.type },
@@ -236,13 +254,11 @@ export const router = createBrowserRouter([
       // pas se disputer une URL. Son premier segment reste `:type` et non le
       // littéral « team » : ChartPage aiguille sur `type`, et un littéral ne
       // remplit pas ce paramètre — la page retomberait sur son accueil.
-      { path: "/stats/chart",                        element: withSuspense(<Protected><ChartPage /></Protected>) },
-      { path: "/stats/chart/:type/:id?",             element: withSuspense(<Protected><ChartPage /></Protected>) },
-      { path: "/stats/chart/:type/:id/:section",     element: withSuspense(<Protected><ChartPage /></Protected>) },
-      { path: "/bet",                                element: withSuspense(<Protected><BetBuilderPage /></Protected>) },
-      { path: "/league",                             element: withSuspense(<Protected><LeaguePage /></Protected>) },
-      { path: "/nhl-predictions",                    element: withSuspense(<Protected><NHLPredictionsPage /></Protected>) },
-      { path: "/parlays",                            element: withSuspense(<Protected><MoreParlaysPage /></Protected>) },
+      { path: "/stats/chart",                        element: withSuspense(<ChartPage />) },
+      { path: "/stats/chart/:type/:id?",             element: withSuspense(<ChartPage />) },
+      { path: "/stats/chart/:type/:id/:section",     element: withSuspense(<ChartPage />) },
+      { path: "/nhl-predictions",                    element: withSuspense(<NHLPredictionsPage />) },
+      { path: "/parlays",                            element: withSuspense(<MoreParlaysPage />) },
       // `/share/:id` a été supprimée le 2026-09-06 : la page n'affichait qu'un
       // « les coupons partagés arrivent bientôt », rien dans l'app n'y renvoyait
       // (le partage passe par une image, ce qui reste le bon choix), et Apple
@@ -252,6 +268,12 @@ export const router = createBrowserRouter([
       // remettre la ligne.
 
       // Protected — require a signed-in account
+      // Pari et Communauté (2026-11-25, demande du user) : le coupon verrouillé,
+      // le classement, le chat et le pick'em de la ligue sont à soi ou sociaux.
+      // Ajouter un pari au coupon reste possible sans compte (le coupon vit dans
+      // le navigateur) ; c'est l'ouverture de /bet qui demande de se connecter.
+      { path: "/bet",                                element: withSuspense(<Protected><BetBuilderPage /></Protected>) },
+      { path: "/league",                             element: withSuspense(<Protected><LeaguePage /></Protected>) },
       // La page joueur exige un compte : le serveur doit savoir QUI regarde pour
       // trancher entre « c'est moi » et « il faut être Pro ». Le mur Pro lui-même
       // est appliqué côté serveur (402), pas ici.

@@ -119,8 +119,13 @@ export function requireOwnerOrAdmin(req: Request, res: Response, next: NextFunct
 // -------------------------------------------------------
 //  Contenu réservé aux comptes (2026-11-20, demande du user)
 // -------------------------------------------------------
-//  Toutes les données d'ArakIce (NHL, prédictions, cotes, nouvelles, pick'em,
-//  classement) exigent désormais un jeton valide. Les routes concernées
+//  ⚠️ 2026-11-25 : le mur est levé (demande du user, la fréquentation chutait).
+//  `requireAccount` n'est plus monté nulle part ; `privatizeCache` ne sert plus
+//  qu'à /api/leaderboard. Gardés pour refermer une route au besoin.
+//
+//  Du 2026-11-20 au 2026-11-25, toutes les données d'ArakIce (NHL,
+//  prédictions, cotes, nouvelles, pick'em, classement) exigeaient un jeton
+//  valide. Les routes concernées
 //  posaient un `Cache-Control: public` : sur une requête portant
 //  `Authorization`, `public` AUTORISE un cache partagé (CDN) à stocker la
 //  réponse et à la resservir à n'importe qui, connecté ou non (RFC 9111 §3.5).
@@ -151,6 +156,7 @@ export const requireAccount = [privatizeCache, authenticate];
 // -------------------------------------------------------
 //  Fil de nouvelles : clé de service OU compte (2026-11-22)
 // -------------------------------------------------------
+//  ⚠️ 2026-11-25 : plus monté (/api/news est redevenu public).
 //  Les comptes de nouvelles par équipe (dépôt NHL-posting) lisent `/api/news`
 //  depuis GitHub Actions, sans compte. Ils envoient `X-News-Key`, comparé en
 //  temps constant à `NEWS_FEED_SECRET`. Sans la variable, ou sans l'en-tête,

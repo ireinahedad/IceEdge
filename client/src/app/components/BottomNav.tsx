@@ -2,6 +2,7 @@ import { useNavigate, useLocation } from "react-router";
 import { Home, BarChart2, Target, Trophy, User } from "lucide-react";
 import { useBet } from "../context/BetContext";
 import { useAuth } from "../context/AuthContext";
+import { useAuthGate } from "../context/AuthGateContext";
 import { useI18n } from "../i18n";
 
 const navItems = [
@@ -11,6 +12,19 @@ const navItems = [
   { Icon: Trophy,    key: "nav.league",  path: "/league" },
   { Icon: User,      key: "nav.profile", path: "/profile" },
 ];
+
+/**
+ * Onglets réservés aux comptes (2026-11-25, demande du user). Pour un visiteur,
+ * le toucher ouvre la fenêtre AuthGate (« Vous devez être connecté pour… »)
+ * au lieu de l'envoyer sans explication sur /login ; « Annuler » le laisse sur
+ * sa page. Après connexion, il arrive sur l'onglet voulu. Profil n'en fait pas
+ * partie : pour un visiteur, c'est l'entrée naturelle de la connexion, il mène
+ * donc droit à /login.
+ */
+const GATED_TABS: Record<string, string> = {
+  "/bet":    "gate.openSlip",
+  "/league": "gate.openCommunity",
+};
 
 const ACCENT = "#86d1ea"; // ice blue — design system accent
 
@@ -39,7 +53,19 @@ export function BottomNav() {
   const location = useLocation();
   const { legs } = useBet();
   const { user } = useAuth();
+  const { requireAuth } = useAuthGate();
   const { t } = useI18n();
+
+  const go = (path: string) => {
+    // Déjà sur /login : pas de fenêtre par-dessus le formulaire, la garde de
+    // la route renvoie ici avec le bon `returnTo`.
+    if (!user && location.pathname !== "/login") {
+      const gateKey = GATED_TABS[path];
+      if (gateKey) { requireAuth(gateKey, path); return; }
+      if (path === "/profile") { navigate(`/login?returnTo=${encodeURIComponent(path)}`); return; }
+    }
+    navigate(path);
+  };
 
   const isActive = (path: string) => {
     if (path === "/") return location.pathname === "/";
@@ -74,7 +100,7 @@ export function BottomNav() {
           <button
             key={key}
             type="button"
-            onClick={() => navigate(path)}
+            onClick={() => go(path)}
             // `aria-current="page"` : sans lui, un lecteur d'écran annonce cinq
             // onglets identiques et ne dit jamais où l'on se trouve. La couleur
             // et l'épaisseur du trait le disent à l'œil, à personne d'autre.

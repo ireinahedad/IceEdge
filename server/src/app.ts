@@ -35,7 +35,7 @@ import { apiLimiter, authLimiter, writeLimiter } from './middleware/rateLimit.mi
 import { noStore, publicCache } from './middleware/httpCache.middleware';
 import { getTrackRecord }    from './services/trackRecord.service';
 import { getProTeaser }     from './services/proTeaser.service';
-import { authenticate, privatizeCache, requireAccount, newsFeedKeyOrAccount } from './middleware/auth.middleware';
+import { authenticate, privatizeCache } from './middleware/auth.middleware';
 import { corsOriginCallback }  from './cors';
 import { sendError, errorStatus, errorBody, requestIdOf } from './httpError';
 
@@ -156,24 +156,24 @@ app.use('/api/auth',          authLimiter, noStore, authRoutes);
 app.use('/api/users',         noStore, profileRoutes);
 app.use('/api/users',         noStore, userRoutes);
 
-// ⚠️ 2026-11-20 (demande du user) : le contenu d'ArakIce exige un compte.
-// `requireAccount` (auth.middleware.ts) = jeton obligatoire + toute politique
-// `public` réécrite en `private`, pour qu'aucun CDN ne resserve une réponse
-// à un visiteur sans compte. Restent publics : /api/auth, /api/geo, le webhook
-// Stripe, /api/content (secret cron), l'API agents x402 (payante, hôte à part)
-// /api/pickem/public-vs-model, /api/track-record et /api/pro-teaser ;
-// /api/news accepte aussi la clé `X-News-Key` (NHL-posting).
+// 2026-11-25 (demande du user) : le contenu redevient CONSULTABLE sans compte.
+// Le mur du 2026-11-20 (tout exigeait un compte) faisait chuter la fréquentation.
+// Publics : /api/nhl, /api/news, /api/odds, /api/predict, /api/pickem en lecture
+// (le vote exige un compte, dans pickem.routes.ts). Restent réservés aux
+// comptes : /api/leaderboard, /api/chat, /api/slips, /api/users, /api/llm…
+// (Communauté, Pari, Profil). Les routes payantes de /api/predict
+// (`value-bets`, `more-parlays`) gardent leur `requirePro`.
+// `requireAccount` et `newsFeedKeyOrAccount` (auth.middleware.ts) ne sont plus
+// montés ; ils restent disponibles pour refermer une route.
 //
 // NHL data (live from NHL API) — identique pour tous.
 // Les en-têtes de cache sont posés par route dans nhl.routes.ts, alignés sur
 // les TTL serveur de nhlApiClient.
-app.use('/api/nhl',           requireAccount, nhlRoutes);
-// Fil de nouvelles par match (F1) — public, lecture seule.
-// 2026-11-22 : les comptes de nouvelles par équipe (dépôt NHL-posting, GitHub
-// Actions) lisent ce fil sans compte, avec l'en-tête `X-News-Key`
-// (= `NEWS_FEED_SECRET`, Railway + secrets GitHub de NHL-posting). Clé à part,
-// en LECTURE SEULE : surtout pas `CONTENT_CRON_SECRET`, qui gèle les combinés.
-app.use('/api/news',          privatizeCache, newsFeedKeyOrAccount, newsRoutes);
+app.use('/api/nhl',           nhlRoutes);
+// Fil de nouvelles par match (F1) — public, lecture seule. NHL-posting
+// (GitHub Actions) le lit sans compte ; son en-tête `X-News-Key` est
+// désormais ignoré, sans effet.
+app.use('/api/news',          newsRoutes);
 // Visitor location (Cloudflare headers) → may we show a sportsbook link? Per visitor, no-store.
 app.use('/api/geo',           geoRoutes);
 // Mesure de l'entonnoir (migration 055) : étapes côté client + provenance des
@@ -181,12 +181,7 @@ app.use('/api/geo',           geoRoutes);
 app.use('/api/growth',        writeLimiter, noStore, growthRoutes);
 // Pick'em ICEEDGE (F3) — GET public, POST connecté. `noStore` : la réponse porte
 // le vote de la personne connectée. `writeLimiter` laisse passer les GET.
-// `/public-vs-model` reste public : c'est un agrégat (précision du public vs
-// le modèle) lu au build par `client/scripts/accuracy-live-gen.mjs` pour la
-// page SEO de précision, qui n'a pas de compte.
-app.use('/api/pickem',        writeLimiter, noStore,
-  (req, res, next) => (req.method === 'GET' && req.path === '/public-vs-model' ? next() : authenticate(req, res, next)),
-  pickemRoutes);
+app.use('/api/pickem',        writeLimiter, noStore, pickemRoutes);
 
 // Bilan des meilleurs paris sur 7 jours (2026-11-21, page /pro) — PUBLIC :
 // un agrégat sans aucun pari visible (taux de réussite, pas de ROI), lu aussi
@@ -204,8 +199,9 @@ app.get('/api/pro-teaser', publicCache(60), async (_req, res) => {
   catch (err: any) { sendError(res, err, { context: '[pro-teaser]' }); }
 });
 
-// Leaderboard — public, identique pour tous, caché 60 s côté service.
-// Le même Cache-Control côté HTTP laisse navigateur et CDN absorber le reste.
+// Leaderboard — réservé aux comptes (onglet Communauté), identique pour tous,
+// caché 60 s côté service. `privatizeCache` : réponse à une requête portant
+// `Authorization`, donc jamais dans un cache partagé.
 app.get('/api/leaderboard', privatizeCache, authenticate, async (_req, res) => {
   try {
     const leaderboard = await getLeaderboard();
@@ -224,7 +220,7 @@ app.use('/api/chat',          writeLimiter, noStore, chatRoutes);
 app.use('/api/slips',         writeLimiter, noStore, slipRoutes);
 
 // Odds
-app.use('/api/odds',          requireAccount, oddsRoutes);
+app.use('/api/odds',          oddsRoutes);
 
 // Saisie manuelle (blessures, gardiens partants, absents, arbitres) — admin.
 // Remplace `/api/injuries`, qui écrivait dans un `dist/data/` inexistant en
@@ -234,7 +230,7 @@ app.use('/api/odds',          requireAccount, oddsRoutes);
 app.use('/api/manual',        writeLimiter, noStore, manualRoutes);
 
 // ML / prediction
-app.use('/api/predict',       requireAccount, mlRoutes);
+app.use('/api/predict',       mlRoutes);
 
 
 // LLM proxy (uses user's own OpenAI key)

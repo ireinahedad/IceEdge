@@ -199,29 +199,14 @@ describe('câblage de app.ts', () => {
     }
   }, IMPORT_HEAVY_TIMEOUT_MS);
 
-  // Depuis le 2026-11-20, /api/nhl exige un compte (`requireAccount`) : sans
-  // jeton, le 401 passe AVANT la validation des paramètres.
-  it('les routes NHL refusent un visiteur sans compte', async () => {
+  // 2026-11-25 : /api/nhl redevient public (le mur du 2026-11-20 est levé).
+  // Un visiteur sans jeton atteint donc la validation des paramètres.
+  it('les routes NHL publiques répondent sans compte et ne cachent pas un 400', async () => {
     const appUnderTest = await loadAppWithoutDb();
-
-    const anon = await request(appUnderTest).get('/api/nhl/games/range?start=nope&end=nope');
-    expect(anon.status).toBe(401);
-  }, IMPORT_HEAVY_TIMEOUT_MS);
-
-  it('les routes NHL ne cachent pas un 400 (compte connecté)', async () => {
-    const appUnderTest = await loadAppWithoutDb();
-    const jwt = (await import('jsonwebtoken')).default;
-    const token = jwt.sign(
-      { sub: 'test-user', email: 'test@example.com', role: 'user' },
-      process.env.JWT_SECRET!,
-      { expiresIn: '5m' },
-    );
 
     // Paramètres invalides → 400 immédiat, aucun appel réseau vers la NHL.
     // Un 400 ne doit justement PAS être caché.
-    const bad = await request(appUnderTest)
-      .get('/api/nhl/games/range?start=nope&end=nope')
-      .set('Authorization', `Bearer ${token}`);
+    const bad = await request(appUnderTest).get('/api/nhl/games/range?start=nope&end=nope');
     expect(bad.status).toBe(400);
     expect(bad.headers['cache-control']).toBe(NO_STORE);
   }, IMPORT_HEAVY_TIMEOUT_MS);

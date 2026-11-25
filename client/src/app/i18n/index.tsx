@@ -388,6 +388,10 @@ const DICT: Record<string, { en: string; fr: string }> = {
   "gate.report":       { en: "report a message",     fr: "signaler un message" },
   "gate.block":        { en: "block a user",         fr: "bloquer un utilisateur" },
   "gate.searchPlayers":{ en: "search for a player",  fr: "rechercher un joueur" },
+  "gate.openSlip":     { en: "open your slip",       fr: "ouvrir votre coupon" },
+  "gate.openCommunity":{ en: "join the community",   fr: "accéder à la communauté" },
+  "gate.openProfile":  { en: "see your profile",     fr: "voir votre profil" },
+  "gate.askAI":        { en: "ask the AI analysis",  fr: "demander l'analyse IA" },
 
   // ── Slips / builder ──
   "slip.build":        { en: "Build",           fr: "Créer" },
@@ -1272,6 +1276,7 @@ const DICT: Record<string, { en: string; fr: string }> = {
 
   // ── Login ──
   "login.title":     { en: "Welcome back",     fr: "Bon retour" },
+  "login.continueGuest": { en: "Browse without signing in →", fr: "Parcourir sans se connecter →" },
   "login.email":     { en: "Email",            fr: "Courriel" },
   "login.password":  { en: "Password",         fr: "Mot de passe" },
   "login.signin":    { en: "Sign In",          fr: "Se connecter" },
@@ -1638,6 +1643,7 @@ const DICT: Record<string, { en: string; fr: string }> = {
 
   // ── Page d'accueil des visiteurs non connectés (IntroLanding, 2026-11-19) ──
   "intro.langAria":     { en: "Language", fr: "Langue" },
+  "intro.see":          { en: "See ArakIce", fr: "Voir ArakIce" },
   "intro.login":        { en: "Log in", fr: "Se connecter" },
   "intro.how":          { en: "How it works", fr: "Comment ça marche" },
   "intro.f1.t":         { en: "Reads the game", fr: "Lit le match" },
@@ -1663,8 +1669,7 @@ const DICT: Record<string, { en: string; fr: string }> = {
   "intro.tonight.rules":{ en: "arakiceML is unavailable right now: these are the rules-based numbers.", fr: "arakiceML est indisponible pour le moment : ce sont les chiffres des règles." },
   "intro.tonight.none": { en: "No NHL game scheduled this week.", fr: "Aucun match de la LNH prévu cette semaine." },
   "intro.tonight.error":{ en: "Tonight's predictions couldn't load.", fr: "Les prédictions de ce soir n'ont pas pu se charger." },
-  "intro.tonight.locked":{ en: "Sign in to see tonight's top 3 predictions, game by game.", fr: "Connectez-vous pour voir le top 3 des prédictions de ce soir, match par match." },
-  "intro.tonight.cta":  { en: "Sign in", fr: "Se connecter" },
+  "intro.tonight.cta":  { en: "See tonight's games", fr: "Voir les matchs de ce soir" },
   "intro.pick.win":     { en: "{team} to win", fr: "Victoire {team}" },
   "intro.pick.over":    { en: "Over {n} goals", fr: "Plus de {n} buts" },
   "intro.pick.under":   { en: "Under {n} goals", fr: "Moins de {n} buts" },

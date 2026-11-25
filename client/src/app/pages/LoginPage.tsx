@@ -9,10 +9,20 @@ import { useI18n } from "../i18n";
 import { features } from "../platform";
 import { ResponsibleGamblingNote } from "../components/ResponsibleGamblingNote";
 import { userErrorMessage } from "../services/errors";
+import { BottomNav } from "../components/BottomNav";
+import { markIntroSeen } from "../introSeen";
 
 type Mode = "login" | "register";
 
 const ACCENT        = "#86d1ea";
+
+/**
+ * Pages qui exigent un compte (voir `Protected` dans routes.tsx). « Parcourir
+ * sans se connecter » ne doit pas y renvoyer : la garde ramènerait ici.
+ */
+const ACCOUNT_ONLY = ["/bet", "/league", "/profile", "/player", "/pro/success", "/dev"];
+const isAccountOnly = (path: string) =>
+  ACCOUNT_ONLY.some((p) => path === p || path.startsWith(`${p}/`) || path.startsWith(`${p}?`));
 const ACCENT_BG     = "rgba(134,209,234,0.12)";
 const ACCENT_BORDER = "rgba(134,209,234,0.3)";
 const SURFACE       = "#131A12";
@@ -224,7 +234,7 @@ export function LoginPage() {
 
   return (
     <div
-      className="flex flex-col min-h-screen text-white max-w-[430px] md:max-w-5xl mx-auto w-full px-5 pt-16 pb-[calc(2.5rem+env(safe-area-inset-bottom,0px))]"
+      className="flex flex-col min-h-screen text-white max-w-[430px] md:max-w-5xl mx-auto w-full px-5 pt-16 pb-[calc(7rem+env(safe-area-inset-bottom,0px))]"
       style={{ background: "#0A0E0C" }}
     >
       {/* Brand hero */}
@@ -240,6 +250,22 @@ export function LoginPage() {
         </h1>
 
         <div className="mt-4 w-12 h-0.5 rounded-full" style={{ background: ACCENT, opacity: 0.5 }} />
+
+        {/* Rétabli le 2026-11-25 (mur levé) : le visiteur repart consulter
+            l'app sans compte. Vers la page d'où il venait si elle est
+            publique (la fenêtre AuthGate passe `returnTo`), sinon l'accueil,
+            sans repasser par la patinoire. */}
+        <button
+          type="button"
+          onClick={() => {
+            markIntroSeen();
+            navigate(returnTo.startsWith("/") && !returnTo.startsWith("//") && !isAccountOnly(returnTo) ? returnTo : "/");
+          }}
+          className="mt-5 text-xs"
+          style={{ color: ACCENT }}
+        >
+          {t("login.continueGuest")}
+        </button>
       </div>
 
       {step === "form" ? (
@@ -501,9 +527,10 @@ export function LoginPage() {
         <a href="/about" className="underline underline-offset-2">{t("login.guide.about")}</a>
       </nav>}
 
-      {/* 2026-11-21 (demande du user) : plus de barre de navigation ici. Tout
-          le contenu exige un compte, ses onglets ramenaient donc à cette même
-          page. Le logo en haut ramène à l'accueil. */}
+      {/* Barre de navigation rétablie le 2026-11-25 (mur levé) : le visiteur
+          peut quitter cet écran et consulter l'app sans compte. La page
+          réserve sa place (padding du bas). */}
+      <BottomNav />
     </div>
   );
 }

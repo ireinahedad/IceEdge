@@ -13,6 +13,7 @@ import { useI18n } from "../../i18n";
 import { ruleNote as localizeRuleNote, marketText } from "../../i18n/serverText";
 import { nhlLogoUrl } from "../../data/teamEmoji";
 import { useBet } from "../../context/BetContext";
+import { useAuthGate } from "../../context/AuthGateContext";
 import type { BetLeg, PredictionCaveat } from "../../types/bet";
 import { askLLM, askExplainBet, type Analysis, type BetPayload } from "../../services/llmService";
 import { AnalysisCard } from "../../components/AnalysisCard";
@@ -129,6 +130,9 @@ function PredictionSheet({ label, rulePct, serverPct, ruleNote, accent, mlProps,
 }) {
   const bookmakerLinks = useBookmakerLinks();
   const { t, lang } = useI18n();
+  // L'analyse IA exige un compte (quota par compte, `/api/llm`). Un visiteur
+  // voit la fenêtre « connectez-vous » au clic plutôt qu'une erreur (2026-11-25).
+  const { requireAuth } = useAuthGate();
   const { odds } = useOddsFormat();
   const { table: oddsTable, bookTitle, nameByAbbr } = useContext(BetOddsCtx);
   const bookPrice = priceForBet(oddsTable, mlProps, nameByAbbr, optId);
@@ -287,6 +291,8 @@ function PredictionSheet({ label, rulePct, serverPct, ruleNote, accent, mlProps,
   async function askFollowup() {
     const q = question.trim().slice(0, FOLLOWUP_MAX_CHARS);
     if (!q || asking || !llmText || llmFailed) return;
+    // Réponse précédente lue dans le cache local par un visiteur déconnecté.
+    if (!requireAuth("gate.askAI")) return;
     setAsking(true);
     const isFr = lang === "fr";
     try {
@@ -529,6 +535,7 @@ function PredictionSheet({ label, rulePct, serverPct, ruleNote, accent, mlProps,
           <button
             disabled={llmLoading}
             onClick={async () => {
+              if (!requireAuth("gate.askAI")) return;
               setLlmLoading(true);
               setLlmText("");
               try {

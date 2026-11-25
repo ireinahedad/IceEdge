@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useCallback } from "react";
 import type { ReactNode } from "react";
-import { useNavigate } from "react-router";
+import { useLocation, useNavigate } from "react-router";
 import { useAuth } from "./AuthContext";
 import { useI18n } from "../i18n";
 import { AppButton } from "../components/AppButton";
@@ -21,13 +21,21 @@ import { Lock } from "lucide-react";
  * proceeds). For guests it returns false and opens a modal — "You need to be
  * connected to <action>" — with a button that routes to the login page.
  *
+ * « Se connecter » mène à /login avec `returnTo` : après la connexion, le
+ * visiteur revient là où il était (2026-11-25), ou sur la page qu'il voulait
+ * ouvrir quand l'appelant la passe en second argument (onglets de BottomNav).
+ *
  * Mounted once from the router's RootLayout so a single modal instance serves
  * the whole app. Must sit inside <AuthProvider> and the router (uses useNavigate).
  */
 
 interface AuthGateValue {
-  /** True if signed in. If not, opens the login prompt and returns false. */
-  requireAuth: (actionKey: string) => boolean;
+  /**
+   * True if signed in. If not, opens the login prompt and returns false.
+   * `returnTo` : chemin interne où revenir après la connexion (par défaut, la
+   * page courante).
+   */
+  requireAuth: (actionKey: string, returnTo?: string) => boolean;
 }
 
 const AuthGateContext = createContext<AuthGateValue | null>(null);
@@ -36,20 +44,25 @@ export function AuthGateProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
   const { t } = useI18n();
   const navigate = useNavigate();
-  const [actionKey, setActionKey] = useState<string | null>(null);
+  const location = useLocation();
+  const [gate, setGate] = useState<{ key: string; returnTo?: string } | null>(null);
+  const actionKey = gate?.key ?? null;
 
-  const requireAuth = useCallback((key: string) => {
+  const requireAuth = useCallback((key: string, returnTo?: string) => {
     if (user) return true;
-    setActionKey(key);
+    setGate({ key, returnTo });
     return false;
   }, [user]);
 
-  const close = useCallback(() => setActionKey(null), []);
+  const close = useCallback(() => setGate(null), []);
 
   const goToLogin = useCallback(() => {
-    setActionKey(null);
-    navigate("/login");
-  }, [navigate]);
+    // Toujours un chemin interne : soit celui de l'appelant (une route de
+    // l'app), soit la page courante.
+    const target = gate?.returnTo ?? location.pathname + location.search;
+    setGate(null);
+    navigate(`/login?returnTo=${encodeURIComponent(target)}`);
+  }, [navigate, gate, location.pathname, location.search]);
 
   return (
     <AuthGateContext.Provider value={{ requireAuth }}>
